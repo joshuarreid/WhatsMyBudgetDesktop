@@ -1,0 +1,16 @@
+.App {
+    text-align: center;
+    color: #fff;
+}
+
+body, html {
+    background-color: #2c2c2c;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.App-header {
+    padding: 40px;
+}
