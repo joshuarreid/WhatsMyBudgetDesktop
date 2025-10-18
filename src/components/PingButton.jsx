@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
+import apiService from '../services/apiService';
 
+/**
+ * PingButton - Button for testing API getTransactions call.
+ * Displays JSON result of GET /api/transactions.
+ * Uses apiService for REST API call with robust logging.
+ */
 export default function PingButton() {
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -8,11 +14,15 @@ export default function PingButton() {
         setLoading(true);
         setResult(null);
         try {
-            // Access the safe preload API
-            // eslint-disable-next-line no-undef
-            const res = await window.electronAPI.ping({ hello: 'world', ts: Date.now() });
-            setResult(JSON.stringify(res, null, 2));
+            // Log method entry
+            console.log('[PingButton] doPing called (fetching all transactions)');
+            // Fetch all transactions (no filters)
+            const transactions = await apiService.getTransactions();
+            // Log result
+            console.log('[PingButton] Transactions fetched', { count: Array.isArray(transactions) ? transactions.length : 0 });
+            setResult(JSON.stringify(transactions, null, 2));
         } catch (err) {
+            console.error('[PingButton] Error fetching transactions', err);
             setResult('Error: ' + (err && err.message ? err.message : String(err)));
         } finally {
             setLoading(false);
@@ -22,12 +32,20 @@ export default function PingButton() {
     return (
         <div>
             <button onClick={doPing} disabled={loading}>
-                {loading ? 'Pinging...' : 'Ping Main'}
+                {loading ? 'Loading...' : 'Get Transactions'}
             </button>
             {result && (
-                <pre style={{ textAlign: 'left', background: '#111', color: '#ddd', padding: 12, marginTop: 16, maxWidth: 800, overflowX: 'auto' }}>
-          {result}
-        </pre>
+                <pre style={{
+                    textAlign: 'left',
+                    background: '#111',
+                    color: '#ddd',
+                    padding: 12,
+                    marginTop: 16,
+                    maxWidth: 800,
+                    overflowX: 'auto'
+                }}>
+                    {result}
+                </pre>
             )}
         </div>
     );
