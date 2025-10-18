@@ -1,16 +1,20 @@
 import React from 'react';
 import PingButton from './components/PingButton';
 import './App.css';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import JointScreen from "./screens/JointScreen/JointScreen";
+
 
 function App() {
     return (
-        <div className="App">
-            <header className="App-header">
-                <h1>Electron + CRA Template</h1>
-                <p>Use the Ping button below to verify preload -> main IPC.</p>
-                <PingButton />
-            </header>
-        </div>
+        <BrowserRouter>
+            <div className={"main-content"}>
+                <Routes>
+                    <Route path="/" element={<JointScreen />} />
+                </Routes>
+            </div>
+        </BrowserRouter>
+
     );
 }
 
