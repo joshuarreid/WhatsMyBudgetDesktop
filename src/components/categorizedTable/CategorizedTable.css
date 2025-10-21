@@ -1,18 +1,33 @@
-/* Dark theme adjustments to match your app (background #2c2c2c) */
+/* Separate CSS for CategorizedTable (dark theme)
+   - Ensures the footer ("Total") is always stuck to the bottom of the card.
+   - The header remains sticky at the top of the scrollable body.
+*/
 
+/* Card width control:
+   - Use --ct-card-width to override globally or on a parent.
+   - Or add the helper class .ct-card--wide to force a wider preset.
+*/
 .ct-card {
-    background: linear-gradient(180deg, #232629 0%, #2c2c2c 100%);
+    box-sizing: border-box;
+    width: var(--ct-card-width, min(720px, 88vw));
+    max-width: none;
     border-radius: 12px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    padding: 12px;
-    max-width: 900px;
-    margin: 12px auto;
+    padding: 5px;
+    min-height: 700px;     /* Fixed minimum height */
+    margin: 12px 0;        /* Top/bottom spacing */
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     color: #e6eef8;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     border: 1px solid rgba(255,255,255,0.03);
+    font-size: 0.85rem;   /* Smaller font size */
+}
+
+/* Preset helper class to force a wider card */
+.ct-card--wide {
+    width: 840px; /* change to your preferred pixel value */
 }
 
 /* header */
@@ -20,24 +35,36 @@
     display: grid;
     grid-template-columns: 1fr 220px;
     gap: 12px;
-    padding: 8px 12px;
+    padding: 6px 12px;
     font-weight: 600;
     color: #cbd5e1;
     border-bottom: 1px solid rgba(255,255,255,0.03);
+
+    /* sticky header inside the card */
     position: sticky;
     top: 0;
     background: linear-gradient(180deg, rgba(35,38,41,0.9), rgba(44,44,44,0.6));
     z-index: 2;
+    font-size: 0.85rem; /* smaller header font */
 }
 
-/* body with scroll if needed */
+/* body with scroll if needed
+   - Make body flexible so footer remains pinned to the bottom.
+*/
 .ct-body {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    max-height: 600px;
-    overflow: auto;
-    padding: 6px;
+    gap: 4px;
+
+    /* Allow the body to grow/shrink and take remaining space */
+    flex: 1 1 auto;
+
+    /* If content exceeds available space, enable scrolling */
+    overflow-y: auto;
+
+    padding: 4px;
+    /* Optional: limit the height on very tall cards (not required) */
+    /* max-height: 500px; */
 }
 
 /* rows */
@@ -46,17 +73,18 @@
     grid-template-columns: 1fr 220px;
     gap: 12px;
     align-items: center;
-    padding: 10px;
+    padding: 8px;
     border-radius: 8px;
     transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
     background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    font-size: 0.85rem; /* smaller row font */
 }
 
 .ct-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
 
 .ct-row:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.5);
     background: rgba(255,255,255,0.03);
 }
 
@@ -80,10 +108,10 @@
 
 /* progress bar */
 .ct-bar {
-    height: 8px;
+    height: 6px; /* smaller bar */
     background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
     border-radius: 999px;
-    margin-top: 8px;
+    margin-top: 6px;
     overflow: hidden;
     position: relative;
     border: 1px solid rgba(255,255,255,0.02);
@@ -99,35 +127,43 @@
 
 /* percent label */
 .ct-pct {
-    font-size: 12px;
+    font-size: 11px;  /* smaller percentage font */
     color: #9aa6b2;
-    margin-left: 8px;
+    margin-left: 6px;
     min-width: 36px;
     text-align: right;
 }
 
-/* footer */
+/* footer
+   - Use margin-top: auto to push footer to the bottom of the flex container (.ct-card).
+   - Keep the layout consistent with header/rows.
+*/
 .ct-footer {
+    margin-top: auto;
     display: grid;
     grid-template-columns: 1fr 220px;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 8px 12px;
     border-top: 1px dashed rgba(255,255,255,0.03);
     font-weight: 700;
     color: #e6eef8;
+    font-size: 0.85rem; /* smaller footer font */
 }
 
-/* empty / loading */
-.ct-empty {
-    text-align: center;
-    color: #9aa6b2;
-    padding: 18px;
-}
+/* Responsive tweak: reduce fixed 220px column on very narrow screens */
+@media (max-width: 480px) {
+    .ct-header-row,
+    .ct-row,
+    .ct-footer {
+        grid-template-columns: 1fr 140px;
+    }
 
-/* responsive */
-@media (max-width: 680px) {
-    .ct-card, .ct-header-row, .ct-row, .ct-footer { grid-template-columns: 1fr; }
-    .ct-pct { display: none; }
-    .ct-col-amount { justify-content: flex-end; }
-    .ct-card { padding: 10px; }
+    .ct-card {
+        width: 96vw;
+        min-height: 300px;
+    }
+
+    .ct-card--wide {
+        width: 96vw;
+    }
 }
