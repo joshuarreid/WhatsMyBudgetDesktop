@@ -1,51 +1,112 @@
 import React from 'react';
-import useTransactions from '../../hooks/useTransactions';
+import { useTransactionTable } from './useTransactionTable';
 import './TransactionTable.css';
+import TransactionBalanceRow from './TransactionBalanceRow';
+import TransactionToolbar from './TransactionToolbar';
+import TransactionHeaderRow from './TransactionHeaderRow';
+import TransactionRow from './TransactionRow';
+
+// Currency formatter, colocated for presentation
+const fmt = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+});
 
 export default function TransactionTable(props) {
-    // Determine if the component was rendered without props (empty object).
-    const hasProps = props && Object.keys(props).length > 0;
+    const filters = props && Object.keys(props).length > 0 ? (props.filters ?? props) : undefined;
+    const statementPeriod = props?.statementPeriod;
 
-    // If no props were provided, pass undefined to useTransactions so it fetches all.
-    // Otherwise use props.filters (preferred) or props as the filters object.
-    const filters = hasProps ? (props.filters ?? props) : undefined;
-
-    const txResult = useTransactions(filters);
-    const transactions = Array.isArray(txResult?.data) ? txResult.data : [];
-    const { loading, error } = txResult || {};
-
-    const fmt = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-    });
+    const {
+        localTx,
+        loading,
+        error,
+        selectedIds,
+        editing,
+        editValueRef,
+        fileInputRef,
+        clearedBalance,
+        unclearedBalance,
+        workingBalance,
+        isAllSelected,
+        toggleSelect,
+        toggleSelectAll,
+        handleAddTransaction,
+        handleDeleteSelected,
+        handleFileChange,
+        openFilePicker,
+        handleCellDoubleClick,
+        patchedHandleEditKey,
+        handleSaveEdit,
+        toInputDate,
+        toggleCleared,
+        setEditing,
+    } = useTransactionTable(filters, statementPeriod);
 
     if (loading) return <div className="tt-empty">Loading...</div>;
     if (error) return <div className="tt-empty">Error: {error.message || String(error)}</div>;
-    if (transactions.length === 0) return <div className="tt-empty">No transactions</div>;
+
+    if (!localTx || localTx.length === 0)
+        return (
+            <div className="tt-card">
+                <TransactionBalanceRow
+                    cleared={clearedBalance}
+                    uncleared={unclearedBalance}
+                    working={workingBalance}
+                    showUncleared={true}
+                    showWorking={true}
+                />
+                <TransactionToolbar
+                    onAdd={handleAddTransaction}
+                    onImport={openFilePicker}
+                    onDelete={handleDeleteSelected}
+                    selectedCount={selectedIds.size}
+                    fileInputRef={fileInputRef}
+                    onFileChange={handleFileChange}
+                    loading={loading}
+                    total={fmt.format(workingBalance)}
+                />
+                <div className="tt-empty">No transactions</div>
+            </div>
+        );
 
     return (
         <div className="tt-card">
-            <div className="tt-header-row">
-                <div>Name</div>
-                <div style={{ textAlign: 'right' }}>Amount</div>
-                <div>Category</div>
-                <div>Criticality</div>
-                <div>Date</div>
-                <div>Account</div>
-                <div>Payment Method</div>
-            </div>
-
+            <TransactionBalanceRow
+                cleared={clearedBalance}
+                uncleared={unclearedBalance}
+                working={workingBalance}
+                showUncleared={true}
+                showWorking={true}
+            />
+            <TransactionToolbar
+                onAdd={handleAddTransaction}
+                onImport={openFilePicker}
+                onDelete={handleDeleteSelected}
+                selectedCount={selectedIds.size}
+                fileInputRef={fileInputRef}
+                onFileChange={handleFileChange}
+                loading={loading}
+                total={fmt.format(workingBalance)}
+            />
+            <TransactionHeaderRow
+                isAllSelected={isAllSelected}
+                toggleSelectAll={toggleSelectAll}
+            />
             <div className="tt-body">
-                {transactions.map((tx) => (
-                    <div className="tt-row" key={tx.id}>
-                        <div>{tx.name}</div>
-                        <div style={{ textAlign: 'right' }}>{fmt.format(tx.amount)}</div>
-                        <div>{tx.category}</div>
-                        <div>{tx.criticality}</div>
-                        <div>{new Date(tx.transactionDate).toLocaleDateString()}</div>
-                        <div>{tx.account}</div>
-                        <div>{tx.paymentMethod}</div>
-                    </div>
+                {localTx.map((tx) => (
+                    <TransactionRow
+                        key={tx.id}
+                        tx={tx}
+                        selected={selectedIds.has(tx.id)}
+                        onSelect={() => toggleSelect(tx.id)}
+                        editing={editing}
+                        editValueRef={editValueRef}
+                        onCellDoubleClick={handleCellDoubleClick}
+                        onEditKey={patchedHandleEditKey}
+                        onSaveEdit={handleSaveEdit}
+                        toInputDate={toInputDate}
+                        onToggleCleared={toggleCleared}
+                    />
                 ))}
             </div>
         </div>

@@ -1,70 +1,240 @@
-/* TransactionTable.css */
+/* TransactionTable.css - updated for YNAB-like toolbar and separated cleared column */
 
+/* Base */
 .tt-card {
     box-sizing: border-box;
     width: var(--tt-card-width, min(1200px, 95vw));
-    max-width: none;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    padding: 5px;
-    min-height: 700px;
+    padding: 8px;
+    min-height: 500px;
     margin: 12px 0;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     color: #e6eef8;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    border: 1px solid rgba(255,255,255,0.03);
-    font-size: 0.85rem;
+    gap: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    background: linear-gradient(180deg, #0f1115, #151516);
 }
 
+/* Top balances row (YNAB style) */
+.tt-balance-row {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, rgba(10,10,12,0.7), rgba(18,18,20,0.6));
+    border-radius: 8px;
+}
+
+.tt-balance-item {
+    color: #9aa6b2;
+    text-align: left;
+}
+
+.tt-balance-amount {
+    color: #9be3a7;
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+
+.tt-balance-label {
+    font-size: 0.78rem;
+    color: #9aa6b2;
+}
+
+.tt-balance-item.tt-working .tt-balance-amount {
+    color: #f6e58d; /* highlight working balance */
+}
+
+/* Toolbar styled to match YNAB top-left links look */
+.tt-toolbar-ynab {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 6px;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.tt-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tt-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* LINK style buttons (similar to YNAB small toolbar links) */
+.tt-link-btn {
+    background: transparent;
+    border: none;
+    color: #8db0ff;
+    font-weight: 700;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tt-link-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.tt-link-btn:hover:not(:disabled) {
+    background: rgba(141,176,255,0.04);
+    transform: translateY(-1px);
+}
+
+.tt-icon {
+    font-weight: 900;
+}
+
+/* Totals on toolbar */
+.tt-totals {
+    color: #9be3a7;
+    font-weight: 800;
+}
+
+/* Header row */
 .tt-header-row {
     display: grid;
-    grid-template-columns: 1fr 120px 150px 100px 120px 100px 120px;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px 36px;
     gap: 12px;
     padding: 6px 12px;
-    font-weight: 600;
+    font-weight: 700;
     color: #cbd5e1;
     border-bottom: 1px solid rgba(255,255,255,0.03);
     position: sticky;
     top: 0;
-    background: linear-gradient(180deg, rgba(35,38,41,0.9), rgba(44,44,44,0.6));
-    z-index: 2;
+    background: linear-gradient(180deg, rgba(20,22,24,0.95), rgba(28,28,30,0.95));
+    z-index: 3;
     font-size: 0.85rem;
 }
 
+/* Body / rows */
 .tt-body {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 4px;
+    padding: 6px;
 }
 
 .tt-row {
     display: grid;
-    grid-template-columns: 1fr 120px 150px 100px 120px 100px 120px;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px 36px;
     gap: 12px;
     align-items: center;
-    padding: 8px;
+    padding: 10px;
     border-radius: 8px;
-    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    font-size: 0.85rem;
+    transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    font-size: 0.86rem;
 }
 
 .tt-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
 
 .tt-row:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.45);
     background: rgba(255,255,255,0.03);
 }
 
-.tt-empty {
-    padding: 20px;
-    text-align: center;
+/* selected row */
+.tt-row-selected {
+    box-shadow: inset 0 0 0 1px rgba(156, 197, 255, 0.06);
+    background: linear-gradient(180deg, rgba(22,26,32,0.35), rgba(18,22,28,0.35));
+}
+
+/* checkbox column */
+.tt-checkbox-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* cells */
+.tt-cell {
+    padding: 4px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* amount */
+.tt-amount {
+    font-variant-numeric: tabular-nums;
+}
+
+/* cleared column */
+.tt-cleared-header {
+    width: 36px;
+}
+
+.tt-cleared-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tt-cleared-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.04);
+    color: #9aa6b2;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.tt-cleared-btn.cleared {
+    background: rgba(155, 213, 150, 0.12);
+    color: #98e3a6;
+    border-color: rgba(155, 213, 150, 0.18);
+}
+
+.tt-cleared-btn.uncleared {
+    background: transparent;
     color: #9aa6b2;
 }
 
+/* editing input */
+.tt-input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.5);
+    color: #e6eef8;
+    outline: none;
+    font-size: 0.85rem;
+}
+
+.tt-input:focus {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    border-color: rgba(120,170,255,0.6);
+}
+
+.tt-input-number {
+    text-align: right;
+}
+
+/* empty */
+.tt-empty {
+    padding: 22px;
+    text-align: center;
+    color: #9aa6b2;
+}

@@ -3,12 +3,19 @@ import useTransactions from '../../hooks/useTransactions';
 import './CategorizedTable.css';
 
 export default function CategorizedTable(props) {
+    const logger = {
+        info: (...args) => console.log('[CategorizedTable]', ...args),
+        error: (...args) => console.error('[CategorizedTable]', ...args),
+    };
+
     const filters = props.filters ?? props;
-    console.log('[CategorizedTable] filters:', filters);
+    logger.info('filters', filters)
     const txResult = useTransactions(filters || {});
     const transactions = Array.isArray(txResult?.data) ? txResult.data : [];
     const { loading, error } = txResult || {};
 
+
+    logger.info('Calculating category totals');
     const totalsByCategory = useMemo(() => {
         return transactions.reduce((acc, tx) => {
             const cat = tx && tx.category ? tx.category : 'Uncategorized';
