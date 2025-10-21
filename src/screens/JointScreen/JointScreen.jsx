@@ -1,13 +1,22 @@
-import PingButton from "../../components/PingButton";
 import React from "react";
+import CategorizedTable from "../../components/categorizedTable/CategorizedTable";
 
 const JointScreen = () => {
+    const NONESSENTIAL = {
+        account: "joint",
+        criticality: "Nonessential"
+    }
+
+    const ESSENTIAL = {
+        account: "joint",
+        criticality: "essential"
+    }
+
     return (
         <div className="App">
             <header className="App-header">
-                <h1>Electron + CRA Template</h1>
-                <p>Use the Ping button below to verify preload -> main IPC.</p>
-                <PingButton />
+                <CategorizedTable filters={ESSENTIAL}/>
+                <CategorizedTable filters={NONESSENTIAL}/>
             </header>
         </div>
     )

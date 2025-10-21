@@ -5,7 +5,7 @@
  */
 
 import axios from 'axios';
-import config from './wmbservice-config.json';
+import config from '../wmbservice-config.json';
 
 const BASE_URL = config.baseUrl;
 const DEFAULT_HEADERS = config.defaultHeaders || {};
