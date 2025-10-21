@@ -42,9 +42,9 @@ export default function TransactionTable(props) {
                         <div style={{ textAlign: 'right' }}>{fmt.format(tx.amount)}</div>
                         <div>{tx.category}</div>
                         <div>{tx.criticality}</div>
-                        <div>{new Date(tx.transaction_date).toLocaleDateString()}</div>
+                        <div>{new Date(tx.transactionDate).toLocaleDateString()}</div>
                         <div>{tx.account}</div>
-                        <div>{tx.payment_method}</div>
+                        <div>{tx.paymentMethod}</div>
                     </div>
                 ))}
             </div>
