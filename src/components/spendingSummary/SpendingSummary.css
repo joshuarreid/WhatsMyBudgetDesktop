@@ -1,0 +1,19 @@
+.tables-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+/* let each table grow/shrink evenly and avoid overflow */
+.tables-row > * {
+    flex: 1 1 0;
+    min-width: 0; /* prevents child overflow with flex */
+}
+
+/* stack vertically on small screens */
+@media (max-width: 600px) {
+    .tables-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+}

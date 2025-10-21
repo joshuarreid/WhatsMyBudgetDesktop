@@ -1,5 +1,5 @@
 import {Link} from "react-router-dom";
-import './Sidebar.css'
+import './Sidebar.css';
 import config from '../../wmbservice-config.json';
 
 export default function Sidebar() {

@@ -3,15 +3,15 @@ import CategorizedTable from "../../components/categorizedTable/CategorizedTable
 import SpendingSummary from "../../components/spendingSummary/SpendingSummary";
 import config from "../../wmbservice-config.json";
 
-const JointScreen = () => {
-    const JOINTFILTER = config.jointFilter;
+const User2Screen = () => {
+    const USER2FILTER = config.user2Filter;
     return (
         <div className="App">
             <header className="App-header">
-                <SpendingSummary account={JOINTFILTER} />
+                <SpendingSummary account={USER2FILTER} />
             </header>
         </div>
     )
 };
 
-export default JointScreen;
+export default User2Screen;
