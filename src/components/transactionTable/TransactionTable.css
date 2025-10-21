@@ -1,0 +1,70 @@
+/* TransactionTable.css */
+
+.tt-card {
+    box-sizing: border-box;
+    width: var(--tt-card-width, min(1200px, 95vw));
+    max-width: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    padding: 5px;
+    min-height: 700px;
+    margin: 12px 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: #e6eef8;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid rgba(255,255,255,0.03);
+    font-size: 0.85rem;
+}
+
+.tt-header-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 150px 100px 120px 100px 120px;
+    gap: 12px;
+    padding: 6px 12px;
+    font-weight: 600;
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, rgba(35,38,41,0.9), rgba(44,44,44,0.6));
+    z-index: 2;
+    font-size: 0.85rem;
+}
+
+.tt-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.tt-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 150px 100px 120px 100px 120px;
+    gap: 12px;
+    align-items: center;
+    padding: 8px;
+    border-radius: 8px;
+    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    font-size: 0.85rem;
+}
+
+.tt-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
+
+.tt-row:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    background: rgba(255,255,255,0.03);
+}
+
+.tt-empty {
+    padding: 20px;
+    text-align: center;
+    color: #9aa6b2;
+}
+

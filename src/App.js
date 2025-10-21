@@ -8,6 +8,7 @@ import Sidebar from "./components/sidebar/Sidebar";
 import SettingsScreen from "./screens/SettingsScreen/SettingsScreen";
 import User1Screen from "./screens/User1Screen/User1Screen";
 import User2Screen from "./screens/User2Screen/User2Screen";
+import TransactionScreen from "./screens/TransactionScreen/TransactionScreen";
 
 
 function App() {
@@ -16,7 +17,8 @@ function App() {
             < Sidebar />
             <div className={"main-content"}>
                 <Routes>
-                    <Route path="/" element={<JointScreen />} />
+                    <Route path="/" element={<TransactionScreen />} />
+                    <Route path="/joint" element={<JointScreen />} />
                     <Route path="/user1" element={<User1Screen />} />
                     <Route path="/user2" element={<User2Screen />} />
                     <Route path="/settings" element={<SettingsScreen />} />

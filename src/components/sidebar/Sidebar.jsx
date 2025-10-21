@@ -11,7 +11,8 @@ export default function Sidebar() {
             <div className="sidebar-divider" />
             <ul className="sidebar-list">
                 <li className="sidebar-list-item">
-                    <Link to="/" className="sidebar-link">Joint</Link>
+                    <Link to="/" className="sidebar-link">Home</Link>
+                    <Link to="/joint" className="sidebar-link">Joint</Link>
                     <Link to="/user1" className="sidebar-link">{USER1}</Link>
                     <Link to="/user2" className="sidebar-link">{USER2}</Link>
                     <Link to="/settings" className="sidebar-link">Settings</Link>
