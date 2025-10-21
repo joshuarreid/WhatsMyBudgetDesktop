@@ -1,6 +1,5 @@
 .App {
     text-align: center;
-    color: #fff;
 }
 
 body, html {
@@ -8,9 +7,54 @@ body, html {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    font-family: Arial, Helvetica, sans-serif;
+    width: 100vw;
 }
 
+
 .App-header {
-    padding: 40px;
+    background-color: #2c2c2c;
+    padding: 20px;
+    color: white;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(10px + 2vmin);
 }
+
+.buttons {
+    margin-top: 30px;
+}
+
+.buttons button {
+    margin: 10px;
+    padding: 15px 30px;
+    font-size: 16px;
+    background-color: #61dafb;
+    color: #282c34;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.buttons button:hover {
+    background-color: #4fa8c5;
+}
+
+.main-content {
+    margin-left: 220px; /* Same as sidebar width */
+    min-height: 100vh;
+}
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 220px; /* Adjust as needed */
+    height: 100vh;
+    background: #f4f4f4;
+    z-index: 1000;
+}
+
+
