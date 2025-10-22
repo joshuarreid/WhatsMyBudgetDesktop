@@ -24,9 +24,9 @@ export default function TransactionTable(props) {
         editing,
         editValueRef,
         fileInputRef,
-        clearedBalance,
-        unclearedBalance,
-        workingBalance,
+        total,
+        jointBalance,
+        personalBalance,
         isAllSelected,
         toggleSelect,
         toggleSelectAll,
@@ -58,11 +58,9 @@ export default function TransactionTable(props) {
         return (
             <div className="tt-card">
                 <TransactionBalanceRow
-                    cleared={clearedBalance}
-                    uncleared={unclearedBalance}
-                    working={workingBalance}
-                    showUncleared={true}
-                    showWorking={true}
+                    total={total}
+                    joint={jointBalance}
+                    personal={personalBalance}
                 />
                 <TransactionToolbar
                     onAdd={handleAddTransaction}
@@ -72,7 +70,7 @@ export default function TransactionTable(props) {
                     fileInputRef={fileInputRef}
                     onFileChange={handleFileChange}
                     loading={loading}
-                    total={fmt.format(workingBalance)}
+                    total={fmt.format(total)}
                 />
                 {/* Keep the header so the table shell is visible during loading */}
                 <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
@@ -83,11 +81,9 @@ export default function TransactionTable(props) {
     return (
         <div className="tt-card">
             <TransactionBalanceRow
-                cleared={clearedBalance}
-                uncleared={unclearedBalance}
-                working={workingBalance}
-                showUncleared={true}
-                showWorking={true}
+                total={total}
+                joint={jointBalance}
+                personal={personalBalance}
             />
             <TransactionToolbar
                 onAdd={handleAddTransaction}
@@ -97,7 +93,7 @@ export default function TransactionTable(props) {
                 fileInputRef={fileInputRef}
                 onFileChange={handleFileChange}
                 loading={loading}
-                total={fmt.format(workingBalance)}
+                total={fmt.format(total)}
             />
             <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
             <div className="tt-body">

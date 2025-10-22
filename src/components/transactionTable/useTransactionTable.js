@@ -25,6 +25,12 @@ export function useTransactionTable(filters, statementPeriod) {
         [txResult.personalTransactions, txResult.jointTransactions]
     );
     const total = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
+    const personalBalance = typeof txResult.personalTotal === 'number'
+        ? txResult.personalTotal
+        : Number(txResult.personalTotal) || 0;
+    const jointBalance = typeof txResult.jointTotal === 'number'
+        ? txResult.jointTotal
+        : Number(txResult.jointTotal) || 0;
     const count = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
     const loading = txResult.loading || false;
     const error = txResult.error || null;
@@ -32,20 +38,6 @@ export function useTransactionTable(filters, statementPeriod) {
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
-
-    // Totals
-    const { clearedBalance, unclearedBalance } = useMemo(() => {
-        let cleared = 0;
-        for (const t of localTx) {
-            const a = Number(t.amount) || 0;
-            if (t.cleared) cleared += a;
-        }
-        return {
-            clearedBalance: cleared,
-            unclearedBalance: (Number(total) || 0) - cleared,
-        };
-    }, [localTx, total]);
-    const workingBalance = total;
 
     // Selection
     const toggleSelect = useCallback((id) => {
@@ -323,10 +315,9 @@ export function useTransactionTable(filters, statementPeriod) {
         editing,
         editValueRef,
         fileInputRef,
-        clearedBalance,
-        unclearedBalance,
-        workingBalance,
         total,
+        jointBalance,
+        personalBalance,
         count,
         isAllSelected,
         toggleSelect,

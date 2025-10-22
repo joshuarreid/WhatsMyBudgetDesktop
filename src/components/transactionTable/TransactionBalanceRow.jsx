@@ -11,37 +11,29 @@ function formatCurrency(amount) {
  * TransactionBalanceRow
  *
  * Props:
- * - cleared: number
- * - uncleared?: number
- * - working?: number
- * - showUncleared?: boolean (default: false)
- * - showWorking?: boolean (default: false)
+ * - total: number
+ * - joint: number
+ * - personal: number
  */
 export function TransactionBalanceRow({
-                                          cleared,
-                                          uncleared,
-                                          working,
-                                          showUncleared = false,
-                                          showWorking = false,
-                                      }) {
+    total,
+    joint,
+    personal,
+}) {
     return (
         <div className="tt-balance-row" role="region" aria-label="Balances">
-            <div className="tt-balance-item" data-testid="balance-cleared">
-                <div className="tt-balance-amount">{formatCurrency(cleared)}</div>
-                <div className="tt-balance-label">Projected Balance</div>
+            <div className="tt-balance-item" data-testid="balance-total">
+                <div className="tt-balance-amount">{formatCurrency(total)}</div>
+                <div className="tt-balance-label">Total Balance</div>
             </div>
-            {showUncleared && (
-                <div className="tt-balance-item" data-testid="balance-uncleared">
-                    <div className="tt-balance-amount">{formatCurrency(uncleared)}</div>
-                    <div className="tt-balance-label">Uncleared</div>
-                </div>
-            )}
-            {showWorking && (
-                <div className="tt-balance-item tt-working" data-testid="balance-working">
-                    <div className="tt-balance-amount">{formatCurrency(working)}</div>
-                    <div className="tt-balance-label">Working Balance</div>
-                </div>
-            )}
+            <div className="tt-balance-item" data-testid="balance-joint">
+                <div className="tt-balance-amount">{formatCurrency(joint)}</div>
+                <div className="tt-balance-label">Joint Balance</div>
+            </div>
+            <div className="tt-balance-item" data-testid="balance-personal">
+                <div className="tt-balance-amount">{formatCurrency(personal)}</div>
+                <div className="tt-balance-label">Personal Balance</div>
+            </div>
         </div>
     );
 }
