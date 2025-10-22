@@ -38,15 +38,14 @@ export default function CategorizedTable(props) {
         currency: 'USD',
     });
 
-    if (loading) return <div className="ct-empty">Loading...</div>;
+    // Don't return early on loading — render the table shell so the UI stays stable.
     if (error) return <div className="ct-empty">Error: {error.message || String(error)}</div>;
-    if (rows.length === 0) return <div className="ct-empty">No transactions</div>;
 
     return (
         <div className="ct-card">
-            <CategoryTableTitle title={props.title} />
+            <CategoryTableTitle title={props.title} loading={loading} />
             <CategoryTableHeader />
-            <CategoryTableBody rows={rows} totalSum={totalSum} fmt={fmt} />
+            <CategoryTableBody rows={rows} totalSum={totalSum} fmt={fmt} loading={loading} />
             <CategoryTableFooter totalSum={totalSum} fmt={fmt} />
         </div>
     );

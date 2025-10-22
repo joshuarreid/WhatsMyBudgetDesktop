@@ -46,7 +46,7 @@ export default function TransactionTable(props) {
         startEditingRow,
     } = useTransactionTable(filters, statementPeriod);
 
-    if (loading) return <div className="tt-empty">Loading...</div>;
+    // Don't return early on loading — render the table shell so the UI stays stable.
     if (error) return <div className="tt-empty">Error: {error.message || String(error)}</div>;
 
     if (!localTx || localTx.length === 0)
@@ -69,7 +69,9 @@ export default function TransactionTable(props) {
                     loading={loading}
                     total={fmt.format(workingBalance)}
                 />
-                <div className="tt-empty">No transactions</div>
+                {/* Keep the header so the table shell is visible during loading */}
+                <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
+                <div className="tt-body">{loading ? null : <div className="tt-empty">No transactions</div>}</div>
             </div>
         );
 
