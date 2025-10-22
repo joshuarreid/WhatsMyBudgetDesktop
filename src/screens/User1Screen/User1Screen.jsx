@@ -1,8 +1,8 @@
 import React from "react";
-import CategorizedTable from "../../components/categorizedTable/CategorizedTable";
-import SpendingSummary from "../../components/spendingSummary/SpendingSummary";
+import CategorizedTable from "../../features/categorizedTable/CategorizedTable";
+import SpendingSummary from "../../features/spendingSummary/SpendingSummary";
 import config from "../../wmbservice-config.json";
-import TransactionTable from "../../components/transactionTable/TransactionTable";
+import TransactionTable from "../../features/transactionTable/TransactionTable";
 
 const User1Screen = () => {
     const USER1FILTER = config.user1Filter;

@@ -141,6 +141,11 @@
     background: none;
 }
 
+
+.ct-row[role="button"] {
+    cursor: pointer;
+}
+
 /* Responsive tweak: reduce fixed 220px column on very narrow screens */
 @media (max-width: 480px) {
     .ct-header-row,

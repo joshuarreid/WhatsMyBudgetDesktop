@@ -1,6 +1,6 @@
-import SpendingSummary from "../../components/spendingSummary/SpendingSummary";
+import SpendingSummary from "../../features/spendingSummary/SpendingSummary";
 import React from "react";
-import TransactionTable from "../../components/transactionTable/TransactionTable";
+import TransactionTable from "../../features/transactionTable/TransactionTable";
 import SettingsScreen from "../SettingsScreen/SettingsScreen";
 import config from "../../wmbservice-config.json";
 
