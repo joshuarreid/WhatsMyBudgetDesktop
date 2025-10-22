@@ -70,6 +70,14 @@
     background: rgba(255,255,255,0.03);
 }
 
+.ct-title {
+    font-weight: 800;
+    font-size: 2rem;
+    color: #e6eef8;
+    padding: 16px 0 2px 8px;
+    letter-spacing: 0.01em;
+}
+
 /* category column */
 .ct-cat {
     font-weight: 600;

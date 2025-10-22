@@ -20,12 +20,10 @@ export default function SpendingSummary(props) {
             <header className="spending-summary__header">
                 <div className="tables-row">
                     <div className="table-container">
-                        <h3>Essential</h3>
-                        <CategorizedTable filters={ESSENTIAL}/>
+                        <CategorizedTable title="Essential Spending" filters={ESSENTIAL}/>
                     </div>
                     <div className="table-container">
-                        <h3>Nonessential</h3>
-                        <CategorizedTable filters={NONESSENTIAL}/>
+                        <CategorizedTable title="Discretionary Spending" filters={NONESSENTIAL}/>
                     </div>
                 </div>
             </header>

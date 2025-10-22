@@ -1,19 +1,22 @@
 import React, { useMemo } from 'react';
 import useTransactions from '../../hooks/useTransactions';
 import './CategorizedTable.css';
+import CategoryTableHeader from './CategoryTableHeader';
+import CategoryTableBody from './CategoryTableBody';
+import CategoryTableFooter from './CategoryTableFooter';
+import CategoryTableTitle from './CategoryTableTitle';
 
 export default function CategorizedTable(props) {
     const logger = {
-        info: (...args) => console.log('[CategorizedTable]', ...args),
+        info: (...args) => console.info('[CategorizedTable]', ...args),
         error: (...args) => console.error('[CategorizedTable]', ...args),
     };
 
     const filters = props.filters ?? props;
-    logger.info('filters', filters)
+    logger.info('filters', filters);
     const txResult = useTransactions(filters || {});
     const transactions = Array.isArray(txResult?.data) ? txResult.data : [];
     const { loading, error } = txResult || {};
-
 
     logger.info('Calculating category totals');
     const totalsByCategory = useMemo(() => {
@@ -41,40 +44,10 @@ export default function CategorizedTable(props) {
 
     return (
         <div className="ct-card">
-            <div className="ct-header-row">
-                <div>Category</div>
-                <div style={{ textAlign: 'right' }}>Amount</div>
-            </div>
-
-            <div className="ct-body">
-                {rows.map(([category, total]) => {
-                    const pct = totalSum > 0 ? Math.round((total / totalSum) * 100) : 0;
-                    return (
-                        <div className="ct-row" key={category}>
-                            <div className="ct-col ct-cat">{category}</div>
-
-                            <div className="ct-col ct-col-amount" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
-                                <div className="ct-amount">{fmt.format(total)}</div>
-                                <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
-                                    <div className="ct-bar" style={{ width: 140 }}>
-                                        <div
-                                            className="ct-bar-fill"
-                                            style={{ width: `${pct}%` }}
-                                            aria-hidden="true"
-                                        />
-                                    </div>
-                                    <div className="ct-pct">{pct}%</div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            <div className="ct-footer">
-                <div>Total</div>
-                <div style={{ textAlign: 'right' }}>{fmt.format(totalSum)}</div>
-            </div>
+            <CategoryTableTitle title={props.title} />
+            <CategoryTableHeader />
+            <CategoryTableBody rows={rows} totalSum={totalSum} fmt={fmt} />
+            <CategoryTableFooter totalSum={totalSum} fmt={fmt} />
         </div>
     );
 }

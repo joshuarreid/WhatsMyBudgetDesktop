@@ -1,20 +1,48 @@
-.App {
-    text-align: center;
+/* App.css
+   Tweaked colors and fonts to better match the transaction table while keeping
+   a slight contrast. All original class names are unchanged; only colors,
+   fonts, and small spacing tweaks were adjusted.
+*/
+
+/* Theme variables (kept local to this file for easy tuning) */
+:root {
+    --bg-page: #272727;           /* slightly lighter than your original #2c2c2c */
+    --bg-panel: #141419;          /* dark panel for sidebar/card contrast */
+    --accent: #7fb7db;            /* softer blue for primary actions */
+    --accent-strong: #c6eecb;     /* soft green for positive numbers / totals */
+    --muted: #b1bcc6;             /* subdued text color */
+    --button-bg: rgba(127,183,219,0.08);
+    --button-border: rgba(127,183,219,0.10);
+    --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --sidebar-width: 275px;
+    --radius: 8px;
 }
 
+/* Reset + base */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
 body, html {
-    background-color: #2c2c2c;
+    background-color: var(--bg-page);
     margin: 0;
     padding: 0;
     min-height: 100vh;
     width: 100vw;
+    font-family: var(--font-sans);
+    color: #e6eef8;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
+/* App container */
+.App {
+    text-align: center;
+}
 
+/* Header - kept structure but adjusted spacing and color */
 .App-header {
-    background-color: #2c2c2c;
+    background-color: transparent;
     padding: 20px;
-    color: white;
+    color: #e6eef8;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -23,38 +51,323 @@ body, html {
     font-size: calc(10px + 2vmin);
 }
 
+/* Buttons block - updated visuals for better cohesion with table */
 .buttons {
     margin-top: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
 }
 
 .buttons button {
     margin: 10px;
-    padding: 15px 30px;
-    font-size: 16px;
-    background-color: #61dafb;
-    color: #282c34;
-    border: none;
-    border-radius: 5px;
+    padding: 12px 28px;
+    font-size: 15px;
+    background-color: var(--button-bg);
+    color: var(--accent);
+    border: 1px solid var(--button-border);
+    border-radius: 8px;
     cursor: pointer;
+    font-weight: 700;
+    transition: background 140ms ease, transform 120ms ease;
 }
 
 .buttons button:hover {
-    background-color: #4fa8c5;
+    background-color: rgba(127,183,219,0.12);
+    transform: translateY(-2px);
 }
 
+/* Main content area - keep same layout but slightly different padding */
 .main-content {
-    margin-left: 220px; /* Same as sidebar width */
+    margin-left: var(--sidebar-width); /* Same as sidebar width */
     min-height: 100vh;
+    padding: 20px;
 }
 
+/* Sidebar - keep class, but switch to dark theme and muted text */
 .sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 220px; /* Adjust as needed */
+    width: var(--sidebar-width); /* Adjust as needed */
     height: 100vh;
-    background: #f4f4f4;
+    background: linear-gradient(180deg, var(--bg-panel), #0f1012);
+    color: var(--muted);
     z-index: 1000;
+    border-right: 1px solid rgba(255,255,255,0.03);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
+/* Keep .sidebar item classes if used in markup (not changing names) */
+.sidebar .item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #cbd5e1;
+    font-weight: 600;
+}
+.sidebar .item:hover {
+    background: rgba(127,183,219,0.03);
+    color: var(--accent);
+}
 
+/* Utility link button class to match TransactionTable's small link buttons */
+.link-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-weight: 700;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.link-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.link-btn:hover:not(:disabled) {
+    background: rgba(127,183,219,0.03);
+    transform: translateY(-1px);
+}
+
+/* Top-level card wrapper similar to .tt-card but not replacing it */
+.app-card {
+    background: linear-gradient(180deg, rgba(20,22,24,0.9), rgba(28,28,30,0.9));
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.03);
+    color: #e6eef8;
+}
+
+/* Balance row helpers to align with transaction table's balance section */
+.balance-row {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, rgba(12,12,14,0.7), rgba(18,18,20,0.6));
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.balance-item { color: var(--muted); text-align: left; }
+.balance-amount { color: var(--accent-strong); font-weight: 800; font-size: 1.05rem; }
+.balance-label { font-size: 0.78rem; color: var(--muted); }
+.balance-item.working .balance-amount { color: #f3d98a; }
+
+/* Scrollbar styling to match darker theme */
+::-webkit-scrollbar { height: 10px; width: 10px; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Small utilities */
+.muted { color: var(--muted); }
+.center { text-align: center; }
+.right { text-align: right; }
+
+/* Responsive */
+@media (max-width: 880px) {
+    .sidebar { position: relative; width: 100%; height: auto; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .main-content { margin-left: 0; padding: 16px; }
+    .balance-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
+
+.buttons button {
+    transition: background 140ms ease, transform 120ms ease, box-shadow 120ms ease;
+    will-change: transform, box-shadow;
+}
+
+.buttons button:hover {
+    /* double-checking hover matches previous style */
+    background-color: rgba(127,183,219,0.12);
+    transform: translateY(-2px);
+}
+
+.buttons button:focus,
+.buttons button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(127,183,219,0.08);
+    transform: translateY(-1px);
+}
+
+/* Small inline link buttons - hover and focus */
+.link-btn:hover:not(:disabled),
+.link-btn:focus-visible:not(:disabled) {
+    background: rgba(127,183,219,0.03);
+    transform: translateY(-1px);
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(127,183,219,0.06);
+}
+
+/* Navigation links used by Sidebar components that use class "sidebar-link".
+   Only add hover/focus/active states — don't touch sizing or layout. */
+.sidebar-link {
+    display: block;
+    padding: 8px 10px;
+    color: var(--muted);
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: background 120ms ease, color 120ms ease, transform 100ms ease;
+}
+
+/* Hover & focus for navigation: subtle lift and color change */
+.sidebar-link:hover,
+.sidebar-link:focus {
+    background: rgba(127,183,219,0.03);
+    color: var(--accent);
+    transform: translateY(-1px);
+    text-decoration: none;
+    outline: none;
+}
+
+/* Focus-visible for keyboard users */
+.sidebar-link:focus-visible {
+    box-shadow: 0 0 0 4px rgba(127,183,219,0.08);
+}
+
+/* Active / selected link (non-intrusive accent) */
+.sidebar-link.active {
+    background: linear-gradient(90deg, rgba(127,183,219,0.02), rgba(127,183,219,0.01));
+    color: #ffffff;
+    position: relative;
+}
+
+/* Small accent bar on the left — subtle and won't change layout width */
+.sidebar-link.active::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    background: var(--accent);
+    border-radius: 3px;
+}
+
+/* remove default bullets/padding for sidebar nav lists */
+.sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.sidebar-list-item {
+    list-style: none; /* extra safety if li gets its own style */
+    margin: 0;
+    padding: 0;
+}
+
+/* Small responsive tweak to ensure nav padding doesn't break mobile layout */
+@media (max-width: 480px) {
+    .sidebar-link { padding: 10px 12px; }
+    .buttons button { padding: 10px 18px; }
+}
+
+/* ========================
+   Accordion / Views additions
+   - reset native button appearance
+   - proper list padding and spacing
+   - chevron behavior and accessible focus
+   - avoid focus jumping/caret artifacts by keeping focus on toggle
+   ======================== */
+
+/* reset native button appearance for the accordion toggle */
+.sidebar-accordion-toggle {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 6px 8px;
+    width: 100%;
+    text-align: left;
+    color: var(--muted);
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+    line-height: 1.2;
+}
+
+/* Remove Firefox inner padding on buttons */
+.sidebar-accordion-toggle::-moz-focus-inner {
+    border: 0;
+    padding: 0;
+}
+
+/* Hover/focus styles for toggle (kept subtle) */
+.sidebar-accordion-toggle:hover,
+.sidebar-accordion-toggle:focus {
+    background: rgba(127,183,219,0.03);
+    color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(127,183,219,0.04);
+}
+
+/* chevron rotation and size */
+.chevron {
+    display: inline-block;
+    transition: transform 160ms ease;
+    transform-origin: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+.chevron.open {
+    transform: rotate(90deg);
+    color: var(--accent);
+}
+
+/* collapse panel animation (CSS-only, safe) */
+.views-panel {
+    overflow: hidden;
+    transition: max-height 220ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease;
+    max-height: 0;
+    opacity: 0;
+    padding-left: 0;
+    margin-top: 6px;
+}
+
+/* when open, allow content to show */
+.views-panel.open {
+    max-height: 600px;
+    opacity: 1;
+}
+
+/* ensure nested lists have no bullets and spacing matches top-level nav */
+.views-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* small vertical gap for list items so they match the rest of the sidebar */
+.sidebar-section .sidebar-list-item {
+    margin: 0;
+    padding: 6px 0;
+}
+
+/* view links should be block-level and indented */
+.view-link {
+    padding-left: 14px;
+    display: block;
+    color: var(--muted);
+}
+
+/* make sure links have proper focus visuals */
+.views-panel .sidebar-link:focus-visible {
+    box-shadow: 0 0 0 4px rgba(127,183,219,0.06);
+    outline: none;
+}
+
+/* If you prefer a different chevron glyph, replace ▸ with an SVG in Sidebar.jsx */
