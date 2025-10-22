@@ -26,6 +26,11 @@ function endOfDay(d) {
  *
  * Create weekly buckets and compute totals for a given transactions list and category.
  *
+ * Behaviour change: weeks are generated from the computed `start` and
+ * we stop after the week that contains "today" (the current date).
+ * This means the final bucket may have an end date in the future,
+ * but buckets strictly after the current week are not produced.
+ *
  * Rules:
  * - start date = 1st of month of earliest transaction (across the provided list)
  * - end date = statementCloseDay (default 5) of the month AFTER the latest transaction
@@ -84,6 +89,29 @@ export default function useWeeklyTotals(
             // end at the statementCloseDay of the month AFTER latest transaction
             const end = endOfDay(new Date(latest.getFullYear(), latest.getMonth() + 1, statementCloseDay));
 
+            // Determine the "last week start" we should include:
+            // - include the week that contains "today" (so the final week may end in the future)
+            const today = new Date();
+            const todayStart = startOfDay(today);
+
+            // Walk week starts from `start` forward in weekLengthDays to find the latest weekStart <= today
+            let cursorForLast = start;
+            let lastWeekStart = start;
+            while (cursorForLast <= todayStart) {
+                lastWeekStart = startOfDay(cursorForLast);
+                // advance
+                cursorForLast = new Date(cursorForLast.getTime() + weekLengthDays * MS_PER_DAY);
+            }
+
+            logger.info('computed boundaries', {
+                start: start.toISOString().slice(0, 10),
+                originalEnd: end.toISOString().slice(0, 10),
+                today: todayStart.toISOString().slice(0, 10),
+                lastWeekStart: lastWeekStart.toISOString().slice(0, 10),
+                weekLengthDays,
+                category,
+            });
+
             // Pre-filter transactions by category if provided (and ensure they have a date)
             const filteredTx = category
                 ? tx.filter((t) => t.category === category && t.transactionDate)
@@ -92,7 +120,8 @@ export default function useWeeklyTotals(
             const weeks = [];
             let cursor = start;
 
-            while (cursor <= end) {
+            // Iterate and create weeks up to and including the week that starts at lastWeekStart
+            while (cursor <= end && cursor <= lastWeekStart) {
                 const weekStart = startOfDay(cursor);
                 // weekEnd is inclusive: weekLengthDays - 1 full days after start, end at endOfDay
                 const rawWeekEnd = new Date(weekStart.getTime() + (weekLengthDays - 1) * MS_PER_DAY);
@@ -130,6 +159,7 @@ export default function useWeeklyTotals(
                 weeks: weeks.length,
                 start: start.toISOString().slice(0, 10),
                 end: end.toISOString().slice(0, 10),
+                limitedToWeekContainingToday: true,
                 category,
             });
 
