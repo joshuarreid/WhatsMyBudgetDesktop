@@ -1,33 +1,26 @@
-/* Separate CSS for CategorizedTable (dark theme)
-   - Ensures the footer ("Total") is always stuck to the bottom of the card.
-   - The header remains sticky at the top of the scrollable body.
-*/
-
-/* Card width control:
-   - Use --ct-card-width to override globally or on a parent.
-   - Or add the helper class .ct-card--wide to force a wider preset.
-*/
 .ct-card {
     box-sizing: border-box;
     width: var(--ct-card-width, min(720px, 88vw));
     max-width: none;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    /* Match TransactionTable card (background and border) */
+    background: linear-gradient(180deg, #0f1115, #151516);
+    border: 1px solid rgba(255,255,255,0.04);
+    /* Optional: remove box-shadow if you want it to match TT exactly */
+    box-shadow: none;
     padding: 5px;
-    min-height: 700px;     /* Fixed minimum height */
-    margin: 12px 0;        /* Top/bottom spacing */
+    min-height: 700px;
+    margin: 12px 0;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     color: #e6eef8;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    border: 1px solid rgba(255,255,255,0.03);
-    font-size: 0.85rem;   /* Smaller font size */
+    font-size: 0.85rem;
 }
 
-/* Preset helper class to force a wider card */
 .ct-card--wide {
-    width: 840px; /* change to your preferred pixel value */
+    width: 840px;
 }
 
 /* header */
@@ -36,35 +29,24 @@
     grid-template-columns: 1fr 220px;
     gap: 12px;
     padding: 6px 12px;
-    font-weight: 600;
+    font-weight: 700;
     color: #cbd5e1;
     border-bottom: 1px solid rgba(255,255,255,0.03);
-
-    /* sticky header inside the card */
     position: sticky;
     top: 0;
-    background: linear-gradient(180deg, rgba(35,38,41,0.9), rgba(44,44,44,0.6));
+    background: linear-gradient(180deg, rgba(20,22,24,0.95), rgba(28,28,30,0.95));
     z-index: 2;
-    font-size: 0.85rem; /* smaller header font */
+    font-size: 0.85rem;
 }
 
-/* body with scroll if needed
-   - Make body flexible so footer remains pinned to the bottom.
-*/
+/* body */
 .ct-body {
     display: flex;
     flex-direction: column;
     gap: 4px;
-
-    /* Allow the body to grow/shrink and take remaining space */
     flex: 1 1 auto;
-
-    /* If content exceeds available space, enable scrolling */
     overflow-y: auto;
-
     padding: 4px;
-    /* Optional: limit the height on very tall cards (not required) */
-    /* max-height: 500px; */
 }
 
 /* rows */
@@ -75,16 +57,16 @@
     align-items: center;
     padding: 8px;
     border-radius: 8px;
-    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    font-size: 0.85rem; /* smaller row font */
+    transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    font-size: 0.85rem;
 }
 
 .ct-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
 
 .ct-row:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.45);
     background: rgba(255,255,255,0.03);
 }
 
@@ -101,14 +83,18 @@
 .ct-amount {
     font-weight: 700;
     text-align: right;
-    color: #f8fafc;
+    color: #9be3a7; /* Match TransactionTable amount color */
+    font-variant-numeric: tabular-nums;
 }
 
-.ct-col { display: flex; align-items: center; }
+.ct-col {
+    display: flex;
+    align-items: center;
+}
 
 /* progress bar */
 .ct-bar {
-    height: 6px; /* smaller bar */
+    height: 6px;
     background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
     border-radius: 999px;
     margin-top: 6px;
@@ -116,7 +102,6 @@
     position: relative;
     border: 1px solid rgba(255,255,255,0.02);
 }
-
 .ct-bar-fill {
     height: 100%;
     background: linear-gradient(90deg, #8b5cf6, #06b6d4);
@@ -127,17 +112,14 @@
 
 /* percent label */
 .ct-pct {
-    font-size: 11px;  /* smaller percentage font */
+    font-size: 11px;
     color: #9aa6b2;
     margin-left: 6px;
     min-width: 36px;
     text-align: right;
 }
 
-/* footer
-   - Use margin-top: auto to push footer to the bottom of the flex container (.ct-card).
-   - Keep the layout consistent with header/rows.
-*/
+/* footer */
 .ct-footer {
     margin-top: auto;
     display: grid;
@@ -147,7 +129,8 @@
     border-top: 1px dashed rgba(255,255,255,0.03);
     font-weight: 700;
     color: #e6eef8;
-    font-size: 0.85rem; /* smaller footer font */
+    font-size: 0.85rem;
+    background: none;
 }
 
 /* Responsive tweak: reduce fixed 220px column on very narrow screens */

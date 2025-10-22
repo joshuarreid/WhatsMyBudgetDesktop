@@ -3,7 +3,7 @@
 /* Base */
 .tt-card {
     box-sizing: border-box;
-    width: var(--tt-card-width, min(1200px, 95vw));
+    width: var(--tt-card-width, min(1450px, 95vw));
     border-radius: 12px;
     padding: 8px;
     min-height: 500px;
