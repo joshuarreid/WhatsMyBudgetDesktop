@@ -14,7 +14,7 @@
     --button-bg: rgba(127,183,219,0.08);
     --button-border: rgba(127,183,219,0.10);
     --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --sidebar-width: 275px;
+    --sidebar-width: clamp(220px, 18vw, 250px); /* scales percent-wise (18vw) but stays between 220px and 320px */
     --radius: 8px;
 }
 
