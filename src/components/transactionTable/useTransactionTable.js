@@ -1,12 +1,19 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import apiService from '../../services/apiService';
 
+const logger = {
+    info: (...args) => console.log('[useTransactionTable]', ...args),
+    error: (...args) => console.error('[useTransactionTable]', ...args),
+};
+
 export function useTransactionTable(filters, statementPeriod) {
     const [localTx, setLocalTx] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedIds, setSelectedIds] = useState(new Set());
-    const [editing, setEditing] = useState(null);
+    const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
+    const [savingIds, setSavingIds] = useState(() => new Set());
+    const [saveErrors, setSaveErrors] = useState(() => ({})); // { [id]: message }
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
@@ -17,12 +24,9 @@ export function useTransactionTable(filters, statementPeriod) {
             const data = await apiService.getTransactions(filters || {});
             setLocalTx(Array.isArray(data) ? data.map((t) => ({ ...t })) : []);
             setSelectedIds(new Set());
+            logger.info('fetchTransactions: loaded', { count: Array.isArray(data) ? data.length : 0 });
         } catch (err) {
-            // Robust logging
-            if (process.env.NODE_ENV === 'development') {
-                // eslint-disable-next-line no-console
-                console.error('[TransactionTable] Failed to load transactions', err);
-            }
+            logger.error('Failed to load transactions', err);
             setError(err);
         } finally {
             setLoading(false);
@@ -33,7 +37,7 @@ export function useTransactionTable(filters, statementPeriod) {
         fetchTransactions();
     }, [fetchTransactions]);
 
-    // Totals: cleared sum, uncleared sum, working total
+    // Totals
     const { clearedBalance, unclearedBalance, workingBalance } = useMemo(() => {
         let cleared = 0;
         let total = 0;
@@ -67,10 +71,9 @@ export function useTransactionTable(filters, statementPeriod) {
         });
     }, [localTx, isAllSelected]);
 
-    // Add transaction
+    // Add transaction (local-only draft)
     const handleAddTransaction = useCallback(() => {
         const newTx = {
-            id: `new-${Date.now()}`,
             name: '',
             amount: 0,
             category: '',
@@ -82,53 +85,53 @@ export function useTransactionTable(filters, statementPeriod) {
             __isNew: true,
         };
         setLocalTx((prev) => [newTx, ...prev]);
-        setEditing({ id: newTx.id, field: 'name' });
+        setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
+        logger.info('handleAddTransaction: created local new tx', { name: newTx.name });
     }, []);
 
-    // Delete selected
-    const handleDeleteSelected = useCallback(async () => {
-        if (selectedIds.size === 0) return;
-        const ids = Array.from(selectedIds);
-        const localOnly = ids.filter((id) => String(id).startsWith('new-'));
-        const toDeleteFromAPI = ids.filter((id) => !String(id).startsWith('new-'));
+    // Delete selected (unchanged)
+    const handleDeleteSelected = useCallback(
+        async () => {
+            if (selectedIds.size === 0) return;
+            const ids = Array.from(selectedIds);
+            const localOnly = ids.filter((id) => String(id).startsWith('new-'));
+            const toDeleteFromAPI = ids.filter((id) => !String(id).startsWith('new-'));
 
-        if (localOnly.length) {
-            setLocalTx((prev) => prev.filter((t) => !localOnly.includes(t.id)));
-            setSelectedIds((prev) => {
-                const copy = new Set(prev);
-                localOnly.forEach((id) => copy.delete(id));
-                return copy;
-            });
-        }
-
-        if (toDeleteFromAPI.length === 0) return;
-
-        setLoading(true);
-        try {
-            await Promise.all(
-                toDeleteFromAPI.map((id) =>
-                    apiService.deleteTransaction(id).catch((err) => {
-                        if (process.env.NODE_ENV === 'development') {
-                            // eslint-disable-next-line no-console
-                            console.error(`[TransactionTable] Failed to delete ${id}`, err);
-                        }
-                    })
-                )
-            );
-            await fetchTransactions();
-        } catch (err) {
-            if (process.env.NODE_ENV === 'development') {
-                // eslint-disable-next-line no-console
-                console.error('[TransactionTable] Error deleting transactions', err);
+            if (localOnly.length) {
+                setLocalTx((prev) => prev.filter((t) => !localOnly.includes(t.id)));
+                setSelectedIds((prev) => {
+                    const copy = new Set(prev);
+                    localOnly.forEach((id) => copy.delete(id));
+                    return copy;
+                });
+                logger.info('handleDeleteSelected: removed local-only ids', { localOnly });
             }
-            setError(err);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedIds, fetchTransactions]);
 
-    // File import
+            if (toDeleteFromAPI.length === 0) return;
+
+            setLoading(true);
+            try {
+                await Promise.all(
+                    toDeleteFromAPI.map((id) =>
+                        apiService.deleteTransaction(id).catch((err) => {
+                            logger.error(`Failed to delete ${id}`, err);
+                        })
+                    )
+                );
+                await fetchTransactions();
+                logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
+            } catch (err) {
+                logger.error('Error deleting transactions', err);
+                setError(err);
+            } finally {
+                setLoading(false);
+            }
+        },
+        [selectedIds, fetchTransactions]
+    );
+
+    // File import (unchanged)
     const handleFileChange = useCallback(
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
@@ -138,11 +141,9 @@ export function useTransactionTable(filters, statementPeriod) {
             try {
                 await apiService.uploadTransactions(file, statementPeriod);
                 await fetchTransactions();
+                logger.info('handleFileChange: upload complete');
             } catch (err) {
-                if (process.env.NODE_ENV === 'development') {
-                    // eslint-disable-next-line no-console
-                    console.error('[TransactionTable] Upload failed', err);
-                }
+                logger.error('Upload failed', err);
                 setError(err);
             } finally {
                 ev.target.value = '';
@@ -155,9 +156,15 @@ export function useTransactionTable(filters, statementPeriod) {
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
 
     // Editing helpers
-    const startEditing = useCallback((id, field, initial = '') => {
-        setEditing({ id, field });
+    const startEditingField = useCallback((id, field, initial = '') => {
+        setEditing({ id, mode: 'field', field });
         editValueRef.current = initial;
+        logger.info('startEditingField', { id, field, initial });
+    }, []);
+
+    const startEditingRow = useCallback((id) => {
+        setEditing({ id, mode: 'row' });
+        logger.info('startEditingRow', { id });
     }, []);
 
     function toInputDate(iso) {
@@ -181,73 +188,122 @@ export function useTransactionTable(filters, statementPeriod) {
                 : tx[field] != null
                     ? String(tx[field])
                     : '';
-        startEditing(tx.id, field, initial);
-    }, [startEditing]);
+        startEditingField(tx.id, field, initial);
+    }, [startEditingField]);
 
+    // key handler wrapper -- will call explicit save function (below)
     const handleEditKey = useCallback(
         (e, id, field) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                handleSaveEdit(id, field, editValueRef.current);
+                // For field mode we still support single-field save
+                // caller will call handleSaveEdit for compatibility
             } else if (e.key === 'Escape') {
                 setEditing(null);
             }
         },
-        // handleSaveEdit comes from below, so we'll add it after declaration
         []
     );
 
-    // Save edit (create if new, update otherwise)
-    const handleSaveEdit = useCallback(
-        async (id, field, value) => {
+    // validate helper
+    const validateForCreate = useCallback((tx) => {
+        const errors = [];
+        if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
+        if (tx.amount == null || Number.isNaN(Number(tx.amount))) errors.push('Amount must be a number');
+        return errors;
+    }, []);
+
+    // Save whole-row (explicit Save)
+    const handleSaveRow = useCallback(
+        async (id, updatedFields) => {
+            // merge changes into localTx synchronously (functional update)
+            let txToPersist = null;
             setLocalTx((prev) =>
                 prev.map((t) => {
                     if (t.id !== id) return t;
-                    const updated = { ...t };
-                    if (field === 'amount') updated.amount = Number(value) || 0;
-                    else if (field === 'transactionDate') updated.transactionDate = value ? new Date(value).toISOString() : t.transactionDate;
-                    else updated[field] = value;
+                    const updated = { ...t, ...updatedFields };
+                    txToPersist = updated;
                     return updated;
                 })
             );
+
             setEditing(null);
 
-            const tx = localTx.find((t) => t.id === id) || {};
-            const updatedTx = { ...tx };
-            if (field === 'amount') updatedTx.amount = Number(value) || 0;
-            else if (field === 'transactionDate') updatedTx.transactionDate = value ? new Date(value).toISOString() : tx.transactionDate;
-            else updatedTx[field] = value;
+            if (!txToPersist) {
+                logger.error('handleSaveRow: transaction not found locally', { id, updatedFields });
+                return;
+            }
+
+            // clear previous errors
+            setSaveErrors((prev) => {
+                if (!prev[id]) return prev;
+                const copy = { ...prev };
+                delete copy[id];
+                return copy;
+            });
+
+            const isNew = String(id).startsWith('new-') || txToPersist.__isNew;
+            if (isNew) {
+                const validationErrors = validateForCreate(txToPersist);
+                if (validationErrors.length > 0) {
+                    setSaveErrors((prev) => ({ ...prev, [id]: validationErrors.join('. ') }));
+                    logger.info('handleSaveRow: validation failed for create', { id, validationErrors });
+                    return;
+                }
+            }
+
+            // mark saving
+            setSavingIds((prev) => {
+                const copy = new Set(prev);
+                copy.add(id);
+                return copy;
+            });
 
             try {
-                if (String(id).startsWith('new-') || tx.__isNew) {
-                    const created = await apiService.createTransaction(updatedTx);
+                if (isNew) {
+                    logger.info('handleSaveRow: creating new transaction', { id });
+                    const created = await apiService.createTransaction(txToPersist);
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
+                    logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
                 } else {
-                    await apiService.updateTransaction(id, updatedTx);
+                    logger.info('handleSaveRow: updating transaction', { id });
+                    await apiService.updateTransaction(id, txToPersist);
+                    logger.info('handleSaveRow: updated', { id });
                 }
             } catch (err) {
-                if (process.env.NODE_ENV === 'development') {
-                    // eslint-disable-next-line no-console
-                    console.error('[TransactionTable] Failed to persist edit', err);
-                }
+                logger.error('handleSaveRow: persist failed', err);
+                setSaveErrors((prev) => ({ ...prev, [id]: err.message || String(err) }));
                 setError(err);
-                await fetchTransactions();
+                if (!isNew) {
+                    try {
+                        await fetchTransactions();
+                    } catch (fetchErr) {
+                        logger.error('fetchTransactions after failed persist also failed', fetchErr);
+                    }
+                } else {
+                    logger.info('Preserving local new transaction after create failure', { id });
+                }
+            } finally {
+                setSavingIds((prev) => {
+                    const copy = new Set(prev);
+                    copy.delete(id);
+                    return copy;
+                });
             }
         },
-        [localTx, fetchTransactions]
+        [fetchTransactions, validateForCreate]
     );
 
-    // Patch handleEditKey to use the actual handleSaveEdit
-    const patchedHandleEditKey = useCallback(
-        (e, id, field) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSaveEdit(id, field, editValueRef.current);
-            } else if (e.key === 'Escape') {
-                setEditing(null);
-            }
+    // For backwards compatibility: single-field save (still supported)
+    const handleSaveEdit = useCallback(
+        async (id, field, value) => {
+            const patch = {};
+            if (field === 'amount') patch.amount = Number(value) || 0;
+            else if (field === 'transactionDate') patch.transactionDate = value ? new Date(value).toISOString() : undefined;
+            else patch[field] = value;
+            await handleSaveRow(id, patch);
         },
-        [handleSaveEdit]
+        [handleSaveRow]
     );
 
     // Toggle cleared state (persists)
@@ -257,14 +313,13 @@ export function useTransactionTable(filters, statementPeriod) {
             setLocalTx((prev) => prev.map((t) => (t.id === tx.id ? updated : t)));
             try {
                 if (String(tx.id).startsWith('new-') || tx.__isNew) {
+                    logger.info('toggleCleared: updated local new transaction', { id: tx.id, cleared: updated.cleared });
                     return;
                 }
                 await apiService.updateTransaction(tx.id, updated);
+                logger.info('toggleCleared: updated persisted transaction', { id: tx.id, cleared: updated.cleared });
             } catch (err) {
-                if (process.env.NODE_ENV === 'development') {
-                    // eslint-disable-next-line no-console
-                    console.error('[TransactionTable] Failed to update cleared state', err);
-                }
+                logger.error('Failed to update cleared state', err);
                 setError(err);
                 await fetchTransactions();
             }
@@ -291,11 +346,15 @@ export function useTransactionTable(filters, statementPeriod) {
         handleFileChange,
         openFilePicker,
         handleCellDoubleClick,
-        patchedHandleEditKey,
+        handleEditKey,
         handleSaveEdit,
-        startEditing,
+        handleSaveRow,
+        startEditingRow,
+        startEditingField,
         toInputDate,
         toggleCleared,
         setEditing,
+        savingIds,
+        saveErrors,
     };
 }

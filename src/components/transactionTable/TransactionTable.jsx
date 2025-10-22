@@ -35,11 +35,15 @@ export default function TransactionTable(props) {
         handleFileChange,
         openFilePicker,
         handleCellDoubleClick,
-        patchedHandleEditKey,
+        handleEditKey,
         handleSaveEdit,
+        handleSaveRow,
         toInputDate,
         toggleCleared,
         setEditing,
+        savingIds,
+        saveErrors,
+        startEditingRow,
     } = useTransactionTable(filters, statementPeriod);
 
     if (loading) return <div className="tt-empty">Loading...</div>;
@@ -88,10 +92,7 @@ export default function TransactionTable(props) {
                 loading={loading}
                 total={fmt.format(workingBalance)}
             />
-            <TransactionHeaderRow
-                isAllSelected={isAllSelected}
-                toggleSelectAll={toggleSelectAll}
-            />
+            <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
             <div className="tt-body">
                 {localTx.map((tx) => (
                     <TransactionRow
@@ -102,10 +103,15 @@ export default function TransactionTable(props) {
                         editing={editing}
                         editValueRef={editValueRef}
                         onCellDoubleClick={handleCellDoubleClick}
-                        onEditKey={patchedHandleEditKey}
+                        onEditKey={handleEditKey}
                         onSaveEdit={handleSaveEdit}
+                        onSaveRow={handleSaveRow}
                         toInputDate={toInputDate}
                         onToggleCleared={toggleCleared}
+                        setEditing={setEditing}
+                        savingIds={savingIds}
+                        saveErrors={saveErrors}
+                        startEditingRow={startEditingRow}
                     />
                 ))}
             </div>
