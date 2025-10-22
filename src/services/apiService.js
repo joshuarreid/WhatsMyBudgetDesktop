@@ -65,14 +65,18 @@ axiosInstance.interceptors.response.use(
 const apiService = {
     /**
      * GET /api/transactions (list, with optional filters)
-     * @param {Object} filters - { statementPeriod, account, category, paymentMethod }
+     * @param {Object} filters - { statementPeriod, account, category, paymentMethod, criticality }
+     * @returns {Object} BudgetTransactionList { transactions, count, total }
      */
     async getTransactions(filters = {}) {
         logger.info('getTransactions entry', { filters });
         try {
             const response = await axiosInstance.get('', { params: filters });
-            logger.info('getTransactions success', { count: Array.isArray(response.data) ? response.data.length : 0 });
-            return response.data;
+            logger.info('getTransactions success', {
+                count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
+                total: response.data && response.data.total ? response.data.total : 0
+            });
+            return response.data; // BudgetTransactionList: { transactions, count, total }
         } catch (err) {
             logger.error('getTransactions error', err);
             throw err;

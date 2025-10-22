@@ -14,6 +14,8 @@ export function useTransactionTable(filters, statementPeriod) {
     const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
     const [savingIds, setSavingIds] = useState(() => new Set());
     const [saveErrors, setSaveErrors] = useState(() => ({})); // { [id]: message }
+    const [total, setTotal] = useState(0); // backend total
+    const [count, setCount] = useState(0); // backend count
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
@@ -22,9 +24,11 @@ export function useTransactionTable(filters, statementPeriod) {
         setError(null);
         try {
             const data = await apiService.getTransactions(filters || {});
-            setLocalTx(Array.isArray(data) ? data.map((t) => ({ ...t })) : []);
+            setLocalTx(Array.isArray(data.transactions) ? data.transactions.map((t) => ({ ...t })) : []);
+            setTotal(data.total || 0);
+            setCount(data.count || 0);
             setSelectedIds(new Set());
-            logger.info('fetchTransactions: loaded', { count: Array.isArray(data) ? data.length : 0 });
+            logger.info('fetchTransactions: loaded', { count: data.count || 0 });
         } catch (err) {
             logger.error('Failed to load transactions', err);
             setError(err);
@@ -38,20 +42,18 @@ export function useTransactionTable(filters, statementPeriod) {
     }, [fetchTransactions]);
 
     // Totals
-    const { clearedBalance, unclearedBalance, workingBalance } = useMemo(() => {
+    const { clearedBalance, unclearedBalance } = useMemo(() => {
         let cleared = 0;
-        let total = 0;
         for (const t of localTx) {
             const a = Number(t.amount) || 0;
-            total += a;
             if (t.cleared) cleared += a;
         }
         return {
             clearedBalance: cleared,
-            unclearedBalance: total - cleared,
-            workingBalance: total,
+            unclearedBalance: (Number(total) || 0) - cleared,
         };
-    }, [localTx]);
+    }, [localTx, total]);
+    const workingBalance = total;
 
     // Selection
     const toggleSelect = useCallback((id) => {
@@ -338,6 +340,8 @@ export function useTransactionTable(filters, statementPeriod) {
         clearedBalance,
         unclearedBalance,
         workingBalance,
+        total,
+        count,
         isAllSelected,
         toggleSelect,
         toggleSelectAll,
