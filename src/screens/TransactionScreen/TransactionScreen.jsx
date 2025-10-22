@@ -2,13 +2,15 @@ import SpendingSummary from "../../components/spendingSummary/SpendingSummary";
 import React from "react";
 import TransactionTable from "../../components/transactionTable/TransactionTable";
 import SettingsScreen from "../SettingsScreen/SettingsScreen";
+import config from "../../wmbservice-config.json";
 
 
 const TransactionScreen = () => {
+    const JOINTFILTER = config.jointFilter;
     return (
         <div className="App">
             <header className="App-header">
-                <TransactionTable />
+                <TransactionTable account={JOINTFILTER}/>
             </header>
         </div>
     )

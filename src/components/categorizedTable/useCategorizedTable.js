@@ -39,14 +39,21 @@ export default function useCategorizedTable(propsOrFilters = {}) {
 
         // Use the new hook for account-specific transactions
         const txResult = useTransactionsForAccount(filters || {});
-        const transactions = Array.isArray(txResult?.data?.transactions)
-            ? txResult.data.transactions
-            : [];
+        // Combine personal and joint transactions for display, sorted by date desc
+        const transactions = useMemo(
+            () => [
+                ...(txResult.personalTransactions?.transactions || []),
+                ...(txResult.jointTransactions?.transactions || []),
+            ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
+            [txResult.personalTransactions, txResult.jointTransactions],
+        );
+        // Use the new total from the API
         const totalSum =
-            typeof txResult?.data?.total === 'number'
-                ? txResult.data.total
-                : Number(txResult?.data?.total) || 0;
-        const { isLoading: loading = false, error = null } = txResult || {};
+            typeof txResult.total === 'number'
+                ? txResult.total
+                : Number(txResult.total) || 0;
+        const loading = txResult.loading || false;
+        const error = txResult.error || null;
 
         logger.info(
             `transactions: count=${transactions.length} totalSum=${totalSum}`,

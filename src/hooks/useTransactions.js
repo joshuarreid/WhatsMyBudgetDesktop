@@ -39,11 +39,17 @@ export default function useTransactions(filters) {
 
 /**
  * useTransactionsForAccount - fetches transactions for a specific account (and optional filters).
- * Returns { data, loading, error, refetch }.
+ * Returns { personalTransactions, jointTransactions, personalTotal, jointTotal, total, loading, error, refetch }.
  * @param {Object} filters - Must include account.
  */
 export function useTransactionsForAccount(filters) {
-    const [data, setData] = useState(null);
+    const [data, setData] = useState({
+        personalTransactions: { transactions: [], count: 0, total: 0 },
+        jointTransactions: { transactions: [], count: 0, total: 0 },
+        personalTotal: 0,
+        jointTotal: 0,
+        total: 0
+    });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -52,8 +58,14 @@ export function useTransactionsForAccount(filters) {
         setError(null);
         try {
             console.log("[useTransactionsForAccount] fetchData called with filters", currentFilters);
-            const transactions = await apiService.getTransactionsForAccount(currentFilters);
-            setData(transactions);
+            const result = await apiService.getTransactionsForAccount(currentFilters);
+            setData({
+                personalTransactions: result.personalTransactions || { transactions: [], count: 0, total: 0 },
+                jointTransactions: result.jointTransactions || { transactions: [], count: 0, total: 0 },
+                personalTotal: result.personalTotal || 0,
+                jointTotal: result.jointTotal || 0,
+                total: result.total || 0
+            });
         } catch (err) {
             console.error("[useTransactionsForAccount] Error fetching transactions", err);
             setError('Error: ' + (err && err.message ? err.message : String(err)));
@@ -67,5 +79,5 @@ export function useTransactionsForAccount(filters) {
     }, [filters, fetchData]);
 
     const refetch = useCallback(() => fetchData(filters), [fetchData, filters]);
-    return { data, loading, error, refetch };
+    return { ...data, loading, error, refetch };
 }

@@ -1,5 +1,7 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import apiService from '../../services/apiService';
+import {useTransactionsForAccount} from "../../hooks/useTransactions";
+
 
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -7,40 +9,29 @@ const logger = {
 };
 
 export function useTransactionTable(filters, statementPeriod) {
-    const [localTx, setLocalTx] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // Removed local loading and error state (use txResult only)
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
     const [savingIds, setSavingIds] = useState(() => new Set());
     const [saveErrors, setSaveErrors] = useState(() => ({})); // { [id]: message }
-    const [total, setTotal] = useState(0); // backend total
-    const [count, setCount] = useState(0); // backend count
+
+    const txResult = useTransactionsForAccount(filters || {});
+    // Combine personal and joint transactions for display, sorted by date desc
+    const localTx = useMemo(
+        () => [
+            ...(txResult.personalTransactions?.transactions || []),
+            ...(txResult.jointTransactions?.transactions || [])
+        ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
+        [txResult.personalTransactions, txResult.jointTransactions]
+    );
+    const total = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
+    const count = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
+    const loading = txResult.loading || false;
+    const error = txResult.error || null;
+
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
-    const fetchTransactions = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            // Use the account-specific endpoint
-            const data = await apiService.getTransactionsForAccount(filters || {});
-            setLocalTx(Array.isArray(data.transactions) ? data.transactions.map((t) => ({ ...t })) : []);
-            setTotal(data.total || 0);
-            setCount(data.count || 0);
-            setSelectedIds(new Set());
-            logger.info('fetchTransactions: loaded', { count: data.count || 0 });
-        } catch (err) {
-            logger.error('Failed to load transactions', err);
-            setError(err);
-        } finally {
-            setLoading(false);
-        }
-    }, [filters]);
-
-    useEffect(() => {
-        fetchTransactions();
-    }, [fetchTransactions]);
 
     // Totals
     const { clearedBalance, unclearedBalance } = useMemo(() => {
@@ -113,7 +104,6 @@ export function useTransactionTable(filters, statementPeriod) {
 
             if (toDeleteFromAPI.length === 0) return;
 
-            setLoading(true);
             try {
                 await Promise.all(
                     toDeleteFromAPI.map((id) =>
@@ -122,16 +112,14 @@ export function useTransactionTable(filters, statementPeriod) {
                         })
                     )
                 );
-                await fetchTransactions();
+                await txResult.refetch();
                 logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
                 setError(err);
-            } finally {
-                setLoading(false);
             }
         },
-        [selectedIds, fetchTransactions]
+        [selectedIds, txResult.refetch]
     );
 
     // File import (unchanged)
@@ -139,21 +127,18 @@ export function useTransactionTable(filters, statementPeriod) {
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
             if (!file) return;
-            setLoading(true);
-            setError(null);
             try {
                 await apiService.uploadTransactions(file, statementPeriod);
-                await fetchTransactions();
+                await txResult.refetch();
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
                 logger.error('Upload failed', err);
                 setError(err);
             } finally {
                 ev.target.value = '';
-                setLoading(false);
             }
         },
-        [fetchTransactions, statementPeriod]
+        [txResult.refetch, statementPeriod]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
@@ -279,7 +264,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 setError(err);
                 if (!isNew) {
                     try {
-                        await fetchTransactions();
+                        await txResult.refetch();
                     } catch (fetchErr) {
                         logger.error('fetchTransactions after failed persist also failed', fetchErr);
                     }
@@ -294,7 +279,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 });
             }
         },
-        [fetchTransactions, validateForCreate]
+        [txResult.refetch, validateForCreate]
     );
 
     // For backwards compatibility: single-field save (still supported)
@@ -324,10 +309,10 @@ export function useTransactionTable(filters, statementPeriod) {
             } catch (err) {
                 logger.error('Failed to update cleared state', err);
                 setError(err);
-                await fetchTransactions();
+                await txResult.refetch();
             }
         },
-        [fetchTransactions]
+        [txResult.refetch]
     );
 
     return {
