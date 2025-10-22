@@ -23,7 +23,8 @@ export function useTransactionTable(filters, statementPeriod) {
         setLoading(true);
         setError(null);
         try {
-            const data = await apiService.getTransactions(filters || {});
+            // Use the account-specific endpoint
+            const data = await apiService.getTransactionsForAccount(filters || {});
             setLocalTx(Array.isArray(data.transactions) ? data.transactions.map((t) => ({ ...t })) : []);
             setTotal(data.total || 0);
             setCount(data.count || 0);

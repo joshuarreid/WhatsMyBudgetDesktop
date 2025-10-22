@@ -181,6 +181,35 @@ const apiService = {
             logger.error('uploadTransactions error', err);
             throw err;
         }
+    },
+
+    /**
+     * GET /api/transactions/account (list for account, including half of joint transactions)
+     * @param {Object} params - { account (required), statementPeriod, category, criticality, paymentMethod }
+     * @returns {Object} BudgetTransactionList { transactions, count, total }
+     */
+    async getTransactionsForAccount({ account, statementPeriod, category, criticality, paymentMethod }) {
+        logger.info('getTransactionsForAccount entry', { account, statementPeriod, category, criticality, paymentMethod });
+        if (!account) throw new Error('Account is required');
+        try {
+            const response = await axiosInstance.get('/account', {
+                params: {
+                    account,
+                    statementPeriod,
+                    category,
+                    criticality,
+                    paymentMethod
+                }
+            });
+            logger.info('getTransactionsForAccount success', {
+                count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
+                total: response.data && response.data.total ? response.data.total : 0
+            });
+            return response.data;
+        } catch (err) {
+            logger.error('getTransactionsForAccount error', err);
+            throw err;
+        }
     }
 };
 

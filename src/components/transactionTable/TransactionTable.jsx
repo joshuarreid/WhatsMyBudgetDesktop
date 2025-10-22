@@ -49,6 +49,11 @@ export default function TransactionTable(props) {
     // Don't return early on loading — render the table shell so the UI stays stable.
     if (error) return <div className="tt-empty">Error: {error.message || String(error)}</div>;
 
+    // Ensure account is present in filters
+    if (!filters || !filters.account) {
+        return <div className="tt-empty">Error: Account is required to display transactions.</div>;
+    }
+
     if (!localTx || localTx.length === 0)
         return (
             <div className="tt-card">

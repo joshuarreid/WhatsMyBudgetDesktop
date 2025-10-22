@@ -11,7 +11,7 @@
  */
 
 import { useMemo } from 'react';
-import useTransactions from '../../hooks/useTransactions';
+import { useTransactionsForAccount } from '../../hooks/useTransactions';
 
 const logger = {
     info: (...args) => console.log('[useCategorizedTable]', ...args),
@@ -37,7 +37,8 @@ export default function useCategorizedTable(propsOrFilters = {}) {
         const filters = propsOrFilters?.filters ?? propsOrFilters;
         logger.info('normalized filters', filters);
 
-        const txResult = useTransactions(filters || {});
+        // Use the new hook for account-specific transactions
+        const txResult = useTransactionsForAccount(filters || {});
         const transactions = Array.isArray(txResult?.data?.transactions)
             ? txResult.data.transactions
             : [];
