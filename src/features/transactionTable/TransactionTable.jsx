@@ -1,10 +1,10 @@
 import React from 'react';
 import { useTransactionTable } from './useTransactionTable';
 import './TransactionTable.css';
-import TransactionBalanceRow from './TransactionBalanceRow';
-import TransactionToolbar from './TransactionToolbar';
-import TransactionHeaderRow from './TransactionHeaderRow';
-import TransactionRow from './TransactionRow';
+import TransactionBalanceRow from './components/TransactionBalanceRow';
+import TransactionToolbar from './components/TransactionToolbar';
+import TransactionHeaderRow from './components/TransactionHeaderRow';
+import TransactionRow from './components/TransactionRow';
 
 // Currency formatter, colocated for presentation
 const fmt = new Intl.NumberFormat('en-US', {

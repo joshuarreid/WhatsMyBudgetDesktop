@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import useCategorizedTable from './useCategorizedTable';
 import './CategorizedTable.css';
-import CategoryTableHeader from './CategoryTableHeader';
-import CategoryTableBody from './CategoryTableBody';
-import CategoryTableFooter from './CategoryTableFooter';
-import CategoryTableTitle from './CategoryTableTitle';
+import CategoryTableHeader from './components/CategoryTableHeader';
+import CategoryTableBody from './components/CategoryTableBody';
+import CategoryTableFooter from './components/CategoryTableFooter';
+import CategoryTableTitle from './components/CategoryTableTitle';
 import CategoryWeeklyModal from "../categoryWeeklyModal/CategoryWeeklyModal";
 
 const logger = {
