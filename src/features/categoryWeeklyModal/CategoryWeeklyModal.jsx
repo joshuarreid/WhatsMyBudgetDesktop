@@ -3,8 +3,8 @@ import PropTypes from 'prop-types';
 
 import useCategoryWeeklyData from './useCategoryWeeklyData';
 import Modal, { ModalBody, ModalFooter, ModalHeader } from '../../components/modal/Modal';
-import TransactionTable from "../transactionTable/TransactionTable";
-
+// New compact table (read-only, minimal)
+import CompactTransactionTable from '../compactTransactionTable/CompactTransactionTable';
 
 const logger = {
     info: (...args) => console.log('[CategoryWeeklyModal]', ...args),
@@ -18,7 +18,7 @@ export default function CategoryWeeklyModal({
                                                 transactions = [],
                                                 fmt,
                                                 options = {},
-                                                account, // required by TransactionTable
+                                                account, // required by the table
                                             }) {
     const { weeks = [], total = 0, start, end, transactionsInCategory = [] } =
     useCategoryWeeklyData(transactions, category, options) || {};
@@ -119,9 +119,7 @@ export default function CategoryWeeklyModal({
                                             </div>
                                         </div>
 
-                                        <div style={{ fontWeight: 700 }}>
-                                            {fmt ? fmt.format(w.total) : `$${(w.total || 0).toFixed(2)}`}
-                                        </div>
+                                        <div style={{ fontWeight: 700 }}>{fmt ? fmt.format(w.total) : `$${(w.total || 0).toFixed(2)}`}</div>
                                     </div>
                                 );
                             })}
@@ -154,7 +152,7 @@ export default function CategoryWeeklyModal({
                 </ModalFooter>
             </Modal>
 
-            {/* Nested modal: show transaction table for the selected week & category */}
+            {/* Nested modal: show compact transaction table for the selected week & category */}
             <Modal
                 isOpen={Boolean(selectedWeek)}
                 onClose={closeWeekTransactions}
@@ -176,14 +174,18 @@ export default function CategoryWeeklyModal({
                 </ModalHeader>
 
                 <ModalBody style={{ padding: 0 }}>
-                    < TransactionTable
+                    <CompactTransactionTable
                         filters={{
-                            account, // required by TransactionTable; caller should provide this prop
+                            account, // required by hook
                             category: category || undefined,
                             weekStart: selectedWeek?.start,
                             weekEnd: selectedWeek?.end,
                             startDate: selectedWeek?.start,
                             endDate: selectedWeek?.end,
+                        }}
+                        onRowClick={(tx) => {
+                            // optional: you can wire this to another detail modal / navigation
+                            logger.info('compact row clicked', { txId: tx?.id });
                         }}
                     />
                 </ModalBody>
@@ -219,5 +221,5 @@ CategoryWeeklyModal.propTypes = {
     transactions: PropTypes.array,
     fmt: PropTypes.object,
     options: PropTypes.object,
-    account: PropTypes.string, // recommended to pass this
+    account: PropTypes.string,
 };

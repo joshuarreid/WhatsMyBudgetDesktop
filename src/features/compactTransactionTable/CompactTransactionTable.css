@@ -1,0 +1,201 @@
+/* Compact transaction table styling — updated to match TransactionTable.css look & feel */
+
+/* Reuse same base tokens as TransactionTable where possible.
+   Consider centralizing these in :root or a shared variables file for consistency. */
+
+:root {
+    --tt-bg-start: #0f1115;
+    --tt-bg-end: #151516;
+    --tt-card-border: rgba(255,255,255,0.04);
+    --tt-text: #e6eef8;
+    --tt-muted: #9aa6b2;
+    --tt-accent: #8db0ff;
+    --tt-positive: #9be3a7;
+    --tt-working: #f6e58d;
+    --tt-row-alt: rgba(255,255,255,0.01);
+    --tt-row-hover: rgba(255,255,255,0.03);
+    --tt-header-bg-start: rgba(20,22,24,0.95);
+    --tt-header-bg-end: rgba(28,28,30,0.95);
+}
+
+/* Card (match .tt-card) */
+.ct-compact-card {
+    box-sizing: border-box;
+    width: var(--tt-card-width, min(900px, 92vw));
+    border-radius: 12px;
+    padding: 8px;
+    margin: 12px 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: var(--tt-text);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--tt-card-border);
+    background: linear-gradient(180deg, var(--tt-bg-start), var(--tt-bg-end));
+    min-height: 220px;
+}
+
+/* Balances (match .tt-balance-row) */
+.ct-compact-balances {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(10,10,12,0.7), rgba(18,18,20,0.6));
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.02);
+}
+
+.ct-compact-balance-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ct-compact-balance-label {
+    font-size: 0.78rem;
+    color: var(--tt-muted);
+}
+
+.ct-compact-balance-value {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--tt-positive);
+}
+
+/* Header (match header styling in TransactionTable) */
+.ct-compact-header {
+    display: flex;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    background: linear-gradient(180deg, var(--tt-header-bg-start), var(--tt-header-bg-end));
+    align-items: center;
+}
+
+/* Columns: Name | Amount | Date
+   Amount & Date are fixed width to prevent Name from pushing them out of view.
+   Name gets the remaining space and is constrained with max-width so no horizontal scroll. */
+.ct-compact-col {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Ensure Name doesn't push everything horizontally; reserve space for the two fixed columns */
+.ct-compact-col--amount,
+.ct-compact-col--date {
+    flex: 0 0 100px; /* fixed width for amount & date */
+    max-width: 100px;
+}
+
+.ct-compact-col--name {
+    /* allow name to shrink, but don't let it exceed remaining width after amount+date (220px gap) */
+    flex: 1 1 0;
+    max-width: calc(100% - 220px);
+    color: #e6eef8;
+}
+
+.ct-compact-col--amount {
+    text-align: right;
+    color: #e6eef8; /* changed to white to match main table */
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.ct-compact-col--date {
+    text-align: right;
+    color: rgba(255,255,255,0.78);
+}
+
+/* Body (match .tt-body scroll behavior) */
+.ct-compact-body {
+    display: block;
+    max-height: 340px; /* keep nested modal reasonable */
+    overflow: auto;
+    padding: 6px;
+    background: transparent;
+}
+
+/* Row — match .tt-row / hover / alternating background */
+.ct-compact-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    font-size: 0.86rem;
+    cursor: default;
+}
+
+/* alternate row background similar to .tt-row:nth-child(odd) */
+.ct-compact-row:nth-child(odd) {
+    background: var(--tt-row-alt);
+}
+
+/* hover */
+.ct-compact-row:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+    background: var(--tt-row-hover);
+}
+
+/* selected row state (if you want selection in compact later) */
+.ct-compact-row.ct-row-selected {
+    box-shadow: inset 0 0 0 1px rgba(156, 197, 255, 0.06);
+    background: linear-gradient(180deg, rgba(22,26,32,0.35), rgba(18,22,28,0.35));
+}
+
+/* typography adjustments for compact */
+.ct-compact-row .ct-compact-col--name {
+    font-size: 0.92rem;
+}
+
+.ct-compact-row .ct-compact-col--amount {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.ct-compact-row .ct-compact-col--date {
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+/* focus styles for keyboard accessibility */
+.ct-compact-row[tabindex='0']:focus {
+    outline: 2px solid rgba(141,176,255,0.14);
+    outline-offset: 2px;
+}
+
+/* Empty / loading states (match .tt-empty look) */
+.ct-compact-empty,
+.ct-compact-loading {
+    padding: 18px;
+    text-align: center;
+    color: var(--tt-muted);
+    font-size: 0.95rem;
+}
+
+/* Small responsive tweak */
+@media (max-width: 640px) {
+    .ct-compact-col--amount,
+    .ct-compact-col--date {
+        flex: 0 0 90px;
+        max-width: 90px;
+    }
+
+    .ct-compact-col--name {
+        max-width: calc(100% - 180px);
+    }
+
+    .ct-compact-card {
+        width: 100%;
+        padding: 6px;
+    }
+}
