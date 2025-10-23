@@ -1,29 +1,50 @@
-import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import budgetTransactionService from '../../services/BudgetTransactionService';
-import {useTransactionsForAccount} from "../../hooks/useTransactions";
-
-
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
     error: (...args) => console.error('[useTransactionTable]', ...args),
 };
 
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import budgetTransactionService from '../../services/BudgetTransactionService';
+import {useTransactionsForAccount} from "../../hooks/useTransactions";
+
+
+/**
+ * useTransactionTable(filters, statementPeriod)
+ *
+ * - Maintains localTx state (server transactions + local new rows)
+ * - Supports add / cancel /save / save-and-add flows for new rows
+ * - Persists created transactions with the provided statementPeriod
+ *
+ * NOTE: cleared/uncleared functionality removed as it's unused.
+ */
 export function useTransactionTable(filters, statementPeriod) {
-    // Removed local loading and error state (use txResult only)
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
     const [savingIds, setSavingIds] = useState(() => new Set());
     const [saveErrors, setSaveErrors] = useState(() => ({})); // { [id]: message }
 
     const txResult = useTransactionsForAccount(filters || {});
+
     // Combine personal and joint transactions for display, sorted by date desc
-    const localTx = useMemo(
+    const serverTx = useMemo(
         () => [
             ...(txResult.personalTransactions?.transactions || []),
             ...(txResult.jointTransactions?.transactions || [])
         ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
         [txResult.personalTransactions, txResult.jointTransactions]
     );
+
+    // localTx state contains any local new rows (id starts with 'new-') + serverTx (server authoritative)
+    const [localTx, setLocalTx] = useState(() => serverTx);
+
+    // keep localTx in sync with server results while preserving local-only "new-" rows
+    useEffect(() => {
+        setLocalTx((prev) => {
+            const localOnly = (prev || []).filter((t) => String(t.id).startsWith('new-'));
+            return [...localOnly, ...serverTx];
+        });
+    }, [serverTx]);
+
     const total = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
     const personalBalance = typeof txResult.personalTotal === 'number'
         ? txResult.personalTotal
@@ -37,7 +58,6 @@ export function useTransactionTable(filters, statementPeriod) {
 
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
-
 
     // Selection
     const toggleSelect = useCallback((id) => {
@@ -57,26 +77,30 @@ export function useTransactionTable(filters, statementPeriod) {
         });
     }, [localTx, isAllSelected]);
 
+    // Utility to generate a unique temp id for new rows
+    const makeTempId = useCallback(() => `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
+
     // Add transaction (local-only draft)
     const handleAddTransaction = useCallback(() => {
         const newTx = {
+            id: makeTempId(),
             name: '',
             amount: 0,
             category: '',
             criticality: '',
             transactionDate: new Date().toISOString(),
-            account: '',
+            account: filters?.account || '',
             paymentMethod: '',
-            cleared: false,
+            memo: '',
             __isNew: true,
         };
-        setLocalTx((prev) => [newTx, ...prev]);
+        setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
-        logger.info('handleAddTransaction: created local new tx', { name: newTx.name });
-    }, []);
+        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id });
+    }, [makeTempId, filters]);
 
-    // Delete selected (unchanged)
+    // Delete selected
     const handleDeleteSelected = useCallback(
         async () => {
             if (selectedIds.size === 0) return;
@@ -108,10 +132,9 @@ export function useTransactionTable(filters, statementPeriod) {
                 logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
-                setError(err);
             }
         },
-        [selectedIds, txResult.refetch]
+        [selectedIds, txResult]
     );
 
     // File import (unchanged)
@@ -125,12 +148,11 @@ export function useTransactionTable(filters, statementPeriod) {
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
                 logger.error('Upload failed', err);
-                setError(err);
             } finally {
                 ev.target.value = '';
             }
         },
-        [txResult.refetch, statementPeriod]
+        [txResult, statementPeriod]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
@@ -171,13 +193,10 @@ export function useTransactionTable(filters, statementPeriod) {
         startEditingField(tx.id, field, initial);
     }, [startEditingField]);
 
-    // key handler wrapper -- will call explicit save function (below)
     const handleEditKey = useCallback(
         (e, id, field) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                // For field mode we still support single-field save
-                // caller will call handleSaveEdit for compatibility
             } else if (e.key === 'Escape') {
                 setEditing(null);
             }
@@ -193,9 +212,17 @@ export function useTransactionTable(filters, statementPeriod) {
         return errors;
     }, []);
 
-    // Save whole-row (explicit Save)
+    // Helper to strip client-only fields before sending to server (do not send id)
+    const stripClientFields = useCallback((tx) => {
+        const copy = { ...tx };
+        delete copy.id;
+        delete copy.__isNew;
+        return copy;
+    }, []);
+
+    // Save whole-row (explicit Save). addAnother = boolean indicates "save and add another"
     const handleSaveRow = useCallback(
-        async (id, updatedFields) => {
+        async (id, updatedFields = {}, addAnother = false) => {
             // merge changes into localTx synchronously (functional update)
             let txToPersist = null;
             setLocalTx((prev) =>
@@ -241,27 +268,53 @@ export function useTransactionTable(filters, statementPeriod) {
 
             try {
                 if (isNew) {
-                    logger.info('handleSaveRow: creating new transaction', { id });
-                    const created = await budgetTransactionService.createTransaction(txToPersist);
+                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod });
+                    // DO NOT send id in payload (strip before sending)
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
+                    const created = await budgetTransactionService.createTransaction(payload);
+                    // replace temp id row with created row
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
                     logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
+
+                    if (addAnother) {
+                        // create a fresh local new row and start editing it
+                        const newTx = {
+                            id: makeTempId(),
+                            name: '',
+                            amount: 0,
+                            category: '',
+                            criticality: '',
+                            transactionDate: new Date().toISOString(),
+                            account: filters?.account || '',
+                            paymentMethod: '',
+                            memo: '',
+                            __isNew: true,
+                        };
+                        setLocalTx((prev) => [newTx, ...(prev || [])]);
+                        setEditing({ id: newTx.id, mode: 'row' });
+                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id });
+                    } else {
+                        // refresh server data to ensure consistency
+                        try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
+                    }
                 } else {
-                    logger.info('handleSaveRow: updating transaction', { id });
-                    await budgetTransactionService.updateTransaction(id, txToPersist);
+                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod });
+                    // Do not include id in request body; id is provided in URL by updateTransaction
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
+                    await budgetTransactionService.updateTransaction(id, payload);
                     logger.info('handleSaveRow: updated', { id });
+                    try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
                 }
             } catch (err) {
                 logger.error('handleSaveRow: persist failed', err);
                 setSaveErrors((prev) => ({ ...prev, [id]: err.message || String(err) }));
-                setError(err);
+                // if create failed, we keep local new tx so user can retry — do not wipe it
                 if (!isNew) {
                     try {
                         await txResult.refetch();
                     } catch (fetchErr) {
                         logger.error('fetchTransactions after failed persist also failed', fetchErr);
                     }
-                } else {
-                    logger.info('Preserving local new transaction after create failure', { id });
                 }
             } finally {
                 setSavingIds((prev) => {
@@ -271,7 +324,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 });
             }
         },
-        [txResult.refetch, validateForCreate]
+        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields]
     );
 
     // For backwards compatibility: single-field save (still supported)
@@ -281,30 +334,9 @@ export function useTransactionTable(filters, statementPeriod) {
             if (field === 'amount') patch.amount = Number(value) || 0;
             else if (field === 'transactionDate') patch.transactionDate = value ? new Date(value).toISOString() : undefined;
             else patch[field] = value;
-            await handleSaveRow(id, patch);
+            await handleSaveRow(id, patch, false);
         },
         [handleSaveRow]
-    );
-
-    // Toggle cleared state (persists)
-    const toggleCleared = useCallback(
-        async (tx) => {
-            const updated = { ...tx, cleared: !tx.cleared };
-            setLocalTx((prev) => prev.map((t) => (t.id === tx.id ? updated : t)));
-            try {
-                if (String(tx.id).startsWith('new-') || tx.__isNew) {
-                    logger.info('toggleCleared: updated local new transaction', { id: tx.id, cleared: updated.cleared });
-                    return;
-                }
-                await budgetTransactionService.updateTransaction(tx.id, updated);
-                logger.info('toggleCleared: updated persisted transaction', { id: tx.id, cleared: updated.cleared });
-            } catch (err) {
-                logger.error('Failed to update cleared state', err);
-                setError(err);
-                await txResult.refetch();
-            }
-        },
-        [txResult.refetch]
     );
 
     return {
@@ -333,9 +365,9 @@ export function useTransactionTable(filters, statementPeriod) {
         startEditingRow,
         startEditingField,
         toInputDate,
-        toggleCleared,
         setEditing,
         savingIds,
         saveErrors,
+        setLocalTx,
     };
 }

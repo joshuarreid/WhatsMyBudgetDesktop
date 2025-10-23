@@ -1,6 +1,13 @@
-/* TransactionTable.css - updated for YNAB-like toolbar and separated cleared column */
+/* TransactionTable.css - YNAB-like toolbar and transaction rows
+ *
+ * Updated:
+ * - Removed cleared column (simplified 8-column layout)
+ * - Added row-level control bar that appears under inputs when editing a row
+ * - Action button styles (Cancel / Save / Save and add another)
+ * - Kept overall tone and colors consistent with existing app styles
+ */
 
-/* Base */
+/* Base card */
 .tt-card {
     box-sizing: border-box;
     width: var(--tt-card-width, min(1450px, 95vw));
@@ -103,10 +110,12 @@
     font-weight: 800;
 }
 
-/* Header row */
+/* Header row
+   NOTE: layout reduced to 8 data columns (removed cleared column)
+*/
 .tt-header-row {
     display: grid;
-    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px 36px;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px; /* checkbox, name, amount, category, criticality, date, account, payment method */
     gap: 12px;
     padding: 6px 12px;
     font-weight: 700;
@@ -129,16 +138,17 @@
     padding: 6px;
 }
 
+/* Row layout (match header) */
 .tt-row {
     display: grid;
-    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px 36px;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px; /* removed cleared column */
     gap: 12px;
-    align-items: center;
     padding: 10px;
     border-radius: 8px;
     transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
     background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
     font-size: 0.86rem;
+    align-items: start; /* allow row controls below inputs */
 }
 
 .tt-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
@@ -173,42 +183,7 @@
 /* amount */
 .tt-amount {
     font-variant-numeric: tabular-nums;
-}
-
-/* cleared column */
-.tt-cleared-header {
-    width: 36px;
-}
-
-.tt-cleared-col {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.tt-cleared-btn {
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.04);
-    color: #9aa6b2;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-}
-
-.tt-cleared-btn.cleared {
-    background: rgba(155, 213, 150, 0.12);
-    color: #98e3a6;
-    border-color: rgba(155, 213, 150, 0.18);
-}
-
-.tt-cleared-btn.uncleared {
-    background: transparent;
-    color: #9aa6b2;
+    text-align: right;
 }
 
 /* editing input */
@@ -237,4 +212,100 @@
     padding: 22px;
     text-align: center;
     color: #9aa6b2;
+}
+
+/* ----------------------------
+   Row-level controls (under inputs)
+   ---------------------------- */
+
+/* Row-level control bar that sits below the input fields and spans data columns */
+.tt-row-controls {
+    grid-column: 2 / -1; /* start after checkbox column and span to end */
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 10px;
+    align-items: center;
+}
+
+/* Action buttons used in row-edit mode */
+.tt-action-btn {
+    border: none;
+    padding: 8px 14px;
+    border-radius: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 8px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.tt-action-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+}
+
+/* Outline (Cancel) - white outline, transparent background */
+.tt-action-btn.tt-action-outline {
+    background: transparent;
+    color: #e6eef8;
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: none;
+}
+
+/* Primary filled (Save) - strong purple/blue background */
+.tt-action-btn.tt-action-primary {
+    background: linear-gradient(180deg, #5b4cff, #6e58ff);
+    color: white;
+    box-shadow: 0 6px 14px rgba(88, 71, 255, 0.18);
+}
+
+/* Ghost/secondary primary (Save and add another) - pill with lighter fill */
+.tt-action-btn.tt-action-ghost {
+    background: linear-gradient(180deg, #6c5bff, #7d6bff);
+    color: white;
+    box-shadow: 0 6px 14px rgba(125,107,255,0.14);
+}
+
+/* Disabled states */
+.tt-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* keep spacing between rows consistent */
+.tt-row + .tt-row {
+    margin-top: 6px;
+}
+
+/* ----------------------------
+   Small utilities & compatibility
+   ---------------------------- */
+
+/* small inline saving text */
+.tt-row-controls > span {
+    margin-left: 8px;
+    color: #9be3a7;
+    font-weight: 700;
+}
+
+/* inline error for fields */
+.tt-row-controls > div {
+    margin-left: 8px;
+}
+
+/* reduce button size on very small screens */
+@media (max-width: 900px) {
+    .tt-header-row,
+    .tt-row {
+        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
+    }
+
+    .tt-action-btn {
+        padding: 6px 10px;
+        min-height: 32px;
+    }
 }

@@ -1,17 +1,17 @@
-import React, { useEffect, useState } from "react";
-import PropTypes from "prop-types";
-
 const logger = {
     info: (...args) => console.log('[TransactionRow]', ...args),
     error: (...args) => console.error('[TransactionRow]', ...args),
 };
 
+import React, { useEffect, useState } from "react";
+import PropTypes from "prop-types";
+
 /**
  * TransactionRow
  *
- * Supports:
- * - field edit mode (existing behaviour)
- * - whole-row edit mode: edit all fields locally, then Save or Cancel
+ * - Renders Save / Cancel / Save and add another buttons while in whole-row edit mode.
+ * - Calls onSaveRow(id, normalized, addAnother) when saving.
+ * - The cleared/uncleared UI has been removed per request.
  */
 export default function TransactionRow({
                                            tx,
@@ -21,10 +21,9 @@ export default function TransactionRow({
                                            editValueRef,
                                            onCellDoubleClick,
                                            onEditKey,
-                                           onSaveEdit, // single-field save (kept for compatibility)
-                                           onSaveRow, // new: save whole row
+                                           onSaveEdit,
+                                           onSaveRow, // now supports third param addAnother (boolean)
                                            toInputDate,
-                                           onToggleCleared,
                                            setEditing,
                                            savingIds = new Set(),
                                            saveErrors = {},
@@ -43,20 +42,20 @@ export default function TransactionRow({
         if (!isRowEditing) {
             setDraft({ ...tx });
         }
-    }, [tx.id, tx]);
+    }, [tx.id, tx, isRowEditing]);
 
     const updateDraft = (field, value) => {
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
-    const onSaveRowClick = () => {
+    const onSaveRowClick = (addAnother = false) => {
         // normalize date input if needed (if transactionDate is in yyyy-mm-dd)
         const normalized = { ...draft };
         if (normalized.transactionDate && normalized.transactionDate.length === 10) {
             // assume yyyy-mm-dd -> convert to ISO
             normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
         }
-        onSaveRow(tx.id, normalized);
+        onSaveRow(tx.id, normalized, addAnother);
     };
 
     const onCancelRow = () => {
@@ -286,30 +285,39 @@ export default function TransactionRow({
                 )}
             </div>
 
-            {/* Cleared column: small clickable indicator + edit controls */}
-            <div className="tt-cleared-col" title={tx.cleared ? "Cleared" : "Uncleared"} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <button
-                    className={`tt-cleared-btn${tx.cleared ? " cleared" : " uncleared"}`}
-                    onClick={() => onToggleCleared(tx)}
-                    aria-label={tx.cleared ? "Mark uncleared" : "Mark cleared"}
-                >
-                    {tx.cleared ? "✔" : "○"}
-                </button>
+            {/* Row-level controls that span across the data columns (appears underneath inputs) */}
+            {isRowEditing && (
+                <div className="tt-row-controls" role="group" aria-label="Row actions">
+                    <button
+                        className="tt-action-btn tt-action-outline"
+                        onClick={onCancelRow}
+                        disabled={isSaving}
+                    >
+                        Cancel
+                    </button>
 
-                {/* Edit / Save / Cancel controls */}
-                {isRowEditing ? (
-                    <>
-                        <button className="tt-link-btn" onClick={onSaveRowClick} disabled={isSaving}>Save</button>
-                        <button className="tt-link-btn" onClick={onCancelRow} disabled={isSaving}>Cancel</button>
-                        {isSaving && <span style={{ color: '#9be3a7' }}>Saving…</span>}
-                        {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
-                    </>
-                ) : (
-                    <>
-                        <button className="tt-link-btn" onClick={onStartRowEdit}>Edit</button>
-                    </>
-                )}
-            </div>
+                    <button
+                        className="tt-action-btn tt-action-primary"
+                        onClick={() => onSaveRowClick(false)}
+                        disabled={isSaving}
+                    >
+                        Save
+                    </button>
+
+                    {tx.__isNew ? (
+                        <button
+                            className="tt-action-btn tt-action-ghost"
+                            onClick={() => onSaveRowClick(true)}
+                            disabled={isSaving}
+                        >
+                            Save and add another
+                        </button>
+                    ) : null}
+
+                    {isSaving && <span style={{ color: '#9be3a7', marginLeft: 8 }}>Saving…</span>}
+                    {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
+                </div>
+            )}
         </div>
     );
 }
@@ -325,7 +333,6 @@ TransactionRow.propTypes = {
     onSaveEdit: PropTypes.func.isRequired,
     onSaveRow: PropTypes.func.isRequired,
     toInputDate: PropTypes.func.isRequired,
-    onToggleCleared: PropTypes.func.isRequired,
     setEditing: PropTypes.func.isRequired,
     savingIds: PropTypes.object,
     saveErrors: PropTypes.object,

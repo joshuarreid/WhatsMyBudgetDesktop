@@ -7,6 +7,8 @@ import PropTypes from "prop-types";
  * Props:
  * - isAllSelected: boolean
  * - toggleSelectAll: function
+ *
+ * Note: cleared column removed to match updated row layout.
  */
 export default function TransactionHeaderRow({ isAllSelected, toggleSelectAll }) {
     return (
@@ -26,7 +28,6 @@ export default function TransactionHeaderRow({ isAllSelected, toggleSelectAll })
             <div role="columnheader">Date</div>
             <div role="columnheader">Account</div>
             <div role="columnheader">Payment Method</div>
-            <div className="tt-cleared-header" title="Cleared status" role="columnheader" />
         </div>
     );
 }
