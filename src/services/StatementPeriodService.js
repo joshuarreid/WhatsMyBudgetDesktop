@@ -3,10 +3,21 @@ const logger = {
     error: (...args) => console.error('[StatementPeriodService]', ...args),
 };
 
+import { apiClient } from '../lib/apiClient';
+
 /**
- * generateOptions
- * Produces options for i = -prev .. +forward months relative to anchor date.
- * Each option: { label: 'OCTOBER', value: 'OCTOBER2025', iso: ISOStringForMonthStart, offset: number }
+ * StatementPeriodService
+ *
+ * Exposes:
+ * - generateOptions(anchor, prev, forward)  -> named export
+ * - getCurrentOption(options)               -> named export
+ * - getAllFromServer()                      -> named export (uses centralized apiClient)
+ *
+ * Also provides a default export object for backward compatibility.
+ */
+
+/**
+ * generateOptions({ anchor = new Date(), prev = 1, forward = 5 })
  */
 export function generateOptions({ anchor = new Date(), prev = 1, forward = 5 } = {}) {
     try {
@@ -30,14 +41,33 @@ export function generateOptions({ anchor = new Date(), prev = 1, forward = 5 } =
 }
 
 /**
- * getCurrentOption - returns the option with offset 0 if present, otherwise middle option
+ * getCurrentOption(options)
  */
-export function getCurrentOption(options) {
+export function getCurrentOption(options = []) {
     if (!Array.isArray(options) || options.length === 0) return null;
     return options.find((o) => o.offset === 0) || options[Math.floor(options.length / 2)];
 }
 
-export default {
+/**
+ * getAllFromServer()
+ * GET /api/statement-periods using centralized apiClient
+ */
+export async function getAllFromServer() {
+    logger.info('getAllFromServer entry');
+    try {
+        const response = await apiClient.get('/api/statement-periods');
+        logger.info('getAllFromServer success', { count: Array.isArray(response.data) ? response.data.length : 0 });
+        return response.data;
+    } catch (err) {
+        logger.error('getAllFromServer error', err);
+        throw err;
+    }
+}
+
+const defaultExport = {
     generateOptions,
     getCurrentOption,
+    getAllFromServer,
 };
+
+export default defaultExport;

@@ -1,66 +1,17 @@
 /**
- * budgetTransactionService - Service for backend REST API calls (Spring Boot), using Axios and config.
- * Loads config from wmbservice-config.json, generates X-Transaction-ID per call.
- * Robust logging for every public method, error handling, and automatic JSON parsing.
+ * budgetTransactionService - Service for backend REST API calls (Spring Boot), using a shared apiClient.
+ * Uses config.baseUrl (API root). All endpoints use explicit resource paths like /api/transactions.
+ * Robust logging and X-Transaction-ID handled by apiClient.
  */
-
-import axios from 'axios';
-import config from '../wmbservice-config.json';
-
-const BASE_URL = config.baseUrl;
-const DEFAULT_HEADERS = config.defaultHeaders || {};
 
 const logger = {
-    info: (...args) => console.log('[budgetTransactionService]', ...args),
-    error: (...args) => console.error('[budgetTransactionService]', ...args),
+    info: (...args) => console.log('[BudgetTransactionService]', ...args),
+    error: (...args) => console.error('[BudgetTransactionService]', ...args),
 };
 
-/**
- * Generates a UUID for X-Transaction-ID.
- */
-function generateTransactionId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    } else {
-        return 'xxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-}
+import { apiClient } from '../lib/apiClient'; // centralized axios instance
 
-// Create an Axios instance with base URL and config defaults
-const axiosInstance = axios.create({
-    baseURL: BASE_URL,
-    headers: DEFAULT_HEADERS,
-    timeout: 10000 // 10s, adjust as needed
-});
-
-// Add a request interceptor for logging and transaction ID
-axiosInstance.interceptors.request.use(
-    function (request) {
-        const transactionId = generateTransactionId();
-        request.headers['X-Transaction-ID'] = transactionId;
-        logger.info('API request', { url: request.url, method: request.method, data: request.data, params: request.params, transactionId });
-        return request;
-    },
-    function (error) {
-        logger.error('API request error', error);
-        return Promise.reject(error);
-    }
-);
-
-// Add a response interceptor for logging
-axiosInstance.interceptors.response.use(
-    function (response) {
-        logger.info('API response', { url: response.config.url, status: response.status, data: response.data });
-        return response;
-    },
-    function (error) {
-        logger.error('API response error', error);
-        return Promise.reject(error);
-    }
-);
+const RESOURCE = '/api/transactions';
 
 const budgetTransactionService = {
     /**
@@ -71,12 +22,12 @@ const budgetTransactionService = {
     async getTransactions(filters = {}) {
         logger.info('getTransactions entry', { filters });
         try {
-            const response = await axiosInstance.get('', { params: filters });
+            const response = await apiClient.get(RESOURCE, { params: filters });
             logger.info('getTransactions success', {
                 count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
-                total: response.data && response.data.total ? response.data.total : 0
+                total: response.data && response.data.total ? response.data.total : 0,
             });
-            return response.data; // BudgetTransactionList: { transactions, count, total }
+            return response.data;
         } catch (err) {
             logger.error('getTransactions error', err);
             throw err;
@@ -90,7 +41,7 @@ const budgetTransactionService = {
         logger.info('getTransaction entry', { id });
         if (!id) throw new Error('Transaction ID required');
         try {
-            const response = await axiosInstance.get(`/${id}`);
+            const response = await apiClient.get(`${RESOURCE}/${encodeURIComponent(id)}`);
             logger.info('getTransaction success', { transaction: response.data });
             return response.data;
         } catch (err) {
@@ -105,7 +56,7 @@ const budgetTransactionService = {
     async createTransaction(transaction) {
         logger.info('createTransaction entry', { transaction });
         try {
-            const response = await axiosInstance.post('', transaction);
+            const response = await apiClient.post(RESOURCE, transaction);
             logger.info('createTransaction success', { created: response.data });
             return response.data;
         } catch (err) {
@@ -121,7 +72,7 @@ const budgetTransactionService = {
         logger.info('updateTransaction entry', { id, transaction });
         if (!id) throw new Error('Transaction ID required');
         try {
-            const response = await axiosInstance.put(`/${id}`, transaction);
+            const response = await apiClient.put(`${RESOURCE}/${encodeURIComponent(id)}`, transaction);
             logger.info('updateTransaction success', { updated: response.data });
             return response.data;
         } catch (err) {
@@ -137,7 +88,7 @@ const budgetTransactionService = {
         logger.info('deleteTransaction entry', { id });
         if (!id) throw new Error('Transaction ID required');
         try {
-            const response = await axiosInstance.delete(`/${id}`);
+            const response = await apiClient.delete(`${RESOURCE}/${encodeURIComponent(id)}`);
             logger.info('deleteTransaction success', { status: response.status });
             return response.data;
         } catch (err) {
@@ -152,8 +103,8 @@ const budgetTransactionService = {
     async deleteAllTransactions() {
         logger.info('deleteAllTransactions entry');
         try {
-            const response = await axiosInstance.delete('');
-            logger.info('deleteAllTransactions success', { deletedCount: response.data.deletedCount });
+            const response = await apiClient.delete(RESOURCE);
+            logger.info('deleteAllTransactions success', { deletedCount: response.data?.deletedCount });
             return response.data;
         } catch (err) {
             logger.error('deleteAllTransactions error', err);
@@ -163,17 +114,17 @@ const budgetTransactionService = {
 
     /**
      * POST /api/transactions/upload (CSV upload)
-     * @param {File} file
+     * @param {File|Blob} file
      * @param {String} statementPeriod
      */
     async uploadTransactions(file, statementPeriod) {
-        logger.info('uploadTransactions entry', { file, statementPeriod });
+        logger.info('uploadTransactions entry', { fileName: file?.name, statementPeriod });
         const formData = new FormData();
         formData.append('file', file);
         formData.append('statementPeriod', statementPeriod);
         try {
-            const response = await axiosInstance.post('/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            const response = await apiClient.post(`${RESOURCE}/upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
             logger.info('uploadTransactions success', { result: response.data });
             return response.data;
@@ -184,33 +135,31 @@ const budgetTransactionService = {
     },
 
     /**
-     * GET /api/transactions/account (list for account, including half of joint transactions)
-     * @param {Object} params - { account (required), statementPeriod, category, criticality, paymentMethod }
-     * @returns {Object} BudgetTransactionList { transactions, count, total }
+     * GET /api/transactions/account
      */
     async getTransactionsForAccount({ account, statementPeriod, category, criticality, paymentMethod }) {
         logger.info('getTransactionsForAccount entry', { account, statementPeriod, category, criticality, paymentMethod });
         if (!account) throw new Error('Account is required');
         try {
-            const response = await axiosInstance.get('/account', {
+            const response = await apiClient.get(`${RESOURCE}/account`, {
                 params: {
                     account,
                     statementPeriod,
                     category,
                     criticality,
-                    paymentMethod
-                }
+                    paymentMethod,
+                },
             });
             logger.info('getTransactionsForAccount success', {
                 count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
-                total: response.data && response.data.total ? response.data.total : 0
+                total: response.data && response.data.total ? response.data.total : 0,
             });
             return response.data;
         } catch (err) {
             logger.error('getTransactionsForAccount error', err);
             throw err;
         }
-    }
+    },
 };
 
 export default budgetTransactionService;
