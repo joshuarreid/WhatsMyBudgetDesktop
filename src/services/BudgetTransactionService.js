@@ -1,5 +1,5 @@
 /**
- * apiService - Service for backend REST API calls (Spring Boot), using Axios and config.
+ * budgetTransactionService - Service for backend REST API calls (Spring Boot), using Axios and config.
  * Loads config from wmbservice-config.json, generates X-Transaction-ID per call.
  * Robust logging for every public method, error handling, and automatic JSON parsing.
  */
@@ -11,8 +11,8 @@ const BASE_URL = config.baseUrl;
 const DEFAULT_HEADERS = config.defaultHeaders || {};
 
 const logger = {
-    info: (...args) => console.log('[apiService]', ...args),
-    error: (...args) => console.error('[apiService]', ...args),
+    info: (...args) => console.log('[budgetTransactionService]', ...args),
+    error: (...args) => console.error('[budgetTransactionService]', ...args),
 };
 
 /**
@@ -62,7 +62,7 @@ axiosInstance.interceptors.response.use(
     }
 );
 
-const apiService = {
+const budgetTransactionService = {
     /**
      * GET /api/transactions (list, with optional filters)
      * @param {Object} filters - { statementPeriod, account, category, paymentMethod, criticality }
@@ -213,4 +213,4 @@ const apiService = {
     }
 };
 
-export default apiService;
+export default budgetTransactionService;

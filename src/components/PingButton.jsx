@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import apiService from '../services/apiService';
+import budgetTransactionService from '../services/BudgetTransactionService';
 
 /**
  * PingButton - Button for testing API getTransactions call.
  * Displays JSON result of GET /api/transactions.
- * Uses apiService for REST API call with robust logging.
+ * Uses budgetTransactionService for REST API call with robust logging.
  */
 export default function PingButton() {
     const [result, setResult] = useState(null);
@@ -17,7 +17,7 @@ export default function PingButton() {
             // Log method entry
             console.log('[PingButton] doPing called (fetching all transactions)');
             // Fetch all transactions (no filters)
-            const transactions = await apiService.getTransactions();
+            const transactions = await budgetTransactionService.getTransactions();
             // Log result
             console.log('[PingButton] Transactions fetched', { count: Array.isArray(transactions) ? transactions.length : 0 });
             setResult(JSON.stringify(transactions, null, 2));

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback} from 'react';
-import apiService from '../services/apiService';
+import budgetTransactionService from '../services/BudgetTransactionService';
 
 /**
  * useTransactions - fetches transactions for given filters.
@@ -18,7 +18,7 @@ export default function useTransactions(filters) {
 
         try {
             console.log("[useTransactions] fetchData called with filters", currentFilters);
-            const transactions = await apiService.getTransactions(currentFilters);
+            const transactions = await budgetTransactionService.getTransactions(currentFilters);
             setData(transactions);
         } catch (err) {
             console.error("[useTransactions] Error fetching transactions", err);
@@ -58,7 +58,7 @@ export function useTransactionsForAccount(filters) {
         setError(null);
         try {
             console.log("[useTransactionsForAccount] fetchData called with filters", currentFilters);
-            const result = await apiService.getTransactionsForAccount(currentFilters);
+            const result = await budgetTransactionService.getTransactionsForAccount(currentFilters);
             setData({
                 personalTransactions: result.personalTransactions || { transactions: [], count: 0, total: 0 },
                 jointTransactions: result.jointTransactions || { transactions: [], count: 0, total: 0 },

@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import apiService from '../../services/apiService';
+import budgetTransactionService from '../../services/BudgetTransactionService';
 import {useTransactionsForAccount} from "../../hooks/useTransactions";
 
 
@@ -99,7 +99,7 @@ export function useTransactionTable(filters, statementPeriod) {
             try {
                 await Promise.all(
                     toDeleteFromAPI.map((id) =>
-                        apiService.deleteTransaction(id).catch((err) => {
+                        budgetTransactionService.deleteTransaction(id).catch((err) => {
                             logger.error(`Failed to delete ${id}`, err);
                         })
                     )
@@ -120,7 +120,7 @@ export function useTransactionTable(filters, statementPeriod) {
             const file = ev.target.files && ev.target.files[0];
             if (!file) return;
             try {
-                await apiService.uploadTransactions(file, statementPeriod);
+                await budgetTransactionService.uploadTransactions(file, statementPeriod);
                 await txResult.refetch();
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
@@ -242,12 +242,12 @@ export function useTransactionTable(filters, statementPeriod) {
             try {
                 if (isNew) {
                     logger.info('handleSaveRow: creating new transaction', { id });
-                    const created = await apiService.createTransaction(txToPersist);
+                    const created = await budgetTransactionService.createTransaction(txToPersist);
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
                     logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
                 } else {
                     logger.info('handleSaveRow: updating transaction', { id });
-                    await apiService.updateTransaction(id, txToPersist);
+                    await budgetTransactionService.updateTransaction(id, txToPersist);
                     logger.info('handleSaveRow: updated', { id });
                 }
             } catch (err) {
@@ -296,7 +296,7 @@ export function useTransactionTable(filters, statementPeriod) {
                     logger.info('toggleCleared: updated local new transaction', { id: tx.id, cleared: updated.cleared });
                     return;
                 }
-                await apiService.updateTransaction(tx.id, updated);
+                await budgetTransactionService.updateTransaction(tx.id, updated);
                 logger.info('toggleCleared: updated persisted transaction', { id: tx.id, cleared: updated.cleared });
             } catch (err) {
                 logger.error('Failed to update cleared state', err);
