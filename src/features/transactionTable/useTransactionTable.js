@@ -5,6 +5,7 @@ const logger = {
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import budgetTransactionService from '../../services/BudgetTransactionService';
+import localCacheService from '../../services/LocalCacheService';
 import {useTransactionsForAccount} from "../../hooks/useTransactions";
 
 
@@ -16,6 +17,10 @@ import {useTransactionsForAccount} from "../../hooks/useTransactions";
  * - Persists created transactions with the provided statementPeriod
  *
  * NOTE: cleared/uncleared functionality removed as it's unused.
+ *
+ * Enhancement:
+ * - If statementPeriod is not provided via props, read the cached value from LocalCacheService
+ *   (cacheKey = 'currentStatementPeriod') and use it when creating/updating/uploading transactions.
  */
 export function useTransactionTable(filters, statementPeriod) {
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -59,6 +64,42 @@ export function useTransactionTable(filters, statementPeriod) {
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
+    // New: statementPeriod state — prefer provided prop, otherwise attempt to load from cache
+    const [cachedStatementPeriod, setCachedStatementPeriod] = useState(statementPeriod || null);
+
+    // if parent passes a statementPeriod prop, keep state in sync
+    useEffect(() => {
+        if (statementPeriod) {
+            setCachedStatementPeriod(statementPeriod);
+        }
+    }, [statementPeriod]);
+
+    // On mount (or when no statementPeriod present) attempt to read server cache for currentStatementPeriod
+    useEffect(() => {
+        let mounted = true;
+        if (!cachedStatementPeriod) {
+            logger.info('Attempting to load statementPeriod from local cache');
+            localCacheService.get('currentStatementPeriod')
+                .then((data) => {
+                    // LocalCacheController likely returns { cacheKey, cacheValue, ... }
+                    const val = data?.cacheValue ?? data?.value ?? data ?? null;
+                    if (mounted) {
+                        if (val) {
+                            setCachedStatementPeriod(String(val));
+                            logger.info('Loaded statementPeriod from cache', { value: val });
+                        } else {
+                            logger.info('No cached statementPeriod found; using generated/default if any');
+                        }
+                    }
+                })
+                .catch((err) => {
+                    logger.error('Failed to load statementPeriod from cache', err);
+                    // graceful fallback: keep cachedStatementPeriod null — callers should handle missing value
+                });
+        }
+        return () => { mounted = false; };
+    }, [cachedStatementPeriod]);
+
     // Selection
     const toggleSelect = useCallback((id) => {
         setSelectedIds((prev) => {
@@ -93,12 +134,14 @@ export function useTransactionTable(filters, statementPeriod) {
             paymentMethod: '',
             memo: '',
             __isNew: true,
+            // append statementPeriod to local tx so save uses it even if statementPeriod prop missing
+            statementPeriod: cachedStatementPeriod || undefined,
         };
         setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
-        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id });
-    }, [makeTempId, filters]);
+        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod });
+    }, [makeTempId, filters, cachedStatementPeriod]);
 
     // Delete selected
     const handleDeleteSelected = useCallback(
@@ -137,13 +180,17 @@ export function useTransactionTable(filters, statementPeriod) {
         [selectedIds, txResult]
     );
 
-    // File import (unchanged)
+    // File import (unchanged) but pass effective statementPeriod
     const handleFileChange = useCallback(
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
             if (!file) return;
+
+            const effectiveStatementPeriod = cachedStatementPeriod || statementPeriod || undefined;
+
             try {
-                await budgetTransactionService.uploadTransactions(file, statementPeriod);
+                logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod: effectiveStatementPeriod });
+                await budgetTransactionService.uploadTransactions(file, effectiveStatementPeriod);
                 await txResult.refetch();
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
@@ -152,7 +199,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 ev.target.value = '';
             }
         },
-        [txResult, statementPeriod]
+        [txResult, statementPeriod, cachedStatementPeriod]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
@@ -249,6 +296,12 @@ export function useTransactionTable(filters, statementPeriod) {
                 return copy;
             });
 
+            // ensure effective statementPeriod is appended (use cached or prop)
+            const effectiveStatementPeriod = txToPersist.statementPeriod || cachedStatementPeriod || statementPeriod || undefined;
+            if (effectiveStatementPeriod) {
+                txToPersist = { ...txToPersist, statementPeriod: effectiveStatementPeriod };
+            }
+
             const isNew = String(id).startsWith('new-') || txToPersist.__isNew;
             if (isNew) {
                 const validationErrors = validateForCreate(txToPersist);
@@ -268,9 +321,9 @@ export function useTransactionTable(filters, statementPeriod) {
 
             try {
                 if (isNew) {
-                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod });
+                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod: effectiveStatementPeriod });
                     // DO NOT send id in payload (strip before sending)
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
                     const created = await budgetTransactionService.createTransaction(payload);
                     // replace temp id row with created row
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
@@ -289,6 +342,7 @@ export function useTransactionTable(filters, statementPeriod) {
                             paymentMethod: '',
                             memo: '',
                             __isNew: true,
+                            statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
                         };
                         setLocalTx((prev) => [newTx, ...(prev || [])]);
                         setEditing({ id: newTx.id, mode: 'row' });
@@ -298,9 +352,9 @@ export function useTransactionTable(filters, statementPeriod) {
                         try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
                     }
                 } else {
-                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod });
+                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod: effectiveStatementPeriod });
                     // Do not include id in request body; id is provided in URL by updateTransaction
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
                     await budgetTransactionService.updateTransaction(id, payload);
                     logger.info('handleSaveRow: updated', { id });
                     try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
@@ -324,7 +378,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 });
             }
         },
-        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields]
+        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields, cachedStatementPeriod]
     );
 
     // For backwards compatibility: single-field save (still supported)
@@ -369,5 +423,7 @@ export function useTransactionTable(filters, statementPeriod) {
         savingIds,
         saveErrors,
         setLocalTx,
+        // expose the effective statementPeriod for consumers
+        statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
     };
 }
