@@ -1,5 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
+import StatementPeriodDropdown from "../../../components/statementPeriodDropdown/StatementPeriodDropdown";
+
 
 /**
  * TransactionToolbar
@@ -47,6 +49,9 @@ export default function TransactionToolbar({
                 >
                     <span className="tt-icon">🗑️</span> Delete Selected
                 </button>
+
+                {/* Statement period dropdown (UI-only Step 1) */}
+                <StatementPeriodDropdown />
             </div>
             <div className="tt-toolbar-right">
                 <div className="tt-totals">Total: {total}</div>

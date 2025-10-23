@@ -5,24 +5,19 @@ const logger = {
 
 /**
  * generateOptions
- *
- * Produce an array of statement period options relative to `anchor` date:
- * - prev: how many months backward (default 1)
- * - forward: how many months forward (default 5)
- *
- * Each option: { label: 'OCTOBER', value: 'OCTOBER2025', date: ISOStringForMonthStart }
+ * Produces options for i = -prev .. +forward months relative to anchor date.
+ * Each option: { label: 'OCTOBER', value: 'OCTOBER2025', iso: ISOStringForMonthStart, offset: number }
  */
 export function generateOptions({ anchor = new Date(), prev = 1, forward = 5 } = {}) {
     try {
         const options = [];
-        // i runs -prev .. +forward inclusive
         for (let i = -prev; i <= forward; i += 1) {
             const d = new Date(anchor.getTime());
-            d.setMonth(d.getMonth() + i, 1); // set to first of month for stable ISO
+            d.setMonth(d.getMonth() + i, 1); // stable first-of-month
             const monthName = d.toLocaleString('en-US', { month: 'long' }).toUpperCase();
             const year = d.getFullYear();
-            const label = monthName; // display label
-            const value = `${monthName}${year}`; // API value format
+            const label = monthName;
+            const value = `${monthName}${year}`;
             const iso = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
             options.push({ label, value, iso, offset: i });
         }
@@ -35,13 +30,11 @@ export function generateOptions({ anchor = new Date(), prev = 1, forward = 5 } =
 }
 
 /**
- * getCurrentOption
- *
- * Convenience: return the option representing the current month (offset 0).
+ * getCurrentOption - returns the option with offset 0 if present, otherwise middle option
  */
-export function getCurrentOption(opts) {
-    if (!Array.isArray(opts) || opts.length === 0) return null;
-    return opts.find((o) => o.offset === 0) || opts[Math.floor(opts.length / 2)];
+export function getCurrentOption(options) {
+    if (!Array.isArray(options) || options.length === 0) return null;
+    return options.find((o) => o.offset === 0) || options[Math.floor(options.length / 2)];
 }
 
 export default {
