@@ -18,10 +18,14 @@
     --tt-header-bg-end: rgba(28,28,30,0.95);
 }
 
-/* Card (match .tt-card) */
+/* Card (match .tt-card)
+   NOTE: changed to be fluid (100%) so it matches the modal width and prevents horizontal scrolling.
+   Kept border-box and min-width: 0 so flex containers can shrink children properly. */
 .ct-compact-card {
     box-sizing: border-box;
-    width: var(--tt-card-width, min(900px, 92vw));
+    width: 100%;              /* ensure the card fills the modal content width */
+    max-width: 100%;          /* avoid the previous fixed min/max causing overflow */
+    min-width: 0;             /* allow children to shrink (prevents overflow in flex layouts) */
     border-radius: 12px;
     padding: 8px;
     margin: 12px 0;
@@ -33,6 +37,7 @@
     border: 1px solid var(--tt-card-border);
     background: linear-gradient(180deg, var(--tt-bg-start), var(--tt-bg-end));
     min-height: 220px;
+    overflow-x: hidden;       /* explicitly prevent horizontal scrolling caused by shadows/transforms */
 }
 
 /* Balances (match .tt-balance-row) */
@@ -87,16 +92,19 @@
 }
 
 /* Ensure Name doesn't push everything horizontally; reserve space for the two fixed columns */
-.ct-compact-col--amount,
+.ct-compact-col--amount {
+    flex: 0 0 200px; /* fixed width for amount & date */
+    max-width: 200px;
+}
 .ct-compact-col--date {
-    flex: 0 0 100px; /* fixed width for amount & date */
-    max-width: 100px;
+    flex: 0 0 200px; /* fixed width for amount & date */
+    max-width: 200px;
 }
 
 .ct-compact-col--name {
-    /* allow name to shrink, but don't let it exceed remaining width after amount+date (220px gap) */
+    /* allow name to shrink, but don't let it exceed remaining width after amount+date */
     flex: 1 1 0;
-    max-width: calc(100% - 220px);
+    max-width: calc(80% - 200px);
     color: #e6eef8;
 }
 
@@ -119,6 +127,8 @@
     overflow: auto;
     padding: 6px;
     background: transparent;
+    /* prevent accidental horizontal scrollbar by hiding any x-overflow inside the scroll container */
+    overflow-x: hidden;
 }
 
 /* Row — match .tt-row / hover / alternating background */
@@ -132,6 +142,7 @@
     background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
     font-size: 0.86rem;
     cursor: default;
+    min-width: 0;
 }
 
 /* alternate row background similar to .tt-row:nth-child(odd) */

@@ -1,9 +1,9 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { useTransactionTable } from '../transactionTable/useTransactionTable';
-import CompactTransactionHeader from './CompactTransactionHeader';
-import CompactTransactionRow from './CompactTransactionRow';
-import CompactTransactionBalanceRow from './CompactTransactionBalanceRow';
+import CompactTransactionHeader from './components/CompactTransactionHeader';
+import CompactTransactionRow from './components/CompactTransactionRow';
+import CompactTransactionBalanceRow from './components/CompactTransactionBalanceRow';
 import './CompactTransactionTable.css';
 
 const logger = {

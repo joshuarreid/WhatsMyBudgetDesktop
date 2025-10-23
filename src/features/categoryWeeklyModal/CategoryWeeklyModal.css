@@ -1,0 +1,181 @@
+:root {
+    --cwm-bg-muted: rgba(255, 255, 255, 0.02);
+    --cwm-bg-surface: rgba(255, 255, 255, 0.01);
+    --cwm-warning-bg: rgba(255, 80, 80, 0.05);
+    --cwm-warning-label: #ffb4b4;
+    --cwm-text-muted: rgba(255, 255, 255, 0.7);
+    --cwm-border: rgba(255, 255, 255, 0.02);
+    --cwm-radius: 8px;
+    --cwm-padding: 12px;
+}
+
+/* ModalHeader replacement styles (applied via ModalHeader.className) */
+.cwm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--cwm-border);
+    padding-bottom: 8px;
+}
+
+.cwm-title {
+    font-weight: 600;
+}
+
+.cwm-range {
+    opacity: 0.7;
+}
+
+/* Account required warning */
+.cwm-account-warning {
+    margin-bottom: 12px;
+    padding: 8px;
+    border-radius: var(--cwm-radius);
+    background: var(--cwm-warning-bg);
+}
+
+.cwm-account-warning__title {
+    font-weight: 700;
+    color: var(--cwm-warning-label);
+}
+
+.cwm-account-warning__body {
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
+/* No data */
+.cwm-no-data {
+    padding: 8px 0;
+    color: var(--cwm-text-muted);
+}
+
+/* Weeks grid */
+.cwm-weeks-grid {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.cwm-week-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--cwm-radius);
+    background: var(--cwm-bg-muted);
+    cursor: default;
+    align-items: center;
+}
+
+.cwm-week-item--disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.cwm-week-left {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cwm-week-dates {
+    font-size: 14px;
+    font-weight: 600;
+    color: inherit;
+}
+
+.cwm-week-count {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.cwm-week-total {
+    font-weight: 700;
+}
+
+/* Transactions region (wrapped around CompactTransactionTable) */
+.cwm-transactions-region {
+    margin-top: 16px;
+    padding: var(--cwm-padding);
+    border-radius: var(--cwm-radius);
+    background: var(--cwm-bg-surface);
+}
+
+/* Header above the inline table */
+.cwm-transactions-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.cwm-transactions-title {
+    font-weight: 700;
+}
+
+.cwm-transactions-subtitle {
+    opacity: 0.7;
+    font-size: 13px;
+}
+
+.cwm-transactions-total {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-weight: 700;
+}
+
+.cwm-transactions-total__label {
+    font-weight: 700;
+    opacity: 0.9;
+}
+
+.cwm-transactions-total__value {
+    font-weight: 800;
+}
+
+/* Body that contains the CompactTransactionTable - keeps it flush */
+.cwm-transactions-body {
+    margin-top: 6px;
+}
+
+/* Footer stats (left side) */
+.cwm-footer-stats {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.cwm-footer-stats__label {
+    font-weight: 700;
+}
+
+.cwm-footer-stats__value {
+    font-weight: 700;
+}
+
+/* Close button */
+.cwm-close-btn {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.06);
+    color: inherit;
+    cursor: pointer;
+}
+
+/* Small responsive tweak */
+@media (max-width: 640px) {
+    .cwm-transactions-region {
+        padding: 8px;
+    }
+
+    .cwm-week-dates {
+        font-size: 13px;
+    }
+
+    .cwm-week-total {
+        font-size: 0.95rem;
+    }
+}

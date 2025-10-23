@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
 
-import useCategoryWeeklyData from './useCategoryWeeklyData';
 import Modal, { ModalBody, ModalFooter, ModalHeader } from '../../components/modal/Modal';
-// New compact table (read-only, minimal)
 import CompactTransactionTable from '../compactTransactionTable/CompactTransactionTable';
+import useCategoryWeeklyModalData from './useCategoryWeeklyModalData';
+import './CategoryWeeklyModal.css';
 
 const logger = {
     info: (...args) => console.log('[CategoryWeeklyModal]', ...args),
@@ -20,10 +20,8 @@ export default function CategoryWeeklyModal({
                                                 options = {},
                                                 account, // required by the table
                                             }) {
-    const { weeks = [], total = 0, start, end, transactionsInCategory = [] } =
-    useCategoryWeeklyData(transactions, category, options) || {};
-
-    const [selectedWeek, setSelectedWeek] = useState(null);
+    const { weeks, total, start, end, transactionsInCategory, filtersForTable, weeklyAverage } =
+    useCategoryWeeklyModalData({ transactions, category, options, account }) || {};
 
     logger.info('render modal', {
         isOpen,
@@ -31,186 +29,83 @@ export default function CategoryWeeklyModal({
         weeksCount: weeks.length,
         txCount: transactionsInCategory.length,
         hasAccount: Boolean(account),
+        filtersForTable,
     });
 
     const ariaLabel = category ? `Weekly breakdown for ${category}` : 'Weekly breakdown';
 
-    const openWeekTransactions = useCallback(
-        (week) => {
-            if (!account) {
-                logger.error('attempted to open week transactions but no account provided', { category });
-                return;
-            }
-            try {
-                setSelectedWeek({
-                    start: week?.start ? new Date(week.start) : null,
-                    end: week?.end ? new Date(week.end) : null,
-                });
-                logger.info('open week transactions', { category, weekStart: week.start, weekEnd: week.end });
-            } catch (err) {
-                logger.error('failed to open week transactions', err);
-            }
-        },
-        [account, category],
-    );
-
-    const closeWeekTransactions = useCallback(() => {
-        logger.info('close week transactions', { category });
-        setSelectedWeek(null);
-    }, [category]);
-
     return (
-        <>
-            <Modal isOpen={Boolean(isOpen)} onClose={onClose} ariaLabel={ariaLabel} closeOnBackdrop closeOnEsc>
-                <ModalHeader>
-                    <div style={{ fontWeight: 600 }}>{category || 'All categories'}</div>
-                    <div style={{ opacity: 0.7 }}>
-                        {start && end ? `${start.toLocaleDateString()} — ${end.toLocaleDateString()}` : 'No date range'}
-                    </div>
-                </ModalHeader>
+        <Modal isOpen={Boolean(isOpen)} onClose={onClose} ariaLabel={ariaLabel} closeOnBackdrop closeOnEsc>
+            <ModalHeader className="cwm-header">
+                <div className="cwm-title">{category || 'All categories'}</div>
+                <div className="cwm-range">{start && end ? `${start.toLocaleDateString()} — ${end.toLocaleDateString()}` : 'No date range'}</div>
+            </ModalHeader>
 
-                <ModalBody>
-                    {!account && (
-                        <div style={{ marginBottom: 12, padding: 8, borderRadius: 8, background: 'rgba(255,80,80,0.05)' }}>
-                            <div style={{ fontWeight: 700, color: '#ffb4b4' }}>Account required</div>
-                            <div style={{ opacity: 0.8 }}>
-                                An account is required to view transactions. Please provide the <code>account</code> prop to this
-                                component (e.g. account id or name).
-                            </div>
+            <ModalBody>
+                {!account && (
+                    <div className="cwm-account-warning" role="alert">
+                        <div className="cwm-account-warning__title">Account required</div>
+                        <div className="cwm-account-warning__body">
+                            An account is required to view transactions. Please provide the <code>account</code> prop to this component (e.g. account id or
+                            name).
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {weeks.length === 0 ? (
-                        <div>No weekly data available.</div>
-                    ) : (
-                        <div style={{ display: 'grid', gap: 8 }}>
-                            {weeks.map((w, idx) => {
-                                const wkStart = w.start ? new Date(w.start) : null;
-                                const wkEnd = w.end ? new Date(w.end) : null;
-                                return (
-                                    <div
-                                        key={idx}
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => openWeekTransactions(w)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                openWeekTransactions(w);
-                                            }
-                                        }}
-                                        style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            padding: '8px 12px',
-                                            borderRadius: 8,
-                                            background: 'rgba(255,255,255,0.02)',
-                                            cursor: account ? 'pointer' : 'not-allowed',
-                                            opacity: account ? 1 : 0.6,
-                                        }}
-                                        aria-label={`Open transactions for ${wkStart?.toLocaleDateString?.()} — ${wkEnd?.toLocaleDateString?.()}`}
-                                    >
-                                        <div>
-                                            <div style={{ fontSize: 14, fontWeight: 600 }}>
-                                                {wkStart ? wkStart.toLocaleDateString() : '—'} — {wkEnd ? wkEnd.toLocaleDateString() : '—'}
-                                            </div>
-                                            <div style={{ fontSize: 12, opacity: 0.8 }}>
-                                                {w.count} transaction{w.count !== 1 ? 's' : ''}
-                                            </div>
-                                        </div>
+                {weeks.length === 0 ? (
+                    <div className="cwm-no-data">No weekly data available.</div>
+                ) : (
+                    <div className="cwm-weeks-grid" role="list">
+                        {weeks.map((w, idx) => {
+                            const wkStart = w.start ? new Date(w.start) : null;
+                            const wkEnd = w.end ? new Date(w.end) : null;
+                            const ariaLabelWeek = `Week ${idx + 1}: ${wkStart?.toLocaleDateString?.() ?? '—'} — ${wkEnd?.toLocaleDateString?.() ?? '—'}`;
 
-                                        <div style={{ fontWeight: 700 }}>{fmt ? fmt.format(w.total) : `$${(w.total || 0).toFixed(2)}`}</div>
+                            return (
+                                <div
+                                    key={idx}
+                                    className={`cwm-week-item ${!account ? 'cwm-week-item--disabled' : ''}`}
+                                    role="listitem"
+                                    aria-label={ariaLabelWeek}
+                                >
+                                    <div className="cwm-week-left">
+                                        <div className="cwm-week-dates">{wkStart ? wkStart.toLocaleDateString() : '—'} — {wkEnd ? wkEnd.toLocaleDateString() : '—'}</div>
+                                        <div className="cwm-week-count">{w.count} transaction{w.count !== 1 ? 's' : ''}</div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </ModalBody>
 
-                <ModalFooter>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                        <div style={{ fontWeight: 700 }}>Total</div>
-                        <div>{fmt ? fmt.format(total) : `$${(total || 0).toFixed(2)}`}</div>
+                                    <div className="cwm-week-total">{fmt ? fmt.format(w.total) : `$${(w.total || 0).toFixed(2)}`}</div>
+                                </div>
+                            );
+                        })}
                     </div>
+                )}
 
-                    <div>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: 'transparent',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                color: 'inherit',
-                                cursor: 'pointer',
+                <section className="cwm-transactions-region" role="region" aria-label="Transactions for selected date range">
+                    <div className="cwm-transactions-body">
+                        <CompactTransactionTable
+                            filters={filtersForTable}
+                            onRowClick={(tx) => {
+                                // Kept for observability — no UI navigation/hide by default
+                                logger.info('compact row clicked (always-visible table)', { txId: tx?.id });
                             }}
-                        >
-                            Close
-                        </button>
+                        />
                     </div>
-                </ModalFooter>
-            </Modal>
+                </section>
+            </ModalBody>
 
-            {/* Nested modal: show compact transaction table for the selected week & category */}
-            <Modal
-                isOpen={Boolean(selectedWeek)}
-                onClose={closeWeekTransactions}
-                ariaLabel={
-                    category
-                        ? `Transactions for ${category} ${selectedWeek?.start?.toLocaleDateString?.() ?? ''} — ${selectedWeek?.end?.toLocaleDateString?.() ?? ''}`
-                        : `Transactions ${selectedWeek?.start?.toLocaleDateString?.() ?? ''} — ${selectedWeek?.end?.toLocaleDateString?.() ?? ''}`
-                }
-                closeOnBackdrop
-                closeOnEsc
-            >
-                <ModalHeader>
-                    <div style={{ fontWeight: 600 }}>{category ? `${category} — weekly transactions` : 'Transactions'}</div>
-                    <div style={{ opacity: 0.7 }}>
-                        {selectedWeek?.start && selectedWeek?.end
-                            ? `${selectedWeek.start.toLocaleDateString()} — ${selectedWeek.end.toLocaleDateString()}`
-                            : 'No date range'}
-                    </div>
-                </ModalHeader>
+            <ModalFooter>
+                <div className="cwm-footer-stats" aria-hidden="true">
+                    <div className="cwm-footer-stats__label">Weekly Average</div>
+                    <div className="cwm-footer-stats__value">{fmt ? fmt.format(weeklyAverage) : `$${(weeklyAverage || 0).toFixed(2)}`}</div>
+                </div>
 
-                <ModalBody style={{ padding: 0 }}>
-                    <CompactTransactionTable
-                        filters={{
-                            account, // required by hook
-                            category: category || undefined,
-                            weekStart: selectedWeek?.start,
-                            weekEnd: selectedWeek?.end,
-                            startDate: selectedWeek?.start,
-                            endDate: selectedWeek?.end,
-                        }}
-                        onRowClick={(tx) => {
-                            // optional: you can wire this to another detail modal / navigation
-                            logger.info('compact row clicked', { txId: tx?.id });
-                        }}
-                    />
-                </ModalBody>
-
-                <ModalFooter>
-                    <div />
-                    <div>
-                        <button
-                            type="button"
-                            onClick={closeWeekTransactions}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: 'transparent',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Close
-                        </button>
-                    </div>
-                </ModalFooter>
-            </Modal>
-        </>
+                <div>
+                    <button type="button" onClick={onClose} className="cwm-close-btn">
+                        Close
+                    </button>
+                </div>
+            </ModalFooter>
+        </Modal>
     );
 }
 
