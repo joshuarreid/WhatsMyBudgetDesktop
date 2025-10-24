@@ -38,6 +38,7 @@ export default function TransactionTable(props) {
         handleEditKey,
         handleSaveEdit,
         handleSaveRow,
+        handleCancelRow, // new
         toInputDate,
         toggleCleared,
         setEditing,
@@ -109,6 +110,7 @@ export default function TransactionTable(props) {
                         onEditKey={handleEditKey}
                         onSaveEdit={handleSaveEdit}
                         onSaveRow={handleSaveRow}
+                        onCancelRow={handleCancelRow} // pass handler
                         toInputDate={toInputDate}
                         onToggleCleared={toggleCleared}
                         setEditing={setEditing}

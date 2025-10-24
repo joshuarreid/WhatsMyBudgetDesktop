@@ -12,6 +12,8 @@ import PropTypes from "prop-types";
  * - Renders Save / Cancel / Save and add another buttons while in whole-row edit mode.
  * - Calls onSaveRow(id, normalized, addAnother) when saving.
  * - The cleared/uncleared UI has been removed per request.
+ *
+ * New: accepts onCancelRow prop (function) which will be called with the current tx.id.
  */
 export default function TransactionRow({
                                            tx,
@@ -23,6 +25,7 @@ export default function TransactionRow({
                                            onEditKey,
                                            onSaveEdit,
                                            onSaveRow, // now supports third param addAnother (boolean)
+                                           onCancelRow, // NEW: provided by parent hook to remove local new rows
                                            toInputDate,
                                            setEditing,
                                            savingIds = new Set(),
@@ -58,10 +61,23 @@ export default function TransactionRow({
         onSaveRow(tx.id, normalized, addAnother);
     };
 
-    const onCancelRow = () => {
-        setEditing(null);
-        setDraft({ ...tx });
-        logger.info('cancel row edit', { id: tx.id });
+    const onCancelRowLocal = () => {
+        // If parent provided a cancel handler (useTransactionTable.handleCancelRow),
+        // call it (it will remove local new rows). Otherwise fallback to existing behavior.
+        try {
+            if (onCancelRow && typeof onCancelRow === 'function') {
+                onCancelRow(tx.id);
+            } else {
+                setEditing(null);
+                setDraft({ ...tx });
+                logger.info('cancel row edit (local fallback)', { id: tx.id });
+            }
+        } catch (err) {
+            logger.error('onCancelRow handler failed', err);
+            // fallback behaviour
+            setEditing(null);
+            setDraft({ ...tx });
+        }
     };
 
     const onStartRowEdit = () => {
@@ -151,7 +167,7 @@ export default function TransactionRow({
                             onChange={(e) => updateDraft('name', e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') onSaveRowClick();
-                                if (e.key === 'Escape') onCancelRow();
+                                if (e.key === 'Escape') onCancelRowLocal();
                             }}
                         />
                     </>
@@ -177,7 +193,7 @@ export default function TransactionRow({
                             onChange={(e) => updateDraft('amount', e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') onSaveRowClick();
-                                if (e.key === 'Escape') onCancelRow();
+                                if (e.key === 'Escape') onCancelRowLocal();
                             }}
                             style={{ textAlign: 'right' }}
                         />
@@ -198,7 +214,7 @@ export default function TransactionRow({
                         onChange={(e) => updateDraft('category', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRow();
+                            if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     />
                 ) : (
@@ -217,7 +233,7 @@ export default function TransactionRow({
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRow();
+                            if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     />
                 ) : (
@@ -237,7 +253,7 @@ export default function TransactionRow({
                         onChange={(e) => updateDraft('transactionDate', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRow();
+                            if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     />
                 ) : tx.transactionDate ? (
@@ -258,7 +274,7 @@ export default function TransactionRow({
                         onChange={(e) => updateDraft('account', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRow();
+                            if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     />
                 ) : (
@@ -277,7 +293,7 @@ export default function TransactionRow({
                         onChange={(e) => updateDraft('paymentMethod', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRow();
+                            if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     />
                 ) : (
@@ -290,7 +306,7 @@ export default function TransactionRow({
                 <div className="tt-row-controls" role="group" aria-label="Row actions">
                     <button
                         className="tt-action-btn tt-action-outline"
-                        onClick={onCancelRow}
+                        onClick={onCancelRowLocal}
                         disabled={isSaving}
                     >
                         Cancel
@@ -332,6 +348,7 @@ TransactionRow.propTypes = {
     onEditKey: PropTypes.func.isRequired,
     onSaveEdit: PropTypes.func.isRequired,
     onSaveRow: PropTypes.func.isRequired,
+    onCancelRow: PropTypes.func, // optional
     toInputDate: PropTypes.func.isRequired,
     setEditing: PropTypes.func.isRequired,
     savingIds: PropTypes.object,

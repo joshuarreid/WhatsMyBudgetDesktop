@@ -143,6 +143,36 @@ export function useTransactionTable(filters, statementPeriod) {
         logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
+    // Cancel row editing (new or existing)
+    const handleCancelRow = useCallback((id) => {
+        // if it's a local-only new row, remove it entirely
+        if (String(id).startsWith('new-')) {
+            setLocalTx((prev) => {
+                const beforeCount = (prev || []).length;
+                const next = (prev || []).filter((t) => t.id !== id);
+                logger.info('handleCancelRow: removed local new tx', { id, beforeCount, afterCount: next.length });
+                return next;
+            });
+            // also clear selection, errors and editing
+            setSelectedIds((prev) => {
+                const copy = new Set(prev);
+                if (copy.has(id)) copy.delete(id);
+                return copy;
+            });
+            setSaveErrors((prev) => {
+                if (!prev[id]) return prev;
+                const copy = { ...prev };
+                delete copy[id];
+                return copy;
+            });
+            setEditing(null);
+        } else {
+            // non-new rows: simply exit edit mode
+            logger.info('handleCancelRow: canceled editing existing row', { id });
+            setEditing(null);
+        }
+    }, []);
+
     // Delete selected
     const handleDeleteSelected = useCallback(
         async () => {
@@ -416,6 +446,7 @@ export function useTransactionTable(filters, statementPeriod) {
         handleEditKey,
         handleSaveEdit,
         handleSaveRow,
+        handleCancelRow, // new export
         startEditingRow,
         startEditingField,
         toInputDate,
