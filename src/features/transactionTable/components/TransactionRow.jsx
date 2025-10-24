@@ -241,7 +241,7 @@ export default function TransactionRow({
                         }}
                     />
                 ) : tx.transactionDate ? (
-                    new Date(tx.transactionDate).toLocaleDateString()
+                    new Date(tx.transactionDate).toLocaleDateString('en-US', { timeZone: 'UTC' })
                 ) : (
                     ""
                 )}

@@ -38,7 +38,7 @@ export default function CategoryWeeklyModal({
         <Modal isOpen={Boolean(isOpen)} onClose={onClose} ariaLabel={ariaLabel} closeOnBackdrop closeOnEsc>
             <ModalHeader className="cwm-header">
                 <div className="cwm-title">{category || 'All categories'}</div>
-                <div className="cwm-range">{start && end ? `${start.toLocaleDateString()} — ${end.toLocaleDateString()}` : 'No date range'}</div>
+                <div className="cwm-range">{start && end ? `${start.toLocaleDateString('en-US', { timeZone: 'UTC' })} — ${end.toLocaleDateString('en-US', { timeZone: 'UTC' })}` : 'No date range'}</div>
             </ModalHeader>
 
             <ModalBody>
@@ -59,7 +59,7 @@ export default function CategoryWeeklyModal({
                         {weeks.map((w, idx) => {
                             const wkStart = w.start ? new Date(w.start) : null;
                             const wkEnd = w.end ? new Date(w.end) : null;
-                            const ariaLabelWeek = `Week ${idx + 1}: ${wkStart?.toLocaleDateString?.() ?? '—'} — ${wkEnd?.toLocaleDateString?.() ?? '—'}`;
+                            const ariaLabelWeek = `Week ${idx + 1}: ${wkStart?.toLocaleDateString?.('en-US', { timeZone: 'UTC' }) ?? '—'} — ${wkEnd?.toLocaleDateString?.('en-US', { timeZone: 'UTC' }) ?? '—'}`;
 
                             return (
                                 <div
@@ -69,7 +69,7 @@ export default function CategoryWeeklyModal({
                                     aria-label={ariaLabelWeek}
                                 >
                                     <div className="cwm-week-left">
-                                        <div className="cwm-week-dates">{wkStart ? wkStart.toLocaleDateString() : '—'} — {wkEnd ? wkEnd.toLocaleDateString() : '—'}</div>
+                                        <div className="cwm-week-dates">{wkStart ? wkStart.toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'} — {wkEnd ? wkEnd.toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—'}</div>
                                         <div className="cwm-week-count">{w.count} transaction{w.count !== 1 ? 's' : ''}</div>
                                     </div>
 

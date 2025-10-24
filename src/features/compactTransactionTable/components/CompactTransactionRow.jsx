@@ -105,7 +105,8 @@ function parseTxDate(tx) {
 
 function formatDateShort(d) {
     try {
-        return d.toLocaleDateString?.() ?? String(d);
+        // Always display date in UTC to match backend
+        return d.toLocaleDateString('en-US', { timeZone: 'UTC' }) ?? String(d);
     } catch (err) {
         return String(d);
     }
