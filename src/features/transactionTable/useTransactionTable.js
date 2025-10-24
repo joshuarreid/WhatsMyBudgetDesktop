@@ -6,8 +6,14 @@ const logger = {
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import budgetTransactionService from '../../services/BudgetTransactionService';
 import localCacheService from '../../services/LocalCacheService';
-import {useTransactionsForAccount} from "../../hooks/useTransactions";
+import { useTransactionsForAccount } from "../../hooks/useTransactions";
+import config from '../../wmbservice-config.json';
 
+const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
+const CRITICALITY_OPTIONS = Array.isArray(config?.criticalityOptions) && config.criticalityOptions.length > 0
+    ? config.criticalityOptions
+    : DEFAULT_CRITICALITY_OPTIONS;
+const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
 
 /**
  * useTransactionTable(filters, statementPeriod)
@@ -81,7 +87,6 @@ export function useTransactionTable(filters, statementPeriod) {
             logger.info('Attempting to load statementPeriod from local cache');
             localCacheService.get('currentStatementPeriod')
                 .then((data) => {
-                    // LocalCacheController likely returns { cacheKey, cacheValue, ... }
                     const val = data?.cacheValue ?? data?.value ?? data ?? null;
                     if (mounted) {
                         if (val) {
@@ -94,7 +99,6 @@ export function useTransactionTable(filters, statementPeriod) {
                 })
                 .catch((err) => {
                     logger.error('Failed to load statementPeriod from cache', err);
-                    // graceful fallback: keep cachedStatementPeriod null — callers should handle missing value
                 });
         }
         return () => { mounted = false; };
@@ -121,14 +125,14 @@ export function useTransactionTable(filters, statementPeriod) {
     // Utility to generate a unique temp id for new rows
     const makeTempId = useCallback(() => `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
-    // Add transaction (local-only draft)
+    // Add transaction (local-only draft) — default criticality is wired from config (DEFAULT_CRITICALITY)
     const handleAddTransaction = useCallback(() => {
         const newTx = {
             id: makeTempId(),
             name: '',
             amount: 0,
             category: '',
-            criticality: '',
+            criticality: DEFAULT_CRITICALITY,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
             paymentMethod: '',
@@ -140,7 +144,7 @@ export function useTransactionTable(filters, statementPeriod) {
         setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
-        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod });
+        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
     // Cancel row editing (new or existing)
@@ -281,11 +285,21 @@ export function useTransactionTable(filters, statementPeriod) {
         []
     );
 
-    // validate helper
+    // validate helper (now validates criticality against configured options)
     const validateForCreate = useCallback((tx) => {
         const errors = [];
         if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
         if (tx.amount == null || Number.isNaN(Number(tx.amount))) errors.push('Amount must be a number');
+
+        // Validate criticality if present
+        if (tx.criticality != null && String(tx.criticality).trim() !== '') {
+            const val = String(tx.criticality).trim();
+            const match = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === val.toLowerCase());
+            if (!match) {
+                errors.push(`Criticality must be one of: ${CRITICALITY_OPTIONS.join(', ')}`);
+            }
+        }
+
         return errors;
     }, []);
 
@@ -366,7 +380,7 @@ export function useTransactionTable(filters, statementPeriod) {
                             name: '',
                             amount: 0,
                             category: '',
-                            criticality: '',
+                            criticality: DEFAULT_CRITICALITY,
                             transactionDate: new Date().toISOString(),
                             account: filters?.account || '',
                             paymentMethod: '',
@@ -376,7 +390,7 @@ export function useTransactionTable(filters, statementPeriod) {
                         };
                         setLocalTx((prev) => [newTx, ...(prev || [])]);
                         setEditing({ id: newTx.id, mode: 'row' });
-                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id });
+                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality });
                     } else {
                         // refresh server data to ensure consistency
                         try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }

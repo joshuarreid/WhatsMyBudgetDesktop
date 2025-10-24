@@ -5,6 +5,7 @@ const logger = {
 
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
+import config from '../../../wmbservice-config.json'; // read configured criticality values
 
 /**
  * TransactionRow
@@ -13,8 +14,16 @@ import PropTypes from "prop-types";
  * - Calls onSaveRow(id, normalized, addAnother) when saving.
  * - The cleared/uncleared UI has been removed per request.
  *
- * New: accepts onCancelRow prop (function) which will be called with the current tx.id.
+ * New: criticality input is a dropdown with options driven by config (criticalityOptions).
+ * Default criticality for new rows is the first configured option (default: "Essential").
  */
+
+const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
+const CRITICALITY_OPTIONS = Array.isArray(config?.criticalityOptions) && config.criticalityOptions.length > 0
+    ? config.criticalityOptions
+    : DEFAULT_CRITICALITY_OPTIONS;
+const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
+
 export default function TransactionRow({
                                            tx,
                                            selected,
@@ -43,9 +52,48 @@ export default function TransactionRow({
     // keep draft in sync when tx changes and not currently editing row
     useEffect(() => {
         if (!isRowEditing) {
-            setDraft({ ...tx });
+            // ensure new tx gets default criticality if missing
+            if (tx?.__isNew && (tx.criticality == null || String(tx.criticality).trim() === '')) {
+                setDraft({ ...tx, criticality: DEFAULT_CRITICALITY });
+            } else {
+                setDraft({ ...tx });
+            }
         }
     }, [tx.id, tx, isRowEditing]);
+
+    // Helper to normalize incoming criticality values to one of the allowed options or default
+    const normalizeCriticality = (val) => {
+        if (val == null) return DEFAULT_CRITICALITY;
+        const s = String(val).trim();
+        if (s === '') return DEFAULT_CRITICALITY;
+        // try case-insensitive exact match first
+        const exact = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === s.toLowerCase());
+        if (exact) return exact;
+        // fallback mapping for common variants
+        const lower = s.toLowerCase();
+        if (lower.includes('essential')) {
+            if (lower.startsWith('non') || lower.startsWith('non ')) return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('non')) ?? DEFAULT_CRITICALITY;
+            return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('ess')) ?? DEFAULT_CRITICALITY;
+        }
+        if (lower.includes('non')) return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('non')) ?? DEFAULT_CRITICALITY;
+        // unknown -> default
+        return DEFAULT_CRITICALITY;
+    };
+
+    // debug: log when row mounts / tx changes
+    useEffect(() => {
+        try {
+            logger.info('render row', {
+                id: tx?.id ?? null,
+                __isNew: !!tx?.__isNew,
+                date: tx?.transactionDate ?? null,
+                editing: editing ? (editing.id === tx.id ? editing.mode : false) : false,
+                isSaving,
+            });
+        } catch (err) {
+            logger.error('row logging failed', err);
+        }
+    }, [tx, editing, isSaving]);
 
     const updateDraft = (field, value) => {
         setDraft((prev) => ({ ...prev, [field]: value }));
@@ -58,6 +106,8 @@ export default function TransactionRow({
             // assume yyyy-mm-dd -> convert to ISO
             normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
         }
+        // normalize criticality to allowed option (fallback to default)
+        normalized.criticality = normalizeCriticality(normalized.criticality);
         onSaveRow(tx.id, normalized, addAnother);
     };
 
@@ -85,7 +135,7 @@ export default function TransactionRow({
         setDraft({ ...tx });
     };
 
-    // helper for field inputs (unchanged behaviour except no onBlur save)
+    // helper for field inputs (unchanged behaviour except criticality -> select)
     const renderFieldInput = (field, props = {}) => {
         if (field === "amount") {
             return (
@@ -121,6 +171,29 @@ export default function TransactionRow({
                     }}
                     {...props}
                 />
+            );
+        }
+
+        if (field === "criticality") {
+            // Field-level editing uses editValueRef for value transfer (consistent with other fields)
+            const dv = normalizeCriticality(tx.criticality) || DEFAULT_CRITICALITY;
+            return (
+                <select
+                    className="tt-input"
+                    autoFocus
+                    defaultValue={dv}
+                    onChange={(e) => (editValueRef.current = e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") onSaveEdit(tx.id, field, editValueRef.current);
+                        else if (e.key === "Escape") setEditing(null);
+                        else onEditKey(e, tx.id, field);
+                    }}
+                    {...props}
+                >
+                    {CRITICALITY_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                </select>
             );
         }
 
@@ -222,20 +295,24 @@ export default function TransactionRow({
                 )}
             </div>
 
-            {/* Criticality */}
+            {/* Criticality (dropdown) */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("criticality") ? (
                     renderFieldInput("criticality")
                 ) : isRowEditing ? (
-                    <input
+                    <select
                         className="tt-input"
-                        value={draft.criticality || ''}
+                        value={normalizeCriticality(draft.criticality) || DEFAULT_CRITICALITY}
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
                             if (e.key === 'Escape') onCancelRowLocal();
                         }}
-                    />
+                    >
+                        {CRITICALITY_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                    </select>
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "criticality")}>{tx.criticality}</div>
                 )}
