@@ -7,12 +7,25 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import budgetTransactionService from '../../services/BudgetTransactionService';
 import localCacheService from '../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../hooks/useTransactions";
-import config from '../../wmbservice-config.json';
+// NOTE: switch from reading the raw JSON file to using the centralized config module.
+// Adjust the path if your config module lives elsewhere in the repo.
+import { get as getConfig, getCriticalityForCategory } from '../../config/config.ts';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
-const CRITICALITY_OPTIONS = Array.isArray(config?.criticalityOptions) && config.criticalityOptions.length > 0
-    ? config.criticalityOptions
-    : DEFAULT_CRITICALITY_OPTIONS;
+// Prefer runtime-config values via config.ts get('criticalityOptions'), fallback to DEFAULT_CRITICALITY_OPTIONS
+const CRITICALITY_OPTIONS = (() => {
+    try {
+        const cfg = getConfig('criticalityOptions');
+        if (Array.isArray(cfg) && cfg.length > 0) {
+            return cfg.map(String);
+        }
+        return DEFAULT_CRITICALITY_OPTIONS;
+    } catch (err) {
+        logger.error('Failed to read criticalityOptions from config, using defaults', err);
+        return DEFAULT_CRITICALITY_OPTIONS;
+    }
+})();
+
 const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
 
 /**
@@ -132,6 +145,7 @@ export function useTransactionTable(filters, statementPeriod) {
             name: '',
             amount: 0,
             category: '',
+            // if category exists later we could derive via getCriticalityForCategory(category)
             criticality: DEFAULT_CRITICALITY,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
@@ -470,5 +484,8 @@ export function useTransactionTable(filters, statementPeriod) {
         setLocalTx,
         // expose the effective statementPeriod for consumers
         statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
+        // expose config-driven criticality options for consumers (read-only)
+        criticalityOptions: CRITICALITY_OPTIONS,
+        getCriticalityForCategory, // expose helper so consumers can derive default criticality by category
     };
 }
