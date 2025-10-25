@@ -3,25 +3,39 @@ const logger = {
     error: (...args) => console.error('[TransactionRow]', ...args),
 };
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
-import config from '../../../wmbservice-config.json'; // read configured criticality values
+// Use centralized config helpers instead of reading the JSON file directly.
+import { getCategories, getCriticalityForCategory, get as getConfig } from '../../../config/config.ts';
 
 /**
  * TransactionRow
  *
  * - Renders Save / Cancel / Save and add another buttons while in whole-row edit mode.
  * - Calls onSaveRow(id, normalized, addAnother) when saving.
- * - The cleared/uncleared UI has been removed per request.
+ * - Autofills category suggestions from config categories as user types.
+ * - When a category is selected (or focus leaves the category input), it will set the mapped
+ *   criticality for that category (if mapping exists) for row-edit mode; for single-field edits
+ *   it will attempt to save both category and mapped criticality via onSaveEdit.
  *
- * New: criticality input is a dropdown with options driven by config (criticalityOptions).
- * Default criticality for new rows is the first configured option (default: "Essential").
+ * Notes:
+ * - Suggestions are simple and in-component. For a larger app consider extracting an Autocomplete component
+ *   or using a battle-tested library (Downshift, Combobox from Radix).
+ * - Logging added to help diagnose interactions.
  */
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
-const CRITICALITY_OPTIONS = Array.isArray(config?.criticalityOptions) && config.criticalityOptions.length > 0
-    ? config.criticalityOptions
-    : DEFAULT_CRITICALITY_OPTIONS;
+const CRITICALITY_OPTIONS = (() => {
+    try {
+        const cfg = getConfig('criticalityOptions');
+        if (Array.isArray(cfg) && cfg.length > 0) return cfg.map(String);
+        logger.info('TransactionRow: criticalityOptions not found; using defaults', { fallback: DEFAULT_CRITICALITY_OPTIONS });
+        return DEFAULT_CRITICALITY_OPTIONS;
+    } catch (err) {
+        logger.error('TransactionRow: failed to read criticalityOptions from config; using defaults', err);
+        return DEFAULT_CRITICALITY_OPTIONS;
+    }
+})();
 const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
 
 export default function TransactionRow({
@@ -46,39 +60,41 @@ export default function TransactionRow({
     const isSaving = savingIds && savingIds.has(tx.id);
     const inlineError = saveErrors && saveErrors[tx.id];
 
+    // load configured categories once
+    const ALL_CATEGORIES = useMemo(() => {
+        try {
+            const cats = getCategories() || [];
+            logger.info('TransactionRow: loaded categories', { count: cats.length, sample: cats.slice(0, 6) });
+            return cats;
+        } catch (err) {
+            logger.error('TransactionRow: failed to load categories', err);
+            return [];
+        }
+    }, []);
+
     // local draft state used only when editing the whole row
     const [draft, setDraft] = useState(() => ({ ...tx }));
+
+    // suggestion state for category autocomplete
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [highlightIndex, setHighlightIndex] = useState(-1);
+
+    // ref to category input to manage focus/keyboard
+    const categoryInputRef = useRef(null);
 
     // keep draft in sync when tx changes and not currently editing row
     useEffect(() => {
         if (!isRowEditing) {
-            // ensure new tx gets default criticality if missing
+            // ensure new tx gets default criticality if missing (prefer category-derived)
             if (tx?.__isNew && (tx.criticality == null || String(tx.criticality).trim() === '')) {
-                setDraft({ ...tx, criticality: DEFAULT_CRITICALITY });
+                const derived = getCriticalityForCategory(tx.category) || DEFAULT_CRITICALITY;
+                setDraft({ ...tx, criticality: derived });
             } else {
                 setDraft({ ...tx });
             }
         }
     }, [tx.id, tx, isRowEditing]);
-
-    // Helper to normalize incoming criticality values to one of the allowed options or default
-    const normalizeCriticality = (val) => {
-        if (val == null) return DEFAULT_CRITICALITY;
-        const s = String(val).trim();
-        if (s === '') return DEFAULT_CRITICALITY;
-        // try case-insensitive exact match first
-        const exact = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === s.toLowerCase());
-        if (exact) return exact;
-        // fallback mapping for common variants
-        const lower = s.toLowerCase();
-        if (lower.includes('essential')) {
-            if (lower.startsWith('non') || lower.startsWith('non ')) return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('non')) ?? DEFAULT_CRITICALITY;
-            return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('ess')) ?? DEFAULT_CRITICALITY;
-        }
-        if (lower.includes('non')) return CRITICALITY_OPTIONS.find(o => o.toLowerCase().includes('non')) ?? DEFAULT_CRITICALITY;
-        // unknown -> default
-        return DEFAULT_CRITICALITY;
-    };
 
     // debug: log when row mounts / tx changes
     useEffect(() => {
@@ -99,43 +115,113 @@ export default function TransactionRow({
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
-    const onSaveRowClick = (addAnother = false) => {
-        // normalize date input if needed (if transactionDate is in yyyy-mm-dd)
-        const normalized = { ...draft };
-        if (normalized.transactionDate && normalized.transactionDate.length === 10) {
-            // assume yyyy-mm-dd -> convert to ISO
-            normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
-        }
-        // normalize criticality to allowed option (fallback to default)
-        normalized.criticality = normalizeCriticality(normalized.criticality);
-        onSaveRow(tx.id, normalized, addAnother);
+    // --- Category suggestion helpers ---
+    const filterCategories = (q) => {
+        if (!q) return ALL_CATEGORIES.slice(0, 8);
+        const lower = String(q).toLowerCase();
+        return ALL_CATEGORIES
+            .filter((c) => String(c).toLowerCase().includes(lower))
+            .slice(0, 8);
     };
 
-    const onCancelRowLocal = () => {
-        // If parent provided a cancel handler (useTransactionTable.handleCancelRow),
-        // call it (it will remove local new rows). Otherwise fallback to existing behavior.
+    const hideSuggestions = () => {
+        setShowSuggestions(false);
+        setHighlightIndex(-1);
+    };
+
+    const handleSelectCategoryForRow = (value) => {
         try {
-            if (onCancelRow && typeof onCancelRow === 'function') {
-                onCancelRow(tx.id);
-            } else {
-                setEditing(null);
-                setDraft({ ...tx });
-                logger.info('cancel row edit (local fallback)', { id: tx.id });
+            logger.info('category suggestion selected (row)', { txId: tx.id, category: value });
+            updateDraft('category', value);
+            // set mapped criticality if available
+            const mapped = getCriticalityForCategory(value);
+            if (mapped) {
+                logger.info('mapped criticality applied (row)', { txId: tx.id, category: value, criticality: mapped });
+                updateDraft('criticality', mapped);
             }
         } catch (err) {
-            logger.error('onCancelRow handler failed', err);
-            // fallback behaviour
-            setEditing(null);
-            setDraft({ ...tx });
+            logger.error('handleSelectCategoryForRow failed', err);
+        } finally {
+            hideSuggestions();
+            // keep focus on category input after select so user can continue
+            categoryInputRef.current?.focus();
         }
     };
 
-    const onStartRowEdit = () => {
-        startEditingRow(tx.id);
-        setDraft({ ...tx });
+    const handleSelectCategoryForFieldEdit = async (value) => {
+        try {
+            logger.info('category suggestion selected (field)', { txId: tx.id, category: value });
+            // update editValueRef so the input shows the selected value
+            editValueRef.current = value;
+            // save the category field
+            if (typeof onSaveEdit === 'function') {
+                await onSaveEdit(tx.id, 'category', value);
+            }
+            // set criticality if mapped (attempt to save it too)
+            const mapped = getCriticalityForCategory(value);
+            if (mapped) {
+                logger.info('mapped criticality applied (field)', { txId: tx.id, category: value, criticality: mapped });
+                if (typeof onSaveEdit === 'function') {
+                    // attempt to persist criticality as a separate single-field save
+                    await onSaveEdit(tx.id, 'criticality', mapped);
+                }
+            }
+        } catch (err) {
+            logger.error('handleSelectCategoryForFieldEdit failed', err);
+        } finally {
+            hideSuggestions();
+        }
     };
 
-    // helper for field inputs (unchanged behaviour except criticality -> select)
+    // Called when the category input (row edit) loses focus: ensure suggestions close and mapped criticality applied
+    const handleCategoryBlurForRow = (ev) => {
+        // small timeout to allow click on suggestion (mousedown handlers handle selection)
+        setTimeout(() => {
+            try {
+                hideSuggestions();
+                const categoryVal = draft.category;
+                if (categoryVal) {
+                    const mapped = getCriticalityForCategory(categoryVal);
+                    if (mapped && mapped !== draft.criticality) {
+                        logger.info('apply mapped criticality on blur (row)', { txId: tx.id, category: categoryVal, criticality: mapped });
+                        updateDraft('criticality', mapped);
+                    }
+                }
+            } catch (err) {
+                logger.error('handleCategoryBlurForRow failed', err);
+            }
+        }, 150);
+    };
+
+    // For field-level editing: on blur save the category and apply mapped criticality (if any)
+    const handleCategoryBlurForField = async (ev) => {
+        try {
+            const val = String(editValueRef.current ?? '').trim();
+            if (val === '') {
+                // nothing to save
+                hideSuggestions();
+                return;
+            }
+            hideSuggestions();
+            // first persist category
+            if (typeof onSaveEdit === 'function') {
+                logger.info('field edit category blur: saving category', { txId: tx.id, category: val });
+                await onSaveEdit(tx.id, 'category', val);
+            }
+            // then derive and persist criticality if mapped
+            const mapped = getCriticalityForCategory(val);
+            if (mapped) {
+                logger.info('field edit category blur: saving mapped criticality', { txId: tx.id, category: val, criticality: mapped });
+                if (typeof onSaveEdit === 'function') {
+                    await onSaveEdit(tx.id, 'criticality', mapped);
+                }
+            }
+        } catch (err) {
+            logger.error('handleCategoryBlurForField failed', err);
+        }
+    };
+
+    // --- Rendering helpers (field inputs) ---
     const renderFieldInput = (field, props = {}) => {
         if (field === "amount") {
             return (
@@ -176,7 +262,7 @@ export default function TransactionRow({
 
         if (field === "criticality") {
             // Field-level editing uses editValueRef for value transfer (consistent with other fields)
-            const dv = normalizeCriticality(tx.criticality) || DEFAULT_CRITICALITY;
+            const dv = (tx.criticality && String(tx.criticality)) ? tx.criticality : DEFAULT_CRITICALITY;
             return (
                 <select
                     className="tt-input"
@@ -197,6 +283,93 @@ export default function TransactionRow({
             );
         }
 
+        // Category field-level input: enhanced with suggestions + blur save that also applies mapped criticality
+        if (field === "category") {
+            const initial = (tx.category ?? '');
+            return (
+                <div style={{ position: 'relative' }}>
+                    <input
+                        ref={categoryInputRef}
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={(e) => {
+                            editValueRef.current = e.target.value;
+                            const q = e.target.value;
+                            const matched = filterCategories(q);
+                            setSuggestions(matched);
+                            setShowSuggestions(matched.length > 0);
+                        }}
+                        onBlur={handleCategoryBlurForField}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                await onSaveEdit(tx.id, 'category', editValueRef.current);
+                                // apply mapped criticality on Enter as well
+                                const mapped = getCriticalityForCategory(editValueRef.current);
+                                if (mapped) {
+                                    await onSaveEdit(tx.id, 'criticality', mapped);
+                                }
+                                setEditing(null);
+                            } else if (e.key === "Escape") {
+                                setEditing(null);
+                            } else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                            } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setHighlightIndex((i) => Math.max(i - 1, 0));
+                            } else if (e.key === 'Tab') {
+                                // let blur handler run
+                            } else {
+                                onEditKey(e, tx.id, field);
+                            }
+                        }}
+                        {...props}
+                    />
+                    {showSuggestions && suggestions.length > 0 && (
+                        <div
+                            role="listbox"
+                            aria-label="Category suggestions"
+                            style={{
+                                position: 'absolute',
+                                zIndex: 2000,
+                                background: 'white',
+                                border: '1px solid rgba(0,0,0,0.12)',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                width: '100%',
+                                maxHeight: 220,
+                                overflowY: 'auto',
+                                marginTop: 6,
+                            }}
+                        >
+                            {suggestions.map((opt, idx) => (
+                                <div
+                                    key={opt}
+                                    role="option"
+                                    aria-selected={idx === highlightIndex}
+                                    onMouseDown={(ev) => {
+                                        // prevent blur before click handled
+                                        ev.preventDefault();
+                                        handleSelectCategoryForFieldEdit(opt);
+                                    }}
+                                    onMouseEnter={() => setHighlightIndex(idx)}
+                                    style={{
+                                        padding: '6px 8px',
+                                        background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    {opt}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // default text input
         return (
             <input
                 className="tt-input"
@@ -213,6 +386,50 @@ export default function TransactionRow({
         );
     };
 
+    // Save whole-row (explicit Save). addAnother = boolean indicates "save and add another"
+    const onSaveRowClick = (addAnother = false) => {
+        // normalize date input if needed (if transactionDate is in yyyy-mm-dd)
+        const normalized = { ...draft };
+        if (normalized.transactionDate && normalized.transactionDate.length === 10) {
+            // assume yyyy-mm-dd -> convert to ISO
+            normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
+        }
+        // ensure criticality is normalized to an allowed option
+        const s = normalized.criticality;
+        if (s == null || String(s).trim() === '') {
+            normalized.criticality = DEFAULT_CRITICALITY;
+        } else {
+            const exact = CRITICALITY_OPTIONS.find((o) => String(o).toLowerCase() === String(s).toLowerCase());
+            normalized.criticality = exact || DEFAULT_CRITICALITY;
+        }
+        onSaveRow(tx.id, normalized, addAnother);
+    };
+
+    const onCancelRowLocal = () => {
+        // If parent provided a cancel handler (useTransactionTable.handleCancelRow),
+        // call it (it will remove local new rows). Otherwise fallback to existing behavior.
+        try {
+            if (onCancelRow && typeof onCancelRow === 'function') {
+                onCancelRow(tx.id);
+            } else {
+                setEditing(null);
+                setDraft({ ...tx });
+                logger.info('cancel row edit (local fallback)', { id: tx.id });
+            }
+        } catch (err) {
+            logger.error('onCancelRow handler failed', err);
+            // fallback behaviour
+            setEditing(null);
+            setDraft({ ...tx });
+        }
+    };
+
+    const onStartRowEdit = () => {
+        startEditingRow(tx.id);
+        setDraft({ ...tx });
+    };
+
+    // --- Render ---
     return (
         <div className={`tt-row${selected ? " tt-row-selected" : ""}`} key={tx.id}>
             <div className="tt-checkbox-col">
@@ -281,15 +498,73 @@ export default function TransactionRow({
                 {isFieldEditing("category") ? (
                     renderFieldInput("category")
                 ) : isRowEditing ? (
-                    <input
-                        className="tt-input"
-                        value={draft.category || ''}
-                        onChange={(e) => updateDraft('category', e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRowLocal();
-                        }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            ref={categoryInputRef}
+                            className="tt-input"
+                            value={draft.category || ''}
+                            onChange={(e) => {
+                                updateDraft('category', e.target.value);
+                                const matched = filterCategories(e.target.value);
+                                setSuggestions(matched);
+                                setShowSuggestions(matched.length > 0);
+                            }}
+                            onBlur={handleCategoryBlurForRow}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') onSaveRowClick();
+                                if (e.key === 'Escape') onCancelRowLocal();
+                                if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                                }
+                                if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    setHighlightIndex((i) => Math.max(i - 1, 0));
+                                }
+                                if (e.key === 'Tab') {
+                                    // let blur handler run
+                                }
+                            }}
+                        />
+                        {showSuggestions && suggestions.length > 0 && (
+                            <div
+                                role="listbox"
+                                aria-label="Category suggestions"
+                                style={{
+                                    position: 'absolute',
+                                    zIndex: 2000,
+                                    background: 'white',
+                                    border: '1px solid rgba(0,0,0,0.12)',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                    width: '100%',
+                                    maxHeight: 220,
+                                    overflowY: 'auto',
+                                    marginTop: 6,
+                                }}
+                            >
+                                {suggestions.map((opt, idx) => (
+                                    <div
+                                        key={opt}
+                                        role="option"
+                                        aria-selected={idx === highlightIndex}
+                                        onMouseDown={(ev) => {
+                                            // prevent blur before click handled
+                                            ev.preventDefault();
+                                            handleSelectCategoryForRow(opt);
+                                        }}
+                                        onMouseEnter={() => setHighlightIndex(idx)}
+                                        style={{
+                                            padding: '6px 8px',
+                                            background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        {opt}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "category")}>{tx.category}</div>
                 )}
@@ -302,7 +577,7 @@ export default function TransactionRow({
                 ) : isRowEditing ? (
                     <select
                         className="tt-input"
-                        value={normalizeCriticality(draft.criticality) || DEFAULT_CRITICALITY}
+                        value={draft.criticality ? draft.criticality : DEFAULT_CRITICALITY}
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();

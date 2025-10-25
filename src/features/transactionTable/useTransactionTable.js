@@ -7,21 +7,19 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import budgetTransactionService from '../../services/BudgetTransactionService';
 import localCacheService from '../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../hooks/useTransactions";
-// NOTE: switch from reading the raw JSON file to using the centralized config module.
-// Adjust the path if your config module lives elsewhere in the repo.
+// Use the centralized config accessor instead of reading the raw JSON.
+// Adjust the relative path if your config module lives elsewhere.
 import { get as getConfig, getCriticalityForCategory } from '../../config/config.ts';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
-// Prefer runtime-config values via config.ts get('criticalityOptions'), fallback to DEFAULT_CRITICALITY_OPTIONS
 const CRITICALITY_OPTIONS = (() => {
     try {
-        const cfg = getConfig('criticalityOptions');
-        if (Array.isArray(cfg) && cfg.length > 0) {
-            return cfg.map(String);
-        }
+        const opts = getConfig('criticalityOptions');
+        if (Array.isArray(opts) && opts.length > 0) return opts.map(String);
+        logger.info('useTransactionTable: criticalityOptions not found in config; using defaults', { fallback: DEFAULT_CRITICALITY_OPTIONS });
         return DEFAULT_CRITICALITY_OPTIONS;
     } catch (err) {
-        logger.error('Failed to read criticalityOptions from config, using defaults', err);
+        logger.error('useTransactionTable: failed to read criticalityOptions from config, using defaults', err);
         return DEFAULT_CRITICALITY_OPTIONS;
     }
 })();
@@ -140,13 +138,13 @@ export function useTransactionTable(filters, statementPeriod) {
 
     // Add transaction (local-only draft) — default criticality is wired from config (DEFAULT_CRITICALITY)
     const handleAddTransaction = useCallback(() => {
+        const defaultCrit = DEFAULT_CRITICALITY;
         const newTx = {
             id: makeTempId(),
             name: '',
             amount: 0,
             category: '',
-            // if category exists later we could derive via getCriticalityForCategory(category)
-            criticality: DEFAULT_CRITICALITY,
+            criticality: defaultCrit,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
             paymentMethod: '',
@@ -486,6 +484,7 @@ export function useTransactionTable(filters, statementPeriod) {
         statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
         // expose config-driven criticality options for consumers (read-only)
         criticalityOptions: CRITICALITY_OPTIONS,
-        getCriticalityForCategory, // expose helper so consumers can derive default criticality by category
+        // expose helper to derive criticality by category
+        getCriticalityForCategory,
     };
 }
