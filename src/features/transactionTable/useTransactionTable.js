@@ -9,7 +9,7 @@ import localCacheService from '../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../hooks/useTransactions";
 // Use the centralized config accessor instead of reading the raw JSON.
 // Adjust the relative path if your config module lives elsewhere.
-import { get as getConfig, getCriticalityForCategory } from '../../config/config.ts';
+import { get as getConfig, getCriticalityForCategory, getCategories } from '../../config/config.ts';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
 const CRITICALITY_OPTIONS = (() => {
@@ -25,6 +25,27 @@ const CRITICALITY_OPTIONS = (() => {
 })();
 
 const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
+
+/* Category options: if config provides categories, expose them and treat category as a dropdown.
+   Otherwise consumers should render a freeform textbox. */
+const CATEGORY_OPTIONS = (() => {
+    try {
+        const cats = getCategories();
+        if (Array.isArray(cats) && cats.length > 0) {
+            const filtered = cats.filter((c) => typeof c === 'string').map(String);
+            logger.info('useTransactionTable: loaded category options from config', { count: filtered.length, sample: filtered.slice(0, 5) });
+            return filtered;
+        }
+        logger.info('useTransactionTable: no categories in config; category will be a freeform textbox');
+        return null;
+    } catch (err) {
+        logger.error('useTransactionTable: failed to load categories from config', err);
+        return null;
+    }
+})();
+
+const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS.length > 0;
+const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
 
 /**
  * useTransactionTable(filters, statementPeriod)
@@ -143,7 +164,9 @@ export function useTransactionTable(filters, statementPeriod) {
             id: makeTempId(),
             name: '',
             amount: 0,
-            category: '',
+            // If categories are configured, initialize to the default category (first option).
+            // Otherwise keep it as empty string for freeform textbox.
+            category: DEFAULT_CATEGORY,
             criticality: defaultCrit,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
@@ -156,7 +179,7 @@ export function useTransactionTable(filters, statementPeriod) {
         setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
-        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality });
+        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality, defaultCategory: newTx.category });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
     // Cancel row editing (new or existing)
@@ -297,7 +320,7 @@ export function useTransactionTable(filters, statementPeriod) {
         []
     );
 
-    // validate helper (now validates criticality against configured options)
+    // validate helper (now validates criticality against configured options and category when configured)
     const validateForCreate = useCallback((tx) => {
         const errors = [];
         if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
@@ -309,6 +332,19 @@ export function useTransactionTable(filters, statementPeriod) {
             const match = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === val.toLowerCase());
             if (!match) {
                 errors.push(`Criticality must be one of: ${CRITICALITY_OPTIONS.join(', ')}`);
+            }
+        }
+
+        // If categories are configured, validate category against the configured options
+        if (IS_CATEGORY_DROPDOWN) {
+            const val = tx.category == null ? '' : String(tx.category).trim();
+            if (val === '') {
+                errors.push('Category is required');
+            } else {
+                const matched = CATEGORY_OPTIONS.find((c) => c === val);
+                if (!matched) {
+                    errors.push(`Category must be one of: ${CATEGORY_OPTIONS.join(', ')}`);
+                }
             }
         }
 
@@ -391,7 +427,7 @@ export function useTransactionTable(filters, statementPeriod) {
                             id: makeTempId(),
                             name: '',
                             amount: 0,
-                            category: '',
+                            category: DEFAULT_CATEGORY,
                             criticality: DEFAULT_CRITICALITY,
                             transactionDate: new Date().toISOString(),
                             account: filters?.account || '',
@@ -486,5 +522,8 @@ export function useTransactionTable(filters, statementPeriod) {
         criticalityOptions: CRITICALITY_OPTIONS,
         // expose helper to derive criticality by category
         getCriticalityForCategory,
+        // expose category options and whether consumers should render a dropdown
+        categoryOptions: CATEGORY_OPTIONS || [],
+        isCategoryDropdown: IS_CATEGORY_DROPDOWN,
     };
 }

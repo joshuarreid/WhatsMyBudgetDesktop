@@ -72,10 +72,12 @@ export default function TransactionRow({
         }
     }, []);
 
+    const IS_CATEGORY_DROPDOWN = Array.isArray(ALL_CATEGORIES) && ALL_CATEGORIES.length > 0;
+
     // local draft state used only when editing the whole row
     const [draft, setDraft] = useState(() => ({ ...tx }));
 
-    // suggestion state for category autocomplete
+    // suggestion state for category autocomplete (used only when NOT using dropdown)
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(-1);
@@ -115,7 +117,7 @@ export default function TransactionRow({
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
-    // --- Category suggestion helpers ---
+    // --- Category suggestion helpers (only used when no categories configured) ---
     const filterCategories = (q) => {
         if (!q) return ALL_CATEGORIES.slice(0, 8);
         const lower = String(q).toLowerCase();
@@ -283,9 +285,56 @@ export default function TransactionRow({
             );
         }
 
-        // Category field-level input: enhanced with suggestions + blur save that also applies mapped criticality
+        // Category field-level input: if config supplies categories render a dropdown, otherwise the previous autocomplete textbox
         if (field === "category") {
             const initial = (tx.category ?? '');
+            if (IS_CATEGORY_DROPDOWN) {
+                // render select for field edit — persist immediately on change and also persist mapped criticality
+                return (
+                    <select
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={async (e) => {
+                            const val = e.target.value;
+                            editValueRef.current = val;
+                            // persist category immediately
+                            if (typeof onSaveEdit === 'function') {
+                                try {
+                                    await onSaveEdit(tx.id, 'category', val);
+                                } catch (err) {
+                                    logger.error('failed to save category on select change', err);
+                                }
+                            }
+                            // persist mapped criticality if present
+                            const mapped = getCriticalityForCategory(val);
+                            if (mapped && typeof onSaveEdit === 'function') {
+                                try {
+                                    await onSaveEdit(tx.id, 'criticality', mapped);
+                                } catch (err) {
+                                    logger.error('failed to save mapped criticality on select change', err);
+                                }
+                            }
+                            setEditing(null);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                // handled by onChange already
+                            } else if (e.key === "Escape") setEditing(null);
+                            else onEditKey(e, tx.id, field);
+                        }}
+                        {...props}
+                    >
+                        <option value="">{/* allow empty selection */}</option>
+                        {ALL_CATEGORIES.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                    </select>
+                );
+            }
+
+            // fallback: freeform input with suggestions (previous behavior)
             return (
                 <div style={{ position: 'relative' }}>
                     <input
@@ -498,16 +547,16 @@ export default function TransactionRow({
                 {isFieldEditing("category") ? (
                     renderFieldInput("category")
                 ) : isRowEditing ? (
-                    <div style={{ position: 'relative' }}>
-                        <input
-                            ref={categoryInputRef}
+                    IS_CATEGORY_DROPDOWN ? (
+                        <select
                             className="tt-input"
                             value={draft.category || ''}
                             onChange={(e) => {
-                                updateDraft('category', e.target.value);
-                                const matched = filterCategories(e.target.value);
-                                setSuggestions(matched);
-                                setShowSuggestions(matched.length > 0);
+                                const val = e.target.value;
+                                updateDraft('category', val);
+                                // apply mapped criticality if present
+                                const mapped = getCriticalityForCategory(val);
+                                if (mapped) updateDraft('criticality', mapped);
                             }}
                             onBlur={handleCategoryBlurForRow}
                             onKeyDown={(e) => {
@@ -515,56 +564,88 @@ export default function TransactionRow({
                                 if (e.key === 'Escape') onCancelRowLocal();
                                 if (e.key === 'ArrowDown') {
                                     e.preventDefault();
-                                    setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                                    setHighlightIndex((i) => Math.min(i + 1, ALL_CATEGORIES.length - 1));
                                 }
                                 if (e.key === 'ArrowUp') {
                                     e.preventDefault();
                                     setHighlightIndex((i) => Math.max(i - 1, 0));
                                 }
-                                if (e.key === 'Tab') {
-                                    // let blur handler run
-                                }
                             }}
-                        />
-                        {showSuggestions && suggestions.length > 0 && (
-                            <div
-                                role="listbox"
-                                aria-label="Category suggestions"
-                                style={{
-                                    position: 'absolute',
-                                    zIndex: 2000,
-                                    background: 'white',
-                                    border: '1px solid rgba(0,0,0,0.12)',
-                                    boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                                    width: '100%',
-                                    maxHeight: 220,
-                                    overflowY: 'auto',
-                                    marginTop: 6,
+                        >
+                            <option value="">{/* allow empty */}</option>
+                            {ALL_CATEGORIES.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                ref={categoryInputRef}
+                                className="tt-input"
+                                value={draft.category || ''}
+                                onChange={(e) => {
+                                    updateDraft('category', e.target.value);
+                                    const matched = filterCategories(e.target.value);
+                                    setSuggestions(matched);
+                                    setShowSuggestions(matched.length > 0);
                                 }}
-                            >
-                                {suggestions.map((opt, idx) => (
-                                    <div
-                                        key={opt}
-                                        role="option"
-                                        aria-selected={idx === highlightIndex}
-                                        onMouseDown={(ev) => {
-                                            // prevent blur before click handled
-                                            ev.preventDefault();
-                                            handleSelectCategoryForRow(opt);
-                                        }}
-                                        onMouseEnter={() => setHighlightIndex(idx)}
-                                        style={{
-                                            padding: '6px 8px',
-                                            background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        {opt}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                                onBlur={handleCategoryBlurForRow}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') onSaveRowClick();
+                                    if (e.key === 'Escape') onCancelRowLocal();
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setHighlightIndex((i) => Math.max(i - 1, 0));
+                                    }
+                                    if (e.key === 'Tab') {
+                                        // let blur handler run
+                                    }
+                                }}
+                            />
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div
+                                    role="listbox"
+                                    aria-label="Category suggestions"
+                                    style={{
+                                        position: 'absolute',
+                                        zIndex: 2000,
+                                        background: 'white',
+                                        border: '1px solid rgba(0,0,0,0.12)',
+                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                        width: '100%',
+                                        maxHeight: 220,
+                                        overflowY: 'auto',
+                                        marginTop: 6,
+                                    }}
+                                >
+                                    {suggestions.map((opt, idx) => (
+                                        <div
+                                            key={opt}
+                                            role="option"
+                                            aria-selected={idx === highlightIndex}
+                                            onMouseDown={(ev) => {
+                                                // prevent blur before click handled
+                                                ev.preventDefault();
+                                                handleSelectCategoryForRow(opt);
+                                            }}
+                                            onMouseEnter={() => setHighlightIndex(idx)}
+                                            style={{
+                                                padding: '6px 8px',
+                                                background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            {opt}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "category")}>{tx.category}</div>
                 )}
