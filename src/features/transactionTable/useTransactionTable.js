@@ -9,7 +9,12 @@ import localCacheService from '../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../hooks/useTransactions";
 // Use the centralized config accessor instead of reading the raw JSON.
 // Adjust the relative path if your config module lives elsewhere.
-import { get as getConfig, getCriticalityForCategory, getCategories } from '../../config/config.ts';
+import {
+    get as getConfig,
+    getCriticalityForCategory,
+    getCategories,
+    getDefaultPaymentMethodForAccount
+} from '../../config/config.ts';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
 const CRITICALITY_OPTIONS = (() => {
@@ -158,8 +163,11 @@ export function useTransactionTable(filters, statementPeriod) {
     const makeTempId = useCallback(() => `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
     // Add transaction (local-only draft) — default criticality is wired from config (DEFAULT_CRITICALITY)
+    // Now also pick the default payment method for the current account (screen) so new rows get a sensible default immediately.
     const handleAddTransaction = useCallback(() => {
         const defaultCrit = DEFAULT_CRITICALITY;
+        // derive default payment method for current screen/account
+        const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
         const newTx = {
             id: makeTempId(),
             name: '',
@@ -170,7 +178,7 @@ export function useTransactionTable(filters, statementPeriod) {
             criticality: defaultCrit,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
-            paymentMethod: '',
+            paymentMethod: defaultPM,
             memo: '',
             __isNew: true,
             // append statementPeriod to local tx so save uses it even if statementPeriod prop missing
@@ -179,7 +187,7 @@ export function useTransactionTable(filters, statementPeriod) {
         setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
-        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality, defaultCategory: newTx.category });
+        logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality, defaultCategory: newTx.category, defaultPaymentMethod: newTx.paymentMethod });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
     // Cancel row editing (new or existing)
@@ -423,6 +431,7 @@ export function useTransactionTable(filters, statementPeriod) {
 
                     if (addAnother) {
                         // create a fresh local new row and start editing it
+                        const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
                         const newTx = {
                             id: makeTempId(),
                             name: '',
@@ -431,14 +440,14 @@ export function useTransactionTable(filters, statementPeriod) {
                             criticality: DEFAULT_CRITICALITY,
                             transactionDate: new Date().toISOString(),
                             account: filters?.account || '',
-                            paymentMethod: '',
+                            paymentMethod: defaultPM,
                             memo: '',
                             __isNew: true,
                             statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
                         };
                         setLocalTx((prev) => [newTx, ...(prev || [])]);
                         setEditing({ id: newTx.id, mode: 'row' });
-                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality });
+                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality, defaultPaymentMethod: newTx.paymentMethod });
                     } else {
                         // refresh server data to ensure consistency
                         try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }

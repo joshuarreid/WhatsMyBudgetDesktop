@@ -6,17 +6,26 @@ const logger = {
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
 // Use centralized config helpers instead of reading the JSON file directly.
-import { getCategories, getCriticalityForCategory, get as getConfig } from '../../../config/config.ts';
+import {
+    getCategories,
+    getCriticalityForCategory,
+    get as getConfig,
+    getAccounts,
+    getPaymentMethods,
+    getDefaultPaymentMethodForAccount
+} from '../../../config/config.ts';
 
 /**
  * TransactionRow
  *
  * - Renders Save / Cancel / Save and add another buttons while in whole-row edit mode.
  * - Calls onSaveRow(id, normalized, addAnother) when saving.
- * - Autofills category suggestions from config categories as user types.
+ * - Autofills category/account/payment suggestions from config lists as user types.
  * - When a category is selected (or focus leaves the category input), it will set the mapped
  *   criticality for that category (if mapping exists) for row-edit mode; for single-field edits
  *   it will attempt to save both category and mapped criticality via onSaveEdit.
+ * - When account is selected/changed, the row will attempt to set (or persist) the default payment
+ *   method for that account using config.getDefaultPaymentMethodForAccount(account).
  *
  * Notes:
  * - Suggestions are simple and in-component. For a larger app consider extracting an Autocomplete component
@@ -60,7 +69,7 @@ export default function TransactionRow({
     const isSaving = savingIds && savingIds.has(tx.id);
     const inlineError = saveErrors && saveErrors[tx.id];
 
-    // load configured categories once
+    // load configured lists once
     const ALL_CATEGORIES = useMemo(() => {
         try {
             const cats = getCategories() || [];
@@ -72,26 +81,63 @@ export default function TransactionRow({
         }
     }, []);
 
+    const ALL_ACCOUNTS = useMemo(() => {
+        try {
+            const acc = getAccounts() || [];
+            logger.info('TransactionRow: loaded accounts', { count: acc.length, sample: acc.slice(0, 6) });
+            return acc;
+        } catch (err) {
+            logger.error('TransactionRow: failed to load accounts', err);
+            return [];
+        }
+    }, []);
+
+    const ALL_PAYMENT_METHODS = useMemo(() => {
+        try {
+            const pms = getPaymentMethods() || [];
+            logger.info('TransactionRow: loaded paymentMethods', { count: pms.length, sample: pms.slice(0, 6) });
+            return pms;
+        } catch (err) {
+            logger.error('TransactionRow: failed to load paymentMethods', err);
+            return [];
+        }
+    }, []);
+
     const IS_CATEGORY_DROPDOWN = Array.isArray(ALL_CATEGORIES) && ALL_CATEGORIES.length > 0;
+    const IS_ACCOUNT_DROPDOWN = Array.isArray(ALL_ACCOUNTS) && ALL_ACCOUNTS.length > 0;
+    const IS_PAYMENT_DROPDOWN = Array.isArray(ALL_PAYMENT_METHODS) && ALL_PAYMENT_METHODS.length > 0;
 
     // local draft state used only when editing the whole row
     const [draft, setDraft] = useState(() => ({ ...tx }));
 
-    // suggestion state for category autocomplete (used only when NOT using dropdown)
-    const [suggestions, setSuggestions] = useState([]);
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const [highlightIndex, setHighlightIndex] = useState(-1);
-
-    // ref to category input to manage focus/keyboard
+    // suggestion state (separate per field to avoid conflicts)
+    // category suggestion state
+    const [catSuggestions, setCatSuggestions] = useState([]);
+    const [catShowSuggestions, setCatShowSuggestions] = useState(false);
+    const [catHighlightIndex, setCatHighlightIndex] = useState(-1);
     const categoryInputRef = useRef(null);
+
+    // account suggestion state
+    const [accSuggestions, setAccSuggestions] = useState([]);
+    const [accShowSuggestions, setAccShowSuggestions] = useState(false);
+    const [accHighlightIndex, setAccHighlightIndex] = useState(-1);
+    const accountInputRef = useRef(null);
+
+    // payment method suggestion state
+    const [pmSuggestions, setPmSuggestions] = useState([]);
+    const [pmShowSuggestions, setPmShowSuggestions] = useState(false);
+    const [pmHighlightIndex, setPmHighlightIndex] = useState(-1);
+    const paymentInputRef = useRef(null);
 
     // keep draft in sync when tx changes and not currently editing row
     useEffect(() => {
         if (!isRowEditing) {
             // ensure new tx gets default criticality if missing (prefer category-derived)
-            if (tx?.__isNew && (tx.criticality == null || String(tx.criticality).trim() === '')) {
-                const derived = getCriticalityForCategory(tx.category) || DEFAULT_CRITICALITY;
-                setDraft({ ...tx, criticality: derived });
+            // and ensure default paymentMethod for the account is applied for new txs when missing
+            if (tx?.__isNew) {
+                const derivedCrit = getCriticalityForCategory(tx.category) || DEFAULT_CRITICALITY;
+                const derivedPM = getDefaultPaymentMethodForAccount(tx.account) || tx.paymentMethod || '';
+                setDraft({ ...tx, criticality: derivedCrit, paymentMethod: derivedPM });
             } else {
                 setDraft({ ...tx });
             }
@@ -117,7 +163,7 @@ export default function TransactionRow({
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
-    // --- Category suggestion helpers (only used when no categories configured) ---
+    // --- Filtering helpers ---
     const filterCategories = (q) => {
         if (!q) return ALL_CATEGORIES.slice(0, 8);
         const lower = String(q).toLowerCase();
@@ -126,11 +172,36 @@ export default function TransactionRow({
             .slice(0, 8);
     };
 
-    const hideSuggestions = () => {
-        setShowSuggestions(false);
-        setHighlightIndex(-1);
+    const filterAccounts = (q) => {
+        if (!q) return ALL_ACCOUNTS.slice(0, 8);
+        const lower = String(q).toLowerCase();
+        return ALL_ACCOUNTS
+            .filter((a) => String(a).toLowerCase().includes(lower))
+            .slice(0, 8);
     };
 
+    const filterPaymentMethods = (q) => {
+        if (!q) return ALL_PAYMENT_METHODS.slice(0, 8);
+        const lower = String(q).toLowerCase();
+        return ALL_PAYMENT_METHODS
+            .filter((p) => String(p).toLowerCase().includes(lower))
+            .slice(0, 8);
+    };
+
+    const hideCatSuggestions = () => {
+        setCatShowSuggestions(false);
+        setCatHighlightIndex(-1);
+    };
+    const hideAccSuggestions = () => {
+        setAccShowSuggestions(false);
+        setAccHighlightIndex(-1);
+    };
+    const hidePmSuggestions = () => {
+        setPmShowSuggestions(false);
+        setPmHighlightIndex(-1);
+    };
+
+    // --- Selection handlers for row-level suggestion selection ---
     const handleSelectCategoryForRow = (value) => {
         try {
             logger.info('category suggestion selected (row)', { txId: tx.id, category: value });
@@ -144,43 +215,100 @@ export default function TransactionRow({
         } catch (err) {
             logger.error('handleSelectCategoryForRow failed', err);
         } finally {
-            hideSuggestions();
-            // keep focus on category input after select so user can continue
+            hideCatSuggestions();
             categoryInputRef.current?.focus();
         }
     };
 
+    const handleSelectAccountForRow = (value) => {
+        try {
+            logger.info('account suggestion selected (row)', { txId: tx.id, account: value });
+            updateDraft('account', value);
+            // apply default payment method for this account (if any)
+            const defaultPm = getDefaultPaymentMethodForAccount(value);
+            if (defaultPm) {
+                logger.info('applying default paymentMethod for account (row)', { txId: tx.id, account: value, paymentMethod: defaultPm });
+                updateDraft('paymentMethod', defaultPm);
+            }
+        } catch (err) {
+            logger.error('handleSelectAccountForRow failed', err);
+        } finally {
+            hideAccSuggestions();
+            accountInputRef.current?.focus();
+        }
+    };
+
+    const handleSelectPaymentForRow = (value) => {
+        try {
+            logger.info('payment suggestion selected (row)', { txId: tx.id, paymentMethod: value });
+            updateDraft('paymentMethod', value);
+        } catch (err) {
+            logger.error('handleSelectPaymentForRow failed', err);
+        } finally {
+            hidePmSuggestions();
+            paymentInputRef.current?.focus();
+        }
+    };
+
+    // --- Field-edit selection handlers (persist immediately) ---
     const handleSelectCategoryForFieldEdit = async (value) => {
         try {
             logger.info('category suggestion selected (field)', { txId: tx.id, category: value });
-            // update editValueRef so the input shows the selected value
             editValueRef.current = value;
-            // save the category field
             if (typeof onSaveEdit === 'function') {
                 await onSaveEdit(tx.id, 'category', value);
             }
-            // set criticality if mapped (attempt to save it too)
             const mapped = getCriticalityForCategory(value);
-            if (mapped) {
+            if (mapped && typeof onSaveEdit === 'function') {
                 logger.info('mapped criticality applied (field)', { txId: tx.id, category: value, criticality: mapped });
-                if (typeof onSaveEdit === 'function') {
-                    // attempt to persist criticality as a separate single-field save
-                    await onSaveEdit(tx.id, 'criticality', mapped);
-                }
+                await onSaveEdit(tx.id, 'criticality', mapped);
             }
         } catch (err) {
             logger.error('handleSelectCategoryForFieldEdit failed', err);
         } finally {
-            hideSuggestions();
+            hideCatSuggestions();
         }
     };
 
-    // Called when the category input (row edit) loses focus: ensure suggestions close and mapped criticality applied
-    const handleCategoryBlurForRow = (ev) => {
-        // small timeout to allow click on suggestion (mousedown handlers handle selection)
+    const handleSelectAccountForFieldEdit = async (value) => {
+        try {
+            logger.info('account suggestion selected (field)', { txId: tx.id, account: value });
+            editValueRef.current = value;
+            if (typeof onSaveEdit === 'function') {
+                await onSaveEdit(tx.id, 'account', value);
+            }
+            // persist default payment method for this account (if any)
+            const defaultPm = getDefaultPaymentMethodForAccount(value);
+            if (defaultPm && typeof onSaveEdit === 'function') {
+                logger.info('applying default paymentMethod for account (field)', { txId: tx.id, account: value, paymentMethod: defaultPm });
+                await onSaveEdit(tx.id, 'paymentMethod', defaultPm);
+            }
+        } catch (err) {
+            logger.error('handleSelectAccountForFieldEdit failed', err);
+        } finally {
+            hideAccSuggestions();
+        }
+    };
+
+    const handleSelectPaymentForFieldEdit = async (value) => {
+        try {
+            logger.info('payment suggestion selected (field)', { txId: tx.id, paymentMethod: value });
+            editValueRef.current = value;
+            if (typeof onSaveEdit === 'function') {
+                await onSaveEdit(tx.id, 'paymentMethod', value);
+            }
+        } catch (err) {
+            logger.error('handleSelectPaymentForFieldEdit failed', err);
+        } finally {
+            hidePmSuggestions();
+        }
+    };
+
+    // --- Blur handlers for row-level editing (apply mapped criticality for category) ---
+    const handleCategoryBlurForRow = () => {
         setTimeout(() => {
             try {
-                hideSuggestions();
+                hideCatSuggestions();
                 const categoryVal = draft.category;
                 if (categoryVal) {
                     const mapped = getCriticalityForCategory(categoryVal);
@@ -195,31 +323,94 @@ export default function TransactionRow({
         }, 150);
     };
 
-    // For field-level editing: on blur save the category and apply mapped criticality (if any)
-    const handleCategoryBlurForField = async (ev) => {
+    const handleAccountBlurForRow = () => {
+        setTimeout(() => {
+            try {
+                hideAccSuggestions();
+                const accountVal = draft.account;
+                if (accountVal) {
+                    const defaultPm = getDefaultPaymentMethodForAccount(accountVal);
+                    if (defaultPm && defaultPm !== draft.paymentMethod) {
+                        logger.info('apply default paymentMethod on blur (row)', { txId: tx.id, account: accountVal, paymentMethod: defaultPm });
+                        updateDraft('paymentMethod', defaultPm);
+                    }
+                }
+            } catch (err) {
+                logger.error('handleAccountBlurForRow failed', err);
+            }
+        }, 150);
+    };
+
+    const handlePaymentBlurForRow = () => {
+        setTimeout(() => {
+            try {
+                hidePmSuggestions();
+            } catch (err) {
+                logger.error('handlePaymentBlurForRow failed', err);
+            }
+        }, 150);
+    };
+
+    // --- Field-level blur handlers to persist changes on blur (similar to category) ---
+    const handleCategoryBlurForField = async () => {
         try {
             const val = String(editValueRef.current ?? '').trim();
             if (val === '') {
-                // nothing to save
-                hideSuggestions();
+                hideCatSuggestions();
                 return;
             }
-            hideSuggestions();
-            // first persist category
+            hideCatSuggestions();
             if (typeof onSaveEdit === 'function') {
                 logger.info('field edit category blur: saving category', { txId: tx.id, category: val });
                 await onSaveEdit(tx.id, 'category', val);
             }
-            // then derive and persist criticality if mapped
             const mapped = getCriticalityForCategory(val);
-            if (mapped) {
+            if (mapped && typeof onSaveEdit === 'function') {
                 logger.info('field edit category blur: saving mapped criticality', { txId: tx.id, category: val, criticality: mapped });
-                if (typeof onSaveEdit === 'function') {
-                    await onSaveEdit(tx.id, 'criticality', mapped);
-                }
+                await onSaveEdit(tx.id, 'criticality', mapped);
             }
         } catch (err) {
             logger.error('handleCategoryBlurForField failed', err);
+        }
+    };
+
+    const handleAccountBlurForField = async () => {
+        try {
+            const val = String(editValueRef.current ?? '').trim();
+            if (val === '') {
+                hideAccSuggestions();
+                return;
+            }
+            hideAccSuggestions();
+            if (typeof onSaveEdit === 'function') {
+                logger.info('field edit account blur: saving account', { txId: tx.id, account: val });
+                await onSaveEdit(tx.id, 'account', val);
+            }
+            // persist default payment method
+            const defaultPm = getDefaultPaymentMethodForAccount(val);
+            if (defaultPm && typeof onSaveEdit === 'function') {
+                logger.info('field edit account blur: saving default paymentMethod', { txId: tx.id, account: val, paymentMethod: defaultPm });
+                await onSaveEdit(tx.id, 'paymentMethod', defaultPm);
+            }
+        } catch (err) {
+            logger.error('handleAccountBlurForField failed', err);
+        }
+    };
+
+    const handlePaymentBlurForField = async () => {
+        try {
+            const val = String(editValueRef.current ?? '').trim();
+            if (val === '') {
+                hidePmSuggestions();
+                return;
+            }
+            hidePmSuggestions();
+            if (typeof onSaveEdit === 'function') {
+                logger.info('field edit payment blur: saving paymentMethod', { txId: tx.id, paymentMethod: val });
+                await onSaveEdit(tx.id, 'paymentMethod', val);
+            }
+        } catch (err) {
+            logger.error('handlePaymentBlurForField failed', err);
         }
     };
 
@@ -263,7 +454,6 @@ export default function TransactionRow({
         }
 
         if (field === "criticality") {
-            // Field-level editing uses editValueRef for value transfer (consistent with other fields)
             const dv = (tx.criticality && String(tx.criticality)) ? tx.criticality : DEFAULT_CRITICALITY;
             return (
                 <select
@@ -285,11 +475,10 @@ export default function TransactionRow({
             );
         }
 
-        // Category field-level input: if config supplies categories render a dropdown, otherwise the previous autocomplete textbox
+        // Category field-level input: select if configured otherwise autocomplete textbox
         if (field === "category") {
             const initial = (tx.category ?? '');
             if (IS_CATEGORY_DROPDOWN) {
-                // render select for field edit — persist immediately on change and also persist mapped criticality
                 return (
                     <select
                         className="tt-input"
@@ -298,30 +487,18 @@ export default function TransactionRow({
                         onChange={async (e) => {
                             const val = e.target.value;
                             editValueRef.current = val;
-                            // persist category immediately
                             if (typeof onSaveEdit === 'function') {
-                                try {
-                                    await onSaveEdit(tx.id, 'category', val);
-                                } catch (err) {
-                                    logger.error('failed to save category on select change', err);
-                                }
+                                try { await onSaveEdit(tx.id, 'category', val); } catch (err) { logger.error('failed to save category on select change', err); }
                             }
-                            // persist mapped criticality if present
                             const mapped = getCriticalityForCategory(val);
                             if (mapped && typeof onSaveEdit === 'function') {
-                                try {
-                                    await onSaveEdit(tx.id, 'criticality', mapped);
-                                } catch (err) {
-                                    logger.error('failed to save mapped criticality on select change', err);
-                                }
+                                try { await onSaveEdit(tx.id, 'criticality', mapped); } catch (err) { logger.error('failed to save mapped criticality on select change', err); }
                             }
                             setEditing(null);
                         }}
                         onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                e.preventDefault();
-                                // handled by onChange already
-                            } else if (e.key === "Escape") setEditing(null);
+                            if (e.key === "Enter") e.preventDefault();
+                            else if (e.key === "Escape") setEditing(null);
                             else onEditKey(e, tx.id, field);
                         }}
                         {...props}
@@ -334,7 +511,6 @@ export default function TransactionRow({
                 );
             }
 
-            // fallback: freeform input with suggestions (previous behavior)
             return (
                 <div style={{ position: 'relative' }}>
                     <input
@@ -344,30 +520,26 @@ export default function TransactionRow({
                         defaultValue={initial}
                         onChange={(e) => {
                             editValueRef.current = e.target.value;
-                            const q = e.target.value;
-                            const matched = filterCategories(q);
-                            setSuggestions(matched);
-                            setShowSuggestions(matched.length > 0);
+                            const matched = filterCategories(e.target.value);
+                            setCatSuggestions(matched);
+                            setCatShowSuggestions(matched.length > 0);
                         }}
                         onBlur={handleCategoryBlurForField}
                         onKeyDown={async (e) => {
                             if (e.key === "Enter") {
                                 e.preventDefault();
                                 await onSaveEdit(tx.id, 'category', editValueRef.current);
-                                // apply mapped criticality on Enter as well
                                 const mapped = getCriticalityForCategory(editValueRef.current);
-                                if (mapped) {
-                                    await onSaveEdit(tx.id, 'criticality', mapped);
-                                }
+                                if (mapped) await onSaveEdit(tx.id, 'criticality', mapped);
                                 setEditing(null);
                             } else if (e.key === "Escape") {
                                 setEditing(null);
                             } else if (e.key === 'ArrowDown') {
                                 e.preventDefault();
-                                setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                                setCatHighlightIndex((i) => Math.min(i + 1, catSuggestions.length - 1));
                             } else if (e.key === 'ArrowUp') {
                                 e.preventDefault();
-                                setHighlightIndex((i) => Math.max(i - 1, 0));
+                                setCatHighlightIndex((i) => Math.max(i - 1, 0));
                             } else if (e.key === 'Tab') {
                                 // let blur handler run
                             } else {
@@ -376,7 +548,7 @@ export default function TransactionRow({
                         }}
                         {...props}
                     />
-                    {showSuggestions && suggestions.length > 0 && (
+                    {catShowSuggestions && catSuggestions.length > 0 && (
                         <div
                             role="listbox"
                             aria-label="Category suggestions"
@@ -392,20 +564,243 @@ export default function TransactionRow({
                                 marginTop: 6,
                             }}
                         >
-                            {suggestions.map((opt, idx) => (
+                            {catSuggestions.map((opt, idx) => (
                                 <div
                                     key={opt}
                                     role="option"
-                                    aria-selected={idx === highlightIndex}
+                                    aria-selected={idx === catHighlightIndex}
                                     onMouseDown={(ev) => {
-                                        // prevent blur before click handled
                                         ev.preventDefault();
                                         handleSelectCategoryForFieldEdit(opt);
                                     }}
-                                    onMouseEnter={() => setHighlightIndex(idx)}
+                                    onMouseEnter={() => setCatHighlightIndex(idx)}
                                     style={{
                                         padding: '6px 8px',
-                                        background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                        background: idx === catHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    {opt}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Account field-level input
+        if (field === "account") {
+            const initial = (tx.account ?? '');
+            if (IS_ACCOUNT_DROPDOWN) {
+                return (
+                    <select
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={async (e) => {
+                            const val = e.target.value;
+                            editValueRef.current = val;
+                            if (typeof onSaveEdit === 'function') {
+                                try { await onSaveEdit(tx.id, 'account', val); } catch (err) { logger.error('failed to save account on select change', err); }
+                            }
+                            // persist default payment method for this account (if any)
+                            const defaultPm = getDefaultPaymentMethodForAccount(val);
+                            if (defaultPm && typeof onSaveEdit === 'function') {
+                                try { await onSaveEdit(tx.id, 'paymentMethod', defaultPm); } catch (err) { logger.error('failed to save default paymentMethod on account select change', err); }
+                            }
+                            setEditing(null);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") e.preventDefault();
+                            else if (e.key === "Escape") setEditing(null);
+                            else onEditKey(e, tx.id, field);
+                        }}
+                        {...props}
+                    >
+                        <option value="">{/* allow empty */}</option>
+                        {ALL_ACCOUNTS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                    </select>
+                );
+            }
+
+            return (
+                <div style={{ position: 'relative' }}>
+                    <input
+                        ref={accountInputRef}
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={(e) => {
+                            editValueRef.current = e.target.value;
+                            const matched = filterAccounts(e.target.value);
+                            setAccSuggestions(matched);
+                            setAccShowSuggestions(matched.length > 0);
+                        }}
+                        onBlur={handleAccountBlurForField}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                await onSaveEdit(tx.id, 'account', editValueRef.current);
+                                // persist default payment method after account save
+                                const defaultPm = getDefaultPaymentMethodForAccount(editValueRef.current);
+                                if (defaultPm) await onSaveEdit(tx.id, 'paymentMethod', defaultPm);
+                                setEditing(null);
+                            } else if (e.key === "Escape") {
+                                setEditing(null);
+                            } else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setAccHighlightIndex((i) => Math.min(i + 1, accSuggestions.length - 1));
+                            } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setAccHighlightIndex((i) => Math.max(i - 1, 0));
+                            } else if (e.key === 'Tab') {
+                                // let blur handler run
+                            } else {
+                                onEditKey(e, tx.id, field);
+                            }
+                        }}
+                        {...props}
+                    />
+                    {accShowSuggestions && accSuggestions.length > 0 && (
+                        <div
+                            role="listbox"
+                            aria-label="Account suggestions"
+                            style={{
+                                position: 'absolute',
+                                zIndex: 2000,
+                                background: 'white',
+                                border: '1px solid rgba(0,0,0,0.12)',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                width: '100%',
+                                maxHeight: 220,
+                                overflowY: 'auto',
+                                marginTop: 6,
+                            }}
+                        >
+                            {accSuggestions.map((opt, idx) => (
+                                <div
+                                    key={opt}
+                                    role="option"
+                                    aria-selected={idx === accHighlightIndex}
+                                    onMouseDown={(ev) => {
+                                        ev.preventDefault();
+                                        handleSelectAccountForFieldEdit(opt);
+                                    }}
+                                    onMouseEnter={() => setAccHighlightIndex(idx)}
+                                    style={{
+                                        padding: '6px 8px',
+                                        background: idx === accHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    {opt}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Payment method field-level input
+        if (field === "paymentMethod") {
+            const initial = (tx.paymentMethod ?? '');
+            if (IS_PAYMENT_DROPDOWN) {
+                return (
+                    <select
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={async (e) => {
+                            const val = e.target.value;
+                            editValueRef.current = val;
+                            if (typeof onSaveEdit === 'function') {
+                                try { await onSaveEdit(tx.id, 'paymentMethod', val); } catch (err) { logger.error('failed to save paymentMethod on select change', err); }
+                            }
+                            setEditing(null);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") e.preventDefault();
+                            else if (e.key === "Escape") setEditing(null);
+                            else onEditKey(e, tx.id, field);
+                        }}
+                        {...props}
+                    >
+                        <option value="">{/* allow empty */}</option>
+                        {ALL_PAYMENT_METHODS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                    </select>
+                );
+            }
+
+            return (
+                <div style={{ position: 'relative' }}>
+                    <input
+                        ref={paymentInputRef}
+                        className="tt-input"
+                        autoFocus
+                        defaultValue={initial}
+                        onChange={(e) => {
+                            editValueRef.current = e.target.value;
+                            const matched = filterPaymentMethods(e.target.value);
+                            setPmSuggestions(matched);
+                            setPmShowSuggestions(matched.length > 0);
+                        }}
+                        onBlur={handlePaymentBlurForField}
+                        onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault();
+                                await onSaveEdit(tx.id, 'paymentMethod', editValueRef.current);
+                                setEditing(null);
+                            } else if (e.key === "Escape") {
+                                setEditing(null);
+                            } else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setPmHighlightIndex((i) => Math.min(i + 1, pmSuggestions.length - 1));
+                            } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setPmHighlightIndex((i) => Math.max(i - 1, 0));
+                            } else if (e.key === 'Tab') {
+                                // let blur handler run
+                            } else {
+                                onEditKey(e, tx.id, field);
+                            }
+                        }}
+                        {...props}
+                    />
+                    {pmShowSuggestions && pmSuggestions.length > 0 && (
+                        <div
+                            role="listbox"
+                            aria-label="Payment method suggestions"
+                            style={{
+                                position: 'absolute',
+                                zIndex: 2000,
+                                background: 'white',
+                                border: '1px solid rgba(0,0,0,0.12)',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                width: '100%',
+                                maxHeight: 220,
+                                overflowY: 'auto',
+                                marginTop: 6,
+                            }}
+                        >
+                            {pmSuggestions.map((opt, idx) => (
+                                <div
+                                    key={opt}
+                                    role="option"
+                                    aria-selected={idx === pmHighlightIndex}
+                                    onMouseDown={(ev) => {
+                                        ev.preventDefault();
+                                        handleSelectPaymentForFieldEdit(opt);
+                                    }}
+                                    onMouseEnter={() => setPmHighlightIndex(idx)}
+                                    style={{
+                                        padding: '6px 8px',
+                                        background: idx === pmHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
                                         cursor: 'pointer',
                                     }}
                                 >
@@ -437,13 +832,10 @@ export default function TransactionRow({
 
     // Save whole-row (explicit Save). addAnother = boolean indicates "save and add another"
     const onSaveRowClick = (addAnother = false) => {
-        // normalize date input if needed (if transactionDate is in yyyy-mm-dd)
         const normalized = { ...draft };
         if (normalized.transactionDate && normalized.transactionDate.length === 10) {
-            // assume yyyy-mm-dd -> convert to ISO
             normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
         }
-        // ensure criticality is normalized to an allowed option
         const s = normalized.criticality;
         if (s == null || String(s).trim() === '') {
             normalized.criticality = DEFAULT_CRITICALITY;
@@ -455,8 +847,6 @@ export default function TransactionRow({
     };
 
     const onCancelRowLocal = () => {
-        // If parent provided a cancel handler (useTransactionTable.handleCancelRow),
-        // call it (it will remove local new rows). Otherwise fallback to existing behavior.
         try {
             if (onCancelRow && typeof onCancelRow === 'function') {
                 onCancelRow(tx.id);
@@ -467,7 +857,6 @@ export default function TransactionRow({
             }
         } catch (err) {
             logger.error('onCancelRow handler failed', err);
-            // fallback behaviour
             setEditing(null);
             setDraft({ ...tx });
         }
@@ -554,7 +943,6 @@ export default function TransactionRow({
                             onChange={(e) => {
                                 const val = e.target.value;
                                 updateDraft('category', val);
-                                // apply mapped criticality if present
                                 const mapped = getCriticalityForCategory(val);
                                 if (mapped) updateDraft('criticality', mapped);
                             }}
@@ -564,11 +952,11 @@ export default function TransactionRow({
                                 if (e.key === 'Escape') onCancelRowLocal();
                                 if (e.key === 'ArrowDown') {
                                     e.preventDefault();
-                                    setHighlightIndex((i) => Math.min(i + 1, ALL_CATEGORIES.length - 1));
+                                    setCatHighlightIndex((i) => Math.min(i + 1, ALL_CATEGORIES.length - 1));
                                 }
                                 if (e.key === 'ArrowUp') {
                                     e.preventDefault();
-                                    setHighlightIndex((i) => Math.max(i - 1, 0));
+                                    setCatHighlightIndex((i) => Math.max(i - 1, 0));
                                 }
                             }}
                         >
@@ -586,8 +974,8 @@ export default function TransactionRow({
                                 onChange={(e) => {
                                     updateDraft('category', e.target.value);
                                     const matched = filterCategories(e.target.value);
-                                    setSuggestions(matched);
-                                    setShowSuggestions(matched.length > 0);
+                                    setCatSuggestions(matched);
+                                    setCatShowSuggestions(matched.length > 0);
                                 }}
                                 onBlur={handleCategoryBlurForRow}
                                 onKeyDown={(e) => {
@@ -595,18 +983,18 @@ export default function TransactionRow({
                                     if (e.key === 'Escape') onCancelRowLocal();
                                     if (e.key === 'ArrowDown') {
                                         e.preventDefault();
-                                        setHighlightIndex((i) => Math.min(i + 1, suggestions.length - 1));
+                                        setCatHighlightIndex((i) => Math.min(i + 1, catSuggestions.length - 1));
                                     }
                                     if (e.key === 'ArrowUp') {
                                         e.preventDefault();
-                                        setHighlightIndex((i) => Math.max(i - 1, 0));
+                                        setCatHighlightIndex((i) => Math.max(i - 1, 0));
                                     }
                                     if (e.key === 'Tab') {
                                         // let blur handler run
                                     }
                                 }}
                             />
-                            {showSuggestions && suggestions.length > 0 && (
+                            {catShowSuggestions && catSuggestions.length > 0 && (
                                 <div
                                     role="listbox"
                                     aria-label="Category suggestions"
@@ -622,20 +1010,19 @@ export default function TransactionRow({
                                         marginTop: 6,
                                     }}
                                 >
-                                    {suggestions.map((opt, idx) => (
+                                    {catSuggestions.map((opt, idx) => (
                                         <div
                                             key={opt}
                                             role="option"
-                                            aria-selected={idx === highlightIndex}
+                                            aria-selected={idx === catHighlightIndex}
                                             onMouseDown={(ev) => {
-                                                // prevent blur before click handled
                                                 ev.preventDefault();
                                                 handleSelectCategoryForRow(opt);
                                             }}
-                                            onMouseEnter={() => setHighlightIndex(idx)}
+                                            onMouseEnter={() => setCatHighlightIndex(idx)}
                                             style={{
                                                 padding: '6px 8px',
-                                                background: idx === highlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                                background: idx === catHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
                                                 cursor: 'pointer',
                                             }}
                                         >
@@ -701,15 +1088,104 @@ export default function TransactionRow({
                 {isFieldEditing("account") ? (
                     renderFieldInput("account")
                 ) : isRowEditing ? (
-                    <input
-                        className="tt-input"
-                        value={draft.account || ''}
-                        onChange={(e) => updateDraft('account', e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRowLocal();
-                        }}
-                    />
+                    IS_ACCOUNT_DROPDOWN ? (
+                        <select
+                            className="tt-input"
+                            value={draft.account || ''}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                updateDraft('account', val);
+                                // apply default payment method for this account (row-level)
+                                const defaultPm = getDefaultPaymentMethodForAccount(val);
+                                if (defaultPm) updateDraft('paymentMethod', defaultPm);
+                            }}
+                            onBlur={handleAccountBlurForRow}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') onSaveRowClick();
+                                if (e.key === 'Escape') onCancelRowLocal();
+                                if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    setAccHighlightIndex((i) => Math.min(i + 1, ALL_ACCOUNTS.length - 1));
+                                }
+                                if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    setAccHighlightIndex((i) => Math.max(i - 1, 0));
+                                }
+                            }}
+                        >
+                            <option value="">{/* allow empty */}</option>
+                            {ALL_ACCOUNTS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                ref={accountInputRef}
+                                className="tt-input"
+                                value={draft.account || ''}
+                                onChange={(e) => {
+                                    updateDraft('account', e.target.value);
+                                    const matched = filterAccounts(e.target.value);
+                                    setAccSuggestions(matched);
+                                    setAccShowSuggestions(matched.length > 0);
+                                }}
+                                onBlur={handleAccountBlurForRow}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') onSaveRowClick();
+                                    if (e.key === 'Escape') onCancelRowLocal();
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setAccHighlightIndex((i) => Math.min(i + 1, accSuggestions.length - 1));
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setAccHighlightIndex((i) => Math.max(i - 1, 0));
+                                    }
+                                    if (e.key === 'Tab') {
+                                        // let blur handler run
+                                    }
+                                }}
+                            />
+                            {accShowSuggestions && accSuggestions.length > 0 && (
+                                <div
+                                    role="listbox"
+                                    aria-label="Account suggestions"
+                                    style={{
+                                        position: 'absolute',
+                                        zIndex: 2000,
+                                        background: 'white',
+                                        border: '1px solid rgba(0,0,0,0.12)',
+                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                        width: '100%',
+                                        maxHeight: 220,
+                                        overflowY: 'auto',
+                                        marginTop: 6,
+                                    }}
+                                >
+                                    {accSuggestions.map((opt, idx) => (
+                                        <div
+                                            key={opt}
+                                            role="option"
+                                            aria-selected={idx === accHighlightIndex}
+                                            onMouseDown={(ev) => {
+                                                ev.preventDefault();
+                                                handleSelectAccountForRow(opt);
+                                            }}
+                                            onMouseEnter={() => setAccHighlightIndex(idx)}
+                                            style={{
+                                                padding: '6px 8px',
+                                                background: idx === accHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            {opt}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "account")}>{tx.account}</div>
                 )}
@@ -720,15 +1196,101 @@ export default function TransactionRow({
                 {isFieldEditing("paymentMethod") ? (
                     renderFieldInput("paymentMethod")
                 ) : isRowEditing ? (
-                    <input
-                        className="tt-input"
-                        value={draft.paymentMethod || ''}
-                        onChange={(e) => updateDraft('paymentMethod', e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRowLocal();
-                        }}
-                    />
+                    IS_PAYMENT_DROPDOWN ? (
+                        <select
+                            className="tt-input"
+                            value={draft.paymentMethod || ''}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                updateDraft('paymentMethod', val);
+                            }}
+                            onBlur={handlePaymentBlurForRow}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') onSaveRowClick();
+                                if (e.key === 'Escape') onCancelRowLocal();
+                                if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    setPmHighlightIndex((i) => Math.min(i + 1, ALL_PAYMENT_METHODS.length - 1));
+                                }
+                                if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    setPmHighlightIndex((i) => Math.max(i - 1, 0));
+                                }
+                            }}
+                        >
+                            <option value="">{/* allow empty */}</option>
+                            {ALL_PAYMENT_METHODS.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                ref={paymentInputRef}
+                                className="tt-input"
+                                value={draft.paymentMethod || ''}
+                                onChange={(e) => {
+                                    updateDraft('paymentMethod', e.target.value);
+                                    const matched = filterPaymentMethods(e.target.value);
+                                    setPmSuggestions(matched);
+                                    setPmShowSuggestions(matched.length > 0);
+                                }}
+                                onBlur={handlePaymentBlurForRow}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') onSaveRowClick();
+                                    if (e.key === 'Escape') onCancelRowLocal();
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setPmHighlightIndex((i) => Math.min(i + 1, pmSuggestions.length - 1));
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setPmHighlightIndex((i) => Math.max(i - 1, 0));
+                                    }
+                                    if (e.key === 'Tab') {
+                                        // let blur handler run
+                                    }
+                                }}
+                            />
+                            {pmShowSuggestions && pmSuggestions.length > 0 && (
+                                <div
+                                    role="listbox"
+                                    aria-label="Payment method suggestions"
+                                    style={{
+                                        position: 'absolute',
+                                        zIndex: 2000,
+                                        background: 'white',
+                                        border: '1px solid rgba(0,0,0,0.12)',
+                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                                        width: '100%',
+                                        maxHeight: 220,
+                                        overflowY: 'auto',
+                                        marginTop: 6,
+                                    }}
+                                >
+                                    {pmSuggestions.map((opt, idx) => (
+                                        <div
+                                            key={opt}
+                                            role="option"
+                                            aria-selected={idx === pmHighlightIndex}
+                                            onMouseDown={(ev) => {
+                                                ev.preventDefault();
+                                                handleSelectPaymentForRow(opt);
+                                            }}
+                                            onMouseEnter={() => setPmHighlightIndex(idx)}
+                                            style={{
+                                                padding: '6px 8px',
+                                                background: idx === pmHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            {opt}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "paymentMethod")}>{tx.paymentMethod}</div>
                 )}
