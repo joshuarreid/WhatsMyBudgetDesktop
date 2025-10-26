@@ -1,27 +1,41 @@
-/* TransactionTable.css - YNAB-like toolbar and transaction rows
- *
- * Updated:
- * - Removed cleared column (simplified 8-column layout)
- * - Added row-level control bar that appears under inputs when editing a row
- * - Action button styles (Cancel / Save / Save and add another)
- * - Kept overall tone and colors consistent with existing app styles
- */
+
+/* -----------------------
+   Feature tokens / variables
+   ----------------------- */
+:root {
+    --tt-card-width: min(1450px, 95vw);
+    --tt-bg-gradient: linear-gradient(180deg, #0f1115, #151516);
+    --tt-card-border: 1px solid rgba(255,255,255,0.04);
+
+    --tt-input-bg: rgba(0,0,0,0.5);
+    --tt-input-border: 1px solid rgba(255,255,255,0.06);
+
+    --color-text: #e6eef8;
+    --color-muted: #9aa6b2;
+    --color-accent: #8db0ff;
+    --color-success: #9be3a7;
+    --color-inline-error: #ff8a8a;
+}
+
+/* -----------------------
+   Card + header + layout
+   ----------------------- */
 
 /* Base card */
 .tt-card {
     box-sizing: border-box;
-    width: var(--tt-card-width, min(1450px, 95vw));
+    width: var(--tt-card-width);
     border-radius: 12px;
     padding: 8px;
     min-height: 500px;
     margin: 12px 0;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-    color: #e6eef8;
+    color: var(--color-text);
     display: flex;
     flex-direction: column;
     gap: 8px;
-    border: 1px solid rgba(255,255,255,0.04);
-    background: linear-gradient(180deg, #0f1115, #151516);
+    border: var(--tt-card-border);
+    background: var(--tt-bg-gradient);
 }
 
 /* Top balances row (YNAB style) */
@@ -35,23 +49,19 @@
 }
 
 .tt-balance-item {
-    color: #9aa6b2;
+    color: var(--color-muted);
     text-align: left;
 }
 
 .tt-balance-amount {
-    color: #9be3a7;
+    color: var(--color-success);
     font-weight: 800;
     font-size: 1.05rem;
 }
 
 .tt-balance-label {
     font-size: 0.78rem;
-    color: #9aa6b2;
-}
-
-.tt-balance-item.tt-working .tt-balance-amount {
-    color: #f6e58d; /* highlight working balance */
+    color: var(--color-muted);
 }
 
 /* Toolbar styled to match YNAB top-left links look */
@@ -76,11 +86,10 @@
     gap: 12px;
 }
 
-/* LINK style buttons (similar to YNAB small toolbar links) */
 .tt-link-btn {
     background: transparent;
     border: none;
-    color: #8db0ff;
+    color: var(--color-accent);
     font-weight: 700;
     padding: 6px 8px;
     border-radius: 6px;
@@ -100,18 +109,9 @@
     transform: translateY(-1px);
 }
 
-.tt-icon {
-    font-weight: 900;
-}
-
-/* Totals on toolbar */
-.tt-totals {
-    color: #9be3a7;
-    font-weight: 800;
-}
-
-/* Header row
-   NOTE: layout reduced to 8 data columns (removed cleared column)
+/* Header row layout (grid columns) — kept here as a feature-level layout token.
+   Note: the visual surface for rows has been migrated to components/TransactionRow/TransactionRow.module.css.
+   Remove the old global .tt-row rules to avoid conflicting with the module styles.
 */
 .tt-header-row {
     display: grid;
@@ -128,7 +128,7 @@
     font-size: 0.85rem;
 }
 
-/* Body / rows */
+/* Body container */
 .tt-body {
     display: flex;
     flex-direction: column;
@@ -138,41 +138,22 @@
     padding: 6px;
 }
 
-/* Row layout (match header) */
-.tt-row {
-    display: grid;
-    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px; /* removed cleared column */
-    gap: 12px;
-    padding: 10px;
-    border-radius: 8px;
-    transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
-    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
-    font-size: 0.86rem;
-    align-items: start; /* allow row controls below inputs */
-}
-
-.tt-row:nth-child(odd) { background: rgba(255,255,255,0.01); }
-
-.tt-row:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.45);
-    background: rgba(255,255,255,0.03);
-}
-
-/* selected row */
-.tt-row-selected {
-    box-shadow: inset 0 0 0 1px rgba(156, 197, 255, 0.06);
-    background: linear-gradient(180deg, rgba(22,26,32,0.35), rgba(18,22,28,0.35));
-}
-
-/* checkbox column */
+/* Generic global helpers (still used across small components).
+   Prefer moving these into modules; keep them here as temporary shared tokens. */
 .tt-checkbox-col {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-/* cells */
+/* WARNING: .tt-row (row surface), .tt-row-selected and row action styles were migrated
+   to components/TransactionRow/TransactionRow.module.css. Keep the rules below removed to
+   avoid style conflicts. If you still rely on global rules for other components, add only
+   minimal fallbacks here (avoid duplicated selectors).
+*/
+
+/* Generic cell and input helper (kept as a shared helper for backwards compatibility).
+   Prefer migrating components to the module .cell/.input classes and then removing these. */
 .tt-cell {
     padding: 4px 6px;
     overflow: hidden;
@@ -180,20 +161,18 @@
     white-space: nowrap;
 }
 
-/* amount */
 .tt-amount {
     font-variant-numeric: tabular-nums;
     text-align: right;
 }
 
-/* editing input */
 .tt-input {
     width: 100%;
     padding: 6px 8px;
     border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.06);
-    background: rgba(0,0,0,0.5);
-    color: #e6eef8;
+    border: var(--tt-input-border);
+    background: var(--tt-input-bg);
+    color: var(--color-text);
     outline: none;
     font-size: 0.85rem;
 }
@@ -207,113 +186,35 @@
     text-align: right;
 }
 
-/* empty */
+/* Empty / placeholders */
 .tt-empty {
     padding: 22px;
     text-align: center;
-    color: #9aa6b2;
+    color: var(--color-muted);
 }
 
 /* ----------------------------
-   Row-level controls (under inputs)
+   NOTE: Row-level controls & action button styles were migrated to:
+   features/transactionTable/components/TransactionRow/TransactionRow.module.css
+
+   Keep only small global fallbacks here while migration completes.
    ---------------------------- */
 
-/* Row-level control bar that sits below the input fields and spans data columns */
-.tt-row-controls {
-    grid-column: 2 / -1; /* start after checkbox column and span to end */
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding-top: 10px;
-    align-items: center;
-}
-
-/* Action buttons used in row-edit mode */
-.tt-action-btn {
-    border: none;
-    padding: 8px 14px;
-    border-radius: 18px;
-    font-weight: 700;
-    cursor: pointer;
-    margin-left: 8px;
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
-}
-
-.tt-action-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-}
-
-/* Outline (Cancel) - white outline, transparent background */
-.tt-action-btn.tt-action-outline {
-    background: transparent;
-    color: #e6eef8;
-    border: 1px solid rgba(255,255,255,0.18);
-    box-shadow: none;
-}
-
-/* Primary filled (Save) - strong purple/blue background */
-.tt-action-btn.tt-action-primary {
-    background: linear-gradient(180deg, #5b4cff, #6e58ff);
-    color: white;
-    box-shadow: 0 6px 14px rgba(88, 71, 255, 0.18);
-}
-
-/* Ghost/secondary primary (Save and add another) - pill with lighter fill */
-.tt-action-btn.tt-action-ghost {
-    background: linear-gradient(180deg, #6c5bff, #7d6bff);
-    color: white;
-    box-shadow: 0 6px 14px rgba(125,107,255,0.14);
-}
-
-/* Disabled states */
-.tt-action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* keep spacing between rows consistent */
-.tt-row + .tt-row {
-    margin-top: 6px;
-}
-
-/* ----------------------------
-   Small utilities & compatibility
-   ---------------------------- */
-
-/* small inline saving text */
+/* small inline saving text (fallback) */
 .tt-row-controls > span {
     margin-left: 8px;
-    color: #9be3a7;
+    color: var(--color-success);
     font-weight: 700;
 }
 
-/* inline error for fields */
+/* inline error for fields (fallback) */
 .tt-row-controls > div {
     margin-left: 8px;
 }
 
-/* reduce button size on very small screens */
-@media (max-width: 900px) {
-    .tt-header-row,
-    .tt-row {
-        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
-    }
-
-    .tt-action-btn {
-        padding: 6px 10px;
-        min-height: 32px;
-    }
-}
-
 /* ----------------------------
-   SmartSelect suggestion popup styles (moved from inline styles)
-   These styles are kept in the master feature stylesheet so the SmartSelect
-   component can remain logic-only and visual styles stay centralized.
+   SmartSelect suggestion popup styles
+   (keep here until SmartSelect.module.css is introduced)
    ---------------------------- */
 
 :root {
@@ -324,7 +225,7 @@
 
 /* Container used in the component to allow absolutely positioned popup */
 .tt-ss-container {
-    position: relative; /* ensures suggestions are positioned relative to this container */
+    position: relative;
 }
 
 /* Suggestion popup listbox */
@@ -372,7 +273,11 @@
 
 /* Reduce spacing for small screens */
 @media (max-width: 900px) {
-    .tt-ss-suggestions {
-        max-height: 180px;
+    .tt-header-row {
+        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
+    }
+
+    .tt-input {
+        padding: 6px 8px;
     }
 }

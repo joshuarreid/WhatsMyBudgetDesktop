@@ -1,0 +1,161 @@
+/* Scoped styles for TransactionRow component (CSS Modules)
+ *
+ * Notes:
+ * - Keep these selectors small and focused to avoid accidental coupling.
+ * - Many feature-wide rules (layout grid, header, card) stay in the shared TransactionTable.css.
+ * - This module contains the row-specific look & feel: row surface, cells, inputs, and row actions.
+ */
+
+/* Root row surface (replaces .tt-row) */
+.row {
+    display: grid;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    font-size: 0.86rem;
+    align-items: start;
+}
+
+.rowOdd {
+    background: rgba(255,255,255,0.01);
+}
+
+.rowHover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+    background: rgba(255,255,255,0.03);
+}
+
+/* selected variant (replaces .tt-row-selected) */
+.rowSelected {
+    box-shadow: inset 0 0 0 1px rgba(156, 197, 255, 0.06);
+    background: linear-gradient(180deg, rgba(22,26,32,0.35), rgba(18,22,28,0.35));
+}
+
+/* checkbox column */
+.checkboxCol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* generic cell (replaces .tt-cell) */
+.cell {
+    padding: 4px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* amount cell tweaks */
+.amount {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* input styling overrides specific to row inputs (coexists with DEFAULT_INPUT_CLASS) */
+.input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.5);
+    color: #e6eef8;
+    outline: none;
+    font-size: 0.85rem;
+}
+
+/* ensure focus looks good even when using module class */
+.input:focus {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    border-color: rgba(120,170,255,0.6);
+}
+
+/* numeric input tweak (keeps text aligned right) */
+.inputNumber {
+    text-align: right;
+}
+
+/* row-level controls (replaces .tt-row-controls) */
+.rowControls {
+    grid-column: 2 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 10px;
+    align-items: center;
+}
+
+/* action buttons used in row-edit mode (replaces .tt-action-btn) */
+.actionBtn {
+    border: none;
+    padding: 8px 14px;
+    border-radius: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 8px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.actionBtnHover:hover:not(:disabled) {
+    transform: translateY(-2px);
+}
+
+/* Outline (Cancel) */
+.actionOutline {
+    background: transparent;
+    color: #e6eef8;
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: none;
+}
+
+/* Primary filled (Save) */
+.actionPrimary {
+    background: linear-gradient(180deg, #5b4cff, #6e58ff);
+    color: white;
+    box-shadow: 0 6px 14px rgba(88, 71, 255, 0.18);
+}
+
+/* Ghost/secondary primary (Save and add another) */
+.actionGhost {
+    background: linear-gradient(180deg, #6c5bff, #7d6bff);
+    color: white;
+    box-shadow: 0 6px 14px rgba(125,107,255,0.14);
+}
+
+/* inline saving text and inline error (kept small here so only row needs them) */
+.savingText {
+    margin-left: 8px;
+    font-weight: 700;
+    color: #9be3a7;
+}
+
+.inlineError {
+    margin-left: 8px;
+    color: #ff8a8a;
+    margin-top: 6px;
+}
+
+/* responsive adjustments that mirror the global layout reductions */
+@media (max-width: 900px) {
+    .row {
+        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
+    }
+
+    .actionBtn {
+        padding: 6px 10px;
+        min-height: 32px;
+    }
+
+    .savingText {
+        margin-left: 6px;
+    }
+}

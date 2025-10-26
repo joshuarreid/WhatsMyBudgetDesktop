@@ -1,0 +1,69 @@
+/* SmartSelect.module.css
+ *
+ * Scoped styles for SmartSelect component (CSS Modules).
+ * Migrated from the global .tt-ss-* rules.
+ *
+ * Keep these focused on the suggestion popup and option visuals.
+ */
+
+/* Container used in the component to allow absolutely positioned popup */
+.container {
+    position: relative; /* defensive: ensures suggestions are positioned relative to this container */
+}
+
+/* Optional small input tweaks to co-exist with global DEFAULT_INPUT_CLASS.
+   We keep this minimal so consumers can continue using the global input class
+   during incremental migration. */
+.input {
+    /* no-op placeholder styles; prefer global tt-input for full styling */
+}
+
+/* Suggestion popup listbox */
+.suggestions {
+    position: absolute;
+    z-index: 2000;
+    background: white;
+    color: #0b1220;
+    border: 1px solid rgba(0,0,0,0.12);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    width: 100%;
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 6px;
+    border-radius: 6px;
+    padding: 4px 0;
+    box-sizing: border-box;
+}
+
+/* Individual suggestion option */
+.option {
+    padding: 6px 8px;
+    background: white;
+    cursor: pointer;
+    color: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.90rem;
+}
+
+/* Hover and highlight states */
+.optionHover,
+.optionHighlighted,
+.option[aria-selected="true"] {
+    background: rgba(0,0,0,0.04);
+}
+
+/* Keep suggestion popup readable inside dark .tt-card container */
+.cardScope .suggestions {
+    background: #ffffff;
+    color: #0b1220;
+    border: 1px solid rgba(0,0,0,0.12);
+}
+
+/* responsive adjustments */
+@media (max-width: 900px) {
+    .suggestions {
+        max-height: 180px;
+    }
+}

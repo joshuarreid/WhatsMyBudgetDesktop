@@ -1,15 +1,16 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { useTransactionRow } from "../hooks/useTransactionRow";
-import SmartSelect from "./SmartSelect";
-import TransactionRowDropdown from "./TransactionRowDropdown";
+import { useTransactionRow } from "../../hooks/useTransactionRow";
+import SmartSelect from "../SmartSelect/SmartSelect";
+import TransactionRowDropdown from "../TransactionRowDropdown";
+import styles from "./TransactionRow.module.css";
 import {
     INLINE_ERROR_COLOR,
     SAVING_TEXT_COLOR,
     DEFAULT_INPUT_CLASS,
     DEFAULT_LOCALE,
     DEFAULT_CURRENCY,
-} from "../utils/constants";
+} from "../../utils/constants";
 
 const logger = {
     info: (...args) => console.log('[TransactionRow]', ...args),
@@ -49,15 +50,6 @@ export default function TransactionRow({
         categoryInputRef,
         accountInputRef,
         paymentInputRef,
-        catSuggestions,
-        catShowSuggestions,
-        catHighlightIndex,
-        accSuggestions,
-        accShowSuggestions,
-        accHighlightIndex,
-        pmSuggestions,
-        pmShowSuggestions,
-        pmHighlightIndex,
         handleSelectCategoryForRow,
         handleSelectAccountForRow,
         handleSelectPaymentForRow,
@@ -92,10 +84,12 @@ export default function TransactionRow({
         onEditKey,
     });
 
-    // --- Render ---
+    // Helper to merge the global input class with local module class for backward compatibility
+    const inputClass = `${DEFAULT_INPUT_CLASS} ${styles.input}`;
+
     return (
-        <div className={`tt-row${selected ? " tt-row-selected" : ""}`} key={tx.id}>
-            <div className="tt-checkbox-col">
+        <div className={`${styles.row} ${selected ? styles.rowSelected : ""}`} key={tx.id}>
+            <div className={styles.checkboxCol}>
                 <input
                     type="checkbox"
                     checked={selected}
@@ -105,7 +99,7 @@ export default function TransactionRow({
             </div>
 
             {/* Name */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("name") ? (
                     <>
                         <TransactionRowDropdown
@@ -118,12 +112,12 @@ export default function TransactionRow({
                             setEditing={setEditing}
                             onEditKey={onEditKey}
                         />
-                        {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
+                        {inlineError && <div className={styles.inlineError}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
                     <>
                         <input
-                            className={DEFAULT_INPUT_CLASS}
+                            className={inputClass}
                             autoFocus
                             value={draft.name || ''}
                             onChange={(e) => updateDraft('name', e.target.value)}
@@ -139,7 +133,7 @@ export default function TransactionRow({
             </div>
 
             {/* Amount */}
-            <div className="tt-cell tt-amount" title="Double click to edit" style={{ textAlign: "right" }}>
+            <div className={`${styles.cell} ${styles.amount}`} title="Double click to edit" style={{ textAlign: "right" }}>
                 {isFieldEditing("amount") ? (
                     <>
                         <TransactionRowDropdown
@@ -152,12 +146,12 @@ export default function TransactionRow({
                             setEditing={setEditing}
                             onEditKey={onEditKey}
                         />
-                        {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
+                        {inlineError && <div className={styles.inlineError}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
                     <>
                         <input
-                            className={`${DEFAULT_INPUT_CLASS} tt-input-number`}
+                            className={`${inputClass} ${styles.inputNumber}`}
                             type="number"
                             step="0.01"
                             value={draft.amount ?? 0}
@@ -175,7 +169,7 @@ export default function TransactionRow({
             </div>
 
             {/* Category */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("category") ? (
                     <TransactionRowDropdown
                         field="category"
@@ -227,7 +221,7 @@ export default function TransactionRow({
             </div>
 
             {/* Criticality (dropdown) */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("criticality") ? (
                     <TransactionRowDropdown
                         field="criticality"
@@ -243,7 +237,7 @@ export default function TransactionRow({
                     />
                 ) : isRowEditing ? (
                     <select
-                        className={DEFAULT_INPUT_CLASS}
+                        className={inputClass}
                         value={draft.criticality ? draft.criticality : DEFAULT_CRITICALITY}
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
@@ -261,7 +255,7 @@ export default function TransactionRow({
             </div>
 
             {/* Date */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("transactionDate") ? (
                     <TransactionRowDropdown
                         field="transactionDate"
@@ -275,7 +269,7 @@ export default function TransactionRow({
                     />
                 ) : isRowEditing ? (
                     <input
-                        className={DEFAULT_INPUT_CLASS}
+                        className={inputClass}
                         type="date"
                         value={draft.transactionDate ? draft.transactionDate.slice(0, 10) : ''}
                         onChange={(e) => updateDraft('transactionDate', e.target.value)}
@@ -292,7 +286,7 @@ export default function TransactionRow({
             </div>
 
             {/* Account */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("account") ? (
                     <TransactionRowDropdown
                         field="account"
@@ -344,7 +338,7 @@ export default function TransactionRow({
             </div>
 
             {/* Payment Method */}
-            <div className="tt-cell" title="Double click to edit">
+            <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("paymentMethod") ? (
                     <TransactionRowDropdown
                         field="paymentMethod"
@@ -383,9 +377,9 @@ export default function TransactionRow({
 
             {/* Row-level controls that span across the data columns (appears underneath inputs) */}
             {isRowEditing && (
-                <div className="tt-row-controls" role="group" aria-label="Row actions">
+                <div className={styles.rowControls} role="group" aria-label="Row actions">
                     <button
-                        className="tt-action-btn tt-action-outline"
+                        className={`${styles.actionBtn} ${styles.actionOutline}`}
                         onClick={onCancelRowLocal}
                         disabled={isSaving}
                     >
@@ -393,7 +387,7 @@ export default function TransactionRow({
                     </button>
 
                     <button
-                        className="tt-action-btn tt-action-primary"
+                        className={`${styles.actionBtn} ${styles.actionPrimary}`}
                         onClick={() => onSaveRowClick(false)}
                         disabled={isSaving}
                     >
@@ -402,7 +396,7 @@ export default function TransactionRow({
 
                     {tx.__isNew ? (
                         <button
-                            className="tt-action-btn tt-action-ghost"
+                            className={`${styles.actionBtn} ${styles.actionGhost}`}
                             onClick={() => onSaveRowClick(true)}
                             disabled={isSaving}
                         >
@@ -410,8 +404,8 @@ export default function TransactionRow({
                         </button>
                     ) : null}
 
-                    {isSaving && <span style={{ color: SAVING_TEXT_COLOR, marginLeft: 8 }}>Saving…</span>}
-                    {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
+                    {isSaving && <span className={styles.savingText}>Saving…</span>}
+                    {inlineError && <div className={styles.inlineError}>{inlineError}</div>}
                 </div>
             )}
         </div>

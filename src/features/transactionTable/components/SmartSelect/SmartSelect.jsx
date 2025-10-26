@@ -2,20 +2,21 @@
  * SmartSelect.jsx
  *
  * Presentational wrapper that delegates behavior to the useSmartSelect hook.
- * - Keeps visuals (CSS classes) and markup here.
- * - Delegates all state, timers, keyboard handling and selection logic to the hook.
+ * Uses a local CSS module for suggestion popup styles (migrated from global styles).
  *
- * This file expects the hook to live at ../hooks/useSmartSelect.js and the
- * visual styles to be available in the master feature stylesheet (TransactionTable.css).
+ * Accessibility improvements:
+ * - options receive stable ids so the input can set aria-activedescendant when an item is highlighted.
  *
- * Follow Bulletproof React conventions: small presentational component, robust logging,
- * and logic living in a hook (useSmartSelect).
+ * Notes:
+ * - Input keeps using DEFAULT_INPUT_CLASS (global) for now for incremental migration.
+ * - The suggestion popup uses scoped module classes to avoid global collisions.
  */
 
 import React from "react";
 import PropTypes from "prop-types";
-import useSmartSelect from "../hooks/useSmartSelect";
-import { DEFAULT_INPUT_CLASS } from "../utils/constants";
+import useSmartSelect from "../../hooks/useSmartSelect";
+import { DEFAULT_INPUT_CLASS } from "../../utils/constants";
+import styles from "./SmartSelect.module.css";
 
 const logger = {
     info: (...args) => console.log("[SmartSelect]", ...args),
@@ -63,13 +64,19 @@ export default function SmartSelect({
     // Pick final input class: explicit prop -> hook default -> global default
     const inputClass = className ?? smart.className ?? DEFAULT_INPUT_CLASS;
 
+    // Merge global input class with optional module override so styling is incremental-safe
+    const finalInputClass = `${inputClass} ${styles.input ?? ""}`.trim();
+
+    // Defensive id base for option ids (used for aria-activedescendant)
+    const idBase = id || `${name || "smartselect"}-ss`;
+
     // Dropdown (native select) mode
     if (smart.mode === "dropdown" && Array.isArray(options) && options.length > 0) {
         return (
             <select
                 id={id}
                 name={name}
-                className={inputClass}
+                className={finalInputClass}
                 value={value ?? ""}
                 onChange={smart.handleNativeSelectChange}
                 onKeyDown={smart.handleKeyDown}
@@ -87,15 +94,15 @@ export default function SmartSelect({
         );
     }
 
-    // Autocomplete textbox + suggestions (visuals handled by CSS)
+    // Autocomplete textbox + suggestions (visuals handled by CSS module)
     // Keep position:relative inline as a defensive fallback in case consumer forgets to import CSS
     return (
-        <div className="tt-ss-container" style={{ position: "relative" }}>
+        <div className={styles.container} style={{ position: "relative" }}>
             <input
                 id={id}
                 name={name}
                 ref={smart.internalRef}
-                className={inputClass}
+                className={finalInputClass}
                 value={smart.query}
                 onChange={smart.handleInputChange}
                 onKeyDown={smart.handleKeyDown}
@@ -103,22 +110,36 @@ export default function SmartSelect({
                 placeholder={placeholder}
                 disabled={disabled}
                 aria-label={ariaLabel}
+                aria-haspopup="listbox"
+                aria-expanded={smart.showSuggestions ? "true" : "false"}
+                aria-activedescendant={
+                    smart.highlightIndex >= 0 ? `${idBase}-opt-${smart.highlightIndex}` : undefined
+                }
                 autoComplete="off"
             />
             {smart.showSuggestions && smart.suggestions && smart.suggestions.length > 0 && (
-                <div role="listbox" aria-label={`${name} suggestions`} className="tt-ss-suggestions">
-                    {smart.suggestions.map((opt, idx) => (
-                        <div
-                            key={opt}
-                            role="option"
-                            aria-selected={idx === smart.highlightIndex}
-                            onMouseDown={(ev) => smart.handleSuggestionMouseDown(ev, opt)}
-                            onMouseEnter={() => smart.setHighlightIndex(idx)}
-                            className={`tt-ss-option${idx === smart.highlightIndex ? " tt-ss-option-highlight" : ""}`}
-                        >
-                            {opt}
-                        </div>
-                    ))}
+                <div
+                    role="listbox"
+                    aria-label={`${name} suggestions`}
+                    className={styles.suggestions}
+                >
+                    {smart.suggestions.map((opt, idx) => {
+                        const optId = `${idBase}-opt-${idx}`;
+                        const isHighlighted = idx === smart.highlightIndex;
+                        return (
+                            <div
+                                key={opt}
+                                id={optId}
+                                role="option"
+                                aria-selected={isHighlighted}
+                                onMouseDown={(ev) => smart.handleSuggestionMouseDown(ev, opt)}
+                                onMouseEnter={() => smart.setHighlightIndex(idx)}
+                                className={`${styles.option} ${isHighlighted ? styles.optionHighlighted : ""}`}
+                            >
+                                {opt}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>

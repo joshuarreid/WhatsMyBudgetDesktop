@@ -4,7 +4,7 @@ import './TransactionTable.css';
 import TransactionBalanceRow from './components/TransactionBalanceRow';
 import TransactionToolbar from './components/TransactionToolbar';
 import TransactionHeaderRow from './components/TransactionHeaderRow';
-import TransactionRow from './components/TransactionRow';
+import TransactionRow from './components/TransactionRow/TransactionRow';
 
 // Currency formatter, colocated for presentation
 const fmt = new Intl.NumberFormat('en-US', {

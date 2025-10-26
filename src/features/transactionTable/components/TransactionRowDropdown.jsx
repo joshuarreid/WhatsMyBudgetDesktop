@@ -1,6 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
-import SmartSelect from "./SmartSelect";
+import SmartSelect from "./SmartSelect/SmartSelect";
 
 const logger = {
     info: (...args) => console.log("[TransactionRowDropdown]", ...args),

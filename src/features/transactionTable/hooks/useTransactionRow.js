@@ -30,7 +30,7 @@ import {
     getDefaultPaymentMethodForAccount,
 } from '../../../config/config.ts';
 
-import SmartSelect from '../components/SmartSelect';
+import SmartSelect from '../components/SmartSelect/SmartSelect';
 
 // constants centralized for scalability & debugging
 import {
