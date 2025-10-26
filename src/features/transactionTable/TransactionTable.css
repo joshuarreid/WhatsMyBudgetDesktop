@@ -1,3 +1,12 @@
+/* TransactionTable.css - Feature-level styles and tokens
+ *
+ * NOTE: Per-component visual rules are being migrated to CSS Modules.
+ * The global .tt-balance-* rules were migrated to
+ * components/BalanceWidget/BalanceWidget.module.css and removed
+ * from this file to avoid duplication and global collisions.
+ *
+ * Keep feature tokens and layout here.
+ */
 
 /* -----------------------
    Feature tokens / variables
@@ -38,31 +47,10 @@
     background: var(--tt-bg-gradient);
 }
 
-/* Top balances row (YNAB style) */
-.tt-balance-row {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-    padding: 12px 14px;
-    background: linear-gradient(180deg, rgba(10,10,12,0.7), rgba(18,18,20,0.6));
-    border-radius: 8px;
-}
-
-.tt-balance-item {
-    color: var(--color-muted);
-    text-align: left;
-}
-
-.tt-balance-amount {
-    color: var(--color-success);
-    font-weight: 800;
-    font-size: 1.05rem;
-}
-
-.tt-balance-label {
-    font-size: 0.78rem;
-    color: var(--color-muted);
-}
+/* NOTE: BalanceWidget visuals migrated to a CSS Module:
+   features/transactionTable/components/BalanceWidget/BalanceWidget.module.css
+   If you still need a global fallback, add a minimal rule here, but prefer the module.
+*/
 
 /* Toolbar styled to match YNAB top-left links look */
 .tt-toolbar-ynab {
@@ -111,7 +99,6 @@
 
 /* Header row layout (grid columns) — kept here as a feature-level layout token.
    Note: the visual surface for rows has been migrated to components/TransactionRow/TransactionRow.module.css.
-   Remove the old global .tt-row rules to avoid conflicting with the module styles.
 */
 .tt-header-row {
     display: grid;
@@ -145,12 +132,6 @@
     align-items: center;
     justify-content: center;
 }
-
-/* WARNING: .tt-row (row surface), .tt-row-selected and row action styles were migrated
-   to components/TransactionRow/TransactionRow.module.css. Keep the rules below removed to
-   avoid style conflicts. If you still rely on global rules for other components, add only
-   minimal fallbacks here (avoid duplicated selectors).
-*/
 
 /* Generic cell and input helper (kept as a shared helper for backwards compatibility).
    Prefer migrating components to the module .cell/.input classes and then removing these. */
@@ -193,13 +174,6 @@
     color: var(--color-muted);
 }
 
-/* ----------------------------
-   NOTE: Row-level controls & action button styles were migrated to:
-   features/transactionTable/components/TransactionRow/TransactionRow.module.css
-
-   Keep only small global fallbacks here while migration completes.
-   ---------------------------- */
-
 /* small inline saving text (fallback) */
 .tt-row-controls > span {
     margin-left: 8px;
@@ -210,65 +184,6 @@
 /* inline error for fields (fallback) */
 .tt-row-controls > div {
     margin-left: 8px;
-}
-
-/* ----------------------------
-   SmartSelect suggestion popup styles
-   (keep here until SmartSelect.module.css is introduced)
-   ---------------------------- */
-
-:root {
-    --ss-zindex: 2000;
-    --ss-popup-max-height: 220px;
-    --ss-popup-margin-top: 6px;
-}
-
-/* Container used in the component to allow absolutely positioned popup */
-.tt-ss-container {
-    position: relative;
-}
-
-/* Suggestion popup listbox */
-.tt-ss-suggestions {
-    position: absolute;
-    z-index: var(--ss-zindex);
-    background: white;
-    color: #0b1220;
-    border: 1px solid rgba(0,0,0,0.12);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-    width: 100%;
-    max-height: var(--ss-popup-max-height);
-    overflow-y: auto;
-    margin-top: var(--ss-popup-margin-top);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-sizing: border-box;
-}
-
-/* Individual suggestion option */
-.tt-ss-option {
-    padding: 6px 8px;
-    background: white;
-    cursor: pointer;
-    color: inherit;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 0.90rem;
-}
-
-/* Hover and highlight states */
-.tt-ss-option:hover,
-.tt-ss-option.tt-ss-option-highlight,
-.tt-ss-option[aria-selected="true"] {
-    background: rgba(0,0,0,0.04);
-}
-
-/* Make suggestion list look decent on dark backgrounds by adjusting inner card */
-.tt-card .tt-ss-suggestions {
-    background: #ffffff;
-    color: #0b1220;
-    border: 1px solid rgba(0,0,0,0.12);
 }
 
 /* Reduce spacing for small screens */

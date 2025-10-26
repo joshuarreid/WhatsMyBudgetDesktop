@@ -1,0 +1,33 @@
+/* Scoped styles for BalanceWidget (CSS Module)
+ *
+ * Migrated from global .tt-balance-* rules into a component-scoped module so
+ * the BalanceWidget visual surface is owned by the component.
+ *
+ * Uses feature-level CSS variables (defined in TransactionTable.css) for colors
+ * and spacing so the visual tokens remain centralized.
+ */
+
+.container {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, rgba(10,10,12,0.7), rgba(18,18,20,0.6));
+    border-radius: 8px;
+}
+
+.item {
+    color: var(--color-muted);
+    text-align: left;
+}
+
+.amount {
+    color: var(--color-success);
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+
+.label {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+}

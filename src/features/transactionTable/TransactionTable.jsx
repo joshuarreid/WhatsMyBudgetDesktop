@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTransactionTable } from './hooks/useTransactionTable';
 import './TransactionTable.css';
-import TransactionBalanceRow from './components/TransactionBalanceRow';
+import BalanceWidget from './components/BalanceWidget/BalanceWidget';
 import TransactionToolbar from './components/TransactionToolbar';
 import TransactionHeaderRow from './components/TransactionHeaderRow';
 import TransactionRow from './components/TransactionRow/TransactionRow';
@@ -58,7 +58,7 @@ export default function TransactionTable(props) {
     if (!localTx || localTx.length === 0)
         return (
             <div className="tt-card">
-                <TransactionBalanceRow
+                <BalanceWidget
                     total={total}
                     joint={jointBalance}
                     personal={personalBalance}
@@ -81,7 +81,7 @@ export default function TransactionTable(props) {
 
     return (
         <div className="tt-card">
-            <TransactionBalanceRow
+            <BalanceWidget
                 total={total}
                 joint={jointBalance}
                 personal={personalBalance}
