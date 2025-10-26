@@ -2,6 +2,7 @@ import React from "react";
 import PropTypes from "prop-types";
 import { useTransactionRow } from "../useTransactionRow";
 import SmartSelect from "./SmartSelect";
+import TransactionRowDropdown from "./TransactionRowDropdown";
 
 const logger = {
     info: (...args) => console.log('[TransactionRow]', ...args),
@@ -62,7 +63,6 @@ export default function TransactionRow({
         handleCategoryBlurForField,
         handleAccountBlurForField,
         handlePaymentBlurForField,
-        renderFieldInput,
         onSaveRowClick,
         onCancelRowLocal,
         onStartRowEdit,
@@ -101,7 +101,16 @@ export default function TransactionRow({
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("name") ? (
                     <>
-                        {renderFieldInput("name")}
+                        <TransactionRowDropdown
+                            field="name"
+                            tx={tx}
+                            value={tx.name}
+                            editValueRef={editValueRef}
+                            toInputDate={toInputDate}
+                            onSaveEdit={onSaveEdit}
+                            setEditing={setEditing}
+                            onEditKey={onEditKey}
+                        />
                         {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
@@ -126,7 +135,16 @@ export default function TransactionRow({
             <div className="tt-cell tt-amount" title="Double click to edit" style={{ textAlign: "right" }}>
                 {isFieldEditing("amount") ? (
                     <>
-                        {renderFieldInput("amount")}
+                        <TransactionRowDropdown
+                            field="amount"
+                            tx={tx}
+                            value={tx.amount}
+                            editValueRef={editValueRef}
+                            toInputDate={toInputDate}
+                            onSaveEdit={onSaveEdit}
+                            setEditing={setEditing}
+                            onEditKey={onEditKey}
+                        />
                         {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
@@ -152,7 +170,30 @@ export default function TransactionRow({
             {/* Category */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("category") ? (
-                    renderFieldInput("category")
+                    <TransactionRowDropdown
+                        field="category"
+                        tx={tx}
+                        value={tx.category}
+                        editValueRef={editValueRef}
+                        toInputDate={toInputDate}
+                        onSaveEdit={onSaveEdit}
+                        setEditing={setEditing}
+                        onEditKey={onEditKey}
+                        ALL_OPTIONS={ALL_CATEGORIES}
+                        IS_DROPDOWN={IS_CATEGORY_DROPDOWN}
+                        inputRef={categoryInputRef}
+                        onSelectImmediate={async (val) => {
+                            await handleSelectCategoryForFieldEdit(val);
+                            setEditing(null);
+                        }}
+                        onBlur={handleCategoryBlurForField}
+                        getMappedDefault={getCriticalityForCategory}
+                        applyMappedDefault={async (mapped) => {
+                            if (mapped && typeof onSaveEdit === 'function') {
+                                try { await onSaveEdit(tx.id, 'criticality', mapped); } catch (err) { logger.error('persist mapped criticality failed', err); }
+                            }
+                        }}
+                    />
                 ) : isRowEditing ? (
                     <SmartSelect
                         name="category"
@@ -181,7 +222,18 @@ export default function TransactionRow({
             {/* Criticality (dropdown) */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("criticality") ? (
-                    renderFieldInput("criticality")
+                    <TransactionRowDropdown
+                        field="criticality"
+                        tx={tx}
+                        value={tx.criticality}
+                        editValueRef={editValueRef}
+                        toInputDate={toInputDate}
+                        onSaveEdit={onSaveEdit}
+                        setEditing={setEditing}
+                        onEditKey={onEditKey}
+                        CRITICALITY_OPTIONS={CRITICALITY_OPTIONS}
+                        DEFAULT_CRITICALITY={DEFAULT_CRITICALITY}
+                    />
                 ) : isRowEditing ? (
                     <select
                         className="tt-input"
@@ -204,7 +256,16 @@ export default function TransactionRow({
             {/* Date */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("transactionDate") ? (
-                    renderFieldInput("transactionDate")
+                    <TransactionRowDropdown
+                        field="transactionDate"
+                        tx={tx}
+                        value={tx.transactionDate}
+                        editValueRef={editValueRef}
+                        toInputDate={toInputDate}
+                        onSaveEdit={onSaveEdit}
+                        setEditing={setEditing}
+                        onEditKey={onEditKey}
+                    />
                 ) : isRowEditing ? (
                     <input
                         className="tt-input"
@@ -226,7 +287,30 @@ export default function TransactionRow({
             {/* Account */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("account") ? (
-                    renderFieldInput("account")
+                    <TransactionRowDropdown
+                        field="account"
+                        tx={tx}
+                        value={tx.account}
+                        editValueRef={editValueRef}
+                        toInputDate={toInputDate}
+                        onSaveEdit={onSaveEdit}
+                        setEditing={setEditing}
+                        onEditKey={onEditKey}
+                        ALL_OPTIONS={ALL_ACCOUNTS}
+                        IS_DROPDOWN={IS_ACCOUNT_DROPDOWN}
+                        inputRef={accountInputRef}
+                        onSelectImmediate={async (val) => {
+                            await handleSelectAccountForFieldEdit(val);
+                            setEditing(null);
+                        }}
+                        onBlur={handleAccountBlurForField}
+                        getMappedDefault={getDefaultPaymentMethodForAccount}
+                        applyMappedDefault={async (mapped) => {
+                            if (mapped && typeof onSaveEdit === 'function') {
+                                try { await onSaveEdit(tx.id, 'paymentMethod', mapped); } catch (err) { logger.error('persist mapped paymentMethod failed', err); }
+                            }
+                        }}
+                    />
                 ) : isRowEditing ? (
                     <SmartSelect
                         name="account"
@@ -255,7 +339,24 @@ export default function TransactionRow({
             {/* Payment Method */}
             <div className="tt-cell" title="Double click to edit">
                 {isFieldEditing("paymentMethod") ? (
-                    renderFieldInput("paymentMethod")
+                    <TransactionRowDropdown
+                        field="paymentMethod"
+                        tx={tx}
+                        value={tx.paymentMethod}
+                        editValueRef={editValueRef}
+                        toInputDate={toInputDate}
+                        onSaveEdit={onSaveEdit}
+                        setEditing={setEditing}
+                        onEditKey={onEditKey}
+                        ALL_OPTIONS={ALL_PAYMENT_METHODS}
+                        IS_DROPDOWN={IS_PAYMENT_DROPDOWN}
+                        inputRef={paymentInputRef}
+                        onSelectImmediate={async (val) => {
+                            await handleSelectPaymentForFieldEdit(val);
+                            setEditing(null);
+                        }}
+                        onBlur={handlePaymentBlurForField}
+                    />
                 ) : isRowEditing ? (
                     <SmartSelect
                         name="paymentMethod"
