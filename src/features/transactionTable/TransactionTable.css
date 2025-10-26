@@ -309,3 +309,70 @@
         min-height: 32px;
     }
 }
+
+/* ----------------------------
+   SmartSelect suggestion popup styles (moved from inline styles)
+   These styles are kept in the master feature stylesheet so the SmartSelect
+   component can remain logic-only and visual styles stay centralized.
+   ---------------------------- */
+
+:root {
+    --ss-zindex: 2000;
+    --ss-popup-max-height: 220px;
+    --ss-popup-margin-top: 6px;
+}
+
+/* Container used in the component to allow absolutely positioned popup */
+.tt-ss-container {
+    position: relative; /* ensures suggestions are positioned relative to this container */
+}
+
+/* Suggestion popup listbox */
+.tt-ss-suggestions {
+    position: absolute;
+    z-index: var(--ss-zindex);
+    background: white;
+    color: #0b1220;
+    border: 1px solid rgba(0,0,0,0.12);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    width: 100%;
+    max-height: var(--ss-popup-max-height);
+    overflow-y: auto;
+    margin-top: var(--ss-popup-margin-top);
+    border-radius: 6px;
+    padding: 4px 0;
+    box-sizing: border-box;
+}
+
+/* Individual suggestion option */
+.tt-ss-option {
+    padding: 6px 8px;
+    background: white;
+    cursor: pointer;
+    color: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.90rem;
+}
+
+/* Hover and highlight states */
+.tt-ss-option:hover,
+.tt-ss-option.tt-ss-option-highlight,
+.tt-ss-option[aria-selected="true"] {
+    background: rgba(0,0,0,0.04);
+}
+
+/* Make suggestion list look decent on dark backgrounds by adjusting inner card */
+.tt-card .tt-ss-suggestions {
+    background: #ffffff;
+    color: #0b1220;
+    border: 1px solid rgba(0,0,0,0.12);
+}
+
+/* Reduce spacing for small screens */
+@media (max-width: 900px) {
+    .tt-ss-suggestions {
+        max-height: 180px;
+    }
+}

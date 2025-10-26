@@ -3,32 +3,21 @@
  *
  * Reusable select / autocomplete used for Category / Account / Payment inputs.
  *
- * - If `options` is a non-empty array, it can operate in "dropdown" (native select)
- *   or "autocomplete" (text input + suggestion list) modes.
- * - Supports mapped-default application via `getMappedDefault` + `applyMappedDefault`.
- * - Works for both "row" (draft) editing and "field" (immediate persist) editing flows.
+ * This version removes inline styles and uses CSS class names.
+ * The visual styles for the suggestion popup / option items are moved to
+ * the feature master stylesheet (TransactionTable.css).
  *
- * Usage:
- *  <SmartSelect
- *    name="category"
- *    mode={IS_CATEGORY_DROPDOWN ? 'dropdown' : 'autocomplete'}
- *    options={ALL_CATEGORIES}
- *    value={draft.category}
- *    onChange={(v) => updateDraft('category', v)} // for row editing
- *    onSelectImmediate={handleSelectCategoryForFieldEdit} // for field editing
- *    inputRef={categoryInputRef}
- *    onBlur={handleCategoryBlurForRow}
- *    getMappedDefault={getCriticalityForCategory}
- *    applyMappedDefault={(val) => updateDraft('criticality', val)}
- *  />
- *
- * Conventions:
- * - Logging uses the robust logger format requested in the general instructions.
- * - Keeps internal suggestion state only for autocomplete mode so parent components don't
- *   have to duplicate that boilerplate.
+ * Follow Bulletproof React conventions: logic in hooks, UI in components,
+ * robust logging and small, testable functions.
  */
 
 import React, { useEffect, useRef, useState } from "react";
+import {
+    MAX_AUTOCOMPLETE_SUGGESTIONS,
+    DEFAULT_SMARTSELECT_MODE,
+    BLUR_DELAY_MS,
+    DEFAULT_INPUT_CLASS,
+} from "../utils/constants";
 
 const logger = {
     info: (...args) => console.log("[SmartSelect]", ...args),
@@ -37,7 +26,7 @@ const logger = {
 
 export default function SmartSelect({
                                         name,
-                                        mode = "autocomplete", // 'dropdown' | 'autocomplete'
+                                        mode = DEFAULT_SMARTSELECT_MODE, // 'dropdown' | 'autocomplete'
                                         options = [],
                                         allOptions = options, // alias: used for autocomplete filtering
                                         value = "",
@@ -46,7 +35,7 @@ export default function SmartSelect({
                                         inputRef = null,
                                         onBlur = () => {},
                                         placeholder = "",
-                                        className = "tt-input",
+                                        className = DEFAULT_INPUT_CLASS,
                                         getMappedDefault = null, // fn(value) => mappedValue (e.g., criticality or paymentMethod)
                                         applyMappedDefault = null, // fn(mappedValue) => apply (updateDraft or onSaveEdit)
                                         disabled = false,
@@ -81,9 +70,11 @@ export default function SmartSelect({
 
     const filter = (q) => {
         if (!Array.isArray(allOptions) || allOptions.length === 0) return [];
-        if (!q) return allOptions.slice(0, 8);
+        if (!q) return allOptions.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
         const lower = String(q).toLowerCase();
-        return allOptions.filter((o) => String(o).toLowerCase().includes(lower)).slice(0, 8);
+        return allOptions
+            .filter((o) => String(o).toLowerCase().includes(lower))
+            .slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
     };
 
     const applySelection = async (val) => {
@@ -186,7 +177,7 @@ export default function SmartSelect({
             } catch (err) {
                 logger.error("onBlur handler failed", err);
             }
-        }, 120);
+        }, BLUR_DELAY_MS);
     };
 
     // ---- Render ----
@@ -213,9 +204,9 @@ export default function SmartSelect({
         );
     }
 
-    // autocomplete textbox + suggestions
+    // autocomplete textbox + suggestions (visuals handled by CSS classes in master stylesheet)
     return (
-        <div style={{ position: "relative" }}>
+        <div className="tt-ss-container" style={{ position: "relative" }}>
             <input
                 id={id}
                 name={name}
@@ -234,17 +225,7 @@ export default function SmartSelect({
                 <div
                     role="listbox"
                     aria-label={`${name} suggestions`}
-                    style={{
-                        position: "absolute",
-                        zIndex: 2000,
-                        background: "white",
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
-                        width: "100%",
-                        maxHeight: 220,
-                        overflowY: "auto",
-                        marginTop: 6,
-                    }}
+                    className="tt-ss-suggestions"
                 >
                     {suggestions.map((opt, idx) => (
                         <div
@@ -253,11 +234,7 @@ export default function SmartSelect({
                             aria-selected={idx === highlightIndex}
                             onMouseDown={(ev) => handleSuggestionMouseDown(ev, opt)}
                             onMouseEnter={() => setHighlightIndex(idx)}
-                            style={{
-                                padding: "6px 8px",
-                                background: idx === highlightIndex ? "rgba(0,0,0,0.04)" : "white",
-                                cursor: "pointer",
-                            }}
+                            className={`tt-ss-option${idx === highlightIndex ? " tt-ss-option-highlight" : ""}`}
                         >
                             {opt}
                         </div>

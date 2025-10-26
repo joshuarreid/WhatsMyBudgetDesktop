@@ -34,6 +34,22 @@ export const MAX_AUTOCOMPLETE_SUGGESTIONS = 8;
 export const DEFAULT_LOCALE = 'en-US';
 export const DEFAULT_CURRENCY = 'USD';
 
+/* ---------- SmartSelect-specific UI constants ---------- */
+
+// Default SmartSelect mode
+export const DEFAULT_SMARTSELECT_MODE = 'autocomplete';
+
+// Small delay used in blur handlers to allow suggestion clicks to register.
+// Keep this consistent across components that use similar onBlur + suggestion lists.
+export const BLUR_DELAY_MS = 120;
+
+// Suggestion popup styling defaults (kept here so they can be tuned centrally)
+export const SUGGESTION_POPUP_ZINDEX = 2000;
+export const SUGGESTION_POPUP_MAX_HEIGHT = 220; // px
+
+// Default input classname for lightweight theming/overrides
+export const DEFAULT_INPUT_CLASS = 'tt-input';
+
 /* ---------- Helpers ---------- */
 
 /**
@@ -145,6 +161,11 @@ const constants = {
     MAX_AUTOCOMPLETE_SUGGESTIONS,
     DEFAULT_LOCALE,
     DEFAULT_CURRENCY,
+    DEFAULT_SMARTSELECT_MODE,
+    BLUR_DELAY_MS,
+    SUGGESTION_POPUP_ZINDEX,
+    SUGGESTION_POPUP_MAX_HEIGHT,
+    DEFAULT_INPUT_CLASS,
     normalizeCriticality,
     toStatementPeriodValue,
     parseStatementPeriodValue,
