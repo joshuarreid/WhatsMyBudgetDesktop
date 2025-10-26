@@ -64,7 +64,7 @@ const DEFAULT_CRIT = DEFAULT_CRITICALITY || (CRITICALITY_OPTIONS[0] || "Essentia
 /**
  * useTransactionRow
  *
- * Hook that encapsulates per-row behavior and state for TransactionRow components.
+ * Hook that encapsulates per-row behavior and state for TransactionTableRow components.
  *
  * Inputs:
  *  - tx: the transaction object (may be server or local temp)
@@ -83,7 +83,7 @@ const DEFAULT_CRIT = DEFAULT_CRITICALITY || (CRITICALITY_OPTIONS[0] || "Essentia
  *  - Save/cancel/start editing methods for row-level flows
  *
  * The hook intentionally returns fine-grained handlers to make the UI component
- * (TransactionRow.jsx) small and testable.
+ * (TransactionTableRow.jsx) small and testable.
  *
  * @param {Object} params hook parameters (see above)
  */
@@ -101,7 +101,7 @@ export function useTransactionRow({
                                       startEditingRow,
                                       onEditKey,
                                   }) {
-    // replicate helper functions that were previously in TransactionRow
+    // replicate helper functions that were previously in TransactionTableRow
     const isFieldEditing = (field) => editing && editing.id === tx.id && editing.mode === 'field' && editing.field === field;
     const isRowEditing = editing && editing.id === tx.id && editing.mode === 'row';
     const isSaving = savingIds && savingIds.has(tx.id);

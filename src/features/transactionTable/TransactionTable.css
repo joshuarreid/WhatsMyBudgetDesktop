@@ -1,11 +1,10 @@
 /* TransactionTable.css - Feature-level styles and tokens
  *
- * NOTE: Per-component visual rules are being migrated to CSS Modules.
- * The global .tt-balance-* rules were migrated to
- * components/BalanceWidget/BalanceWidget.module.css and removed
- * from this file to avoid duplication and global collisions.
+ * After migrating toolbar/header/balance/rows to CSS Modules, this file keeps:
+ * - feature tokens (CSS variables)
+ * - layout helpers and minimal fallbacks for legacy consumers
  *
- * Keep feature tokens and layout here.
+ * Remove or reduce global selectors over time as components migrate.
  */
 
 /* -----------------------
@@ -27,10 +26,9 @@
 }
 
 /* -----------------------
-   Card + header + layout
+   Card + layout tokens
    ----------------------- */
 
-/* Base card */
 .tt-card {
     box-sizing: border-box;
     width: var(--tt-card-width);
@@ -47,74 +45,6 @@
     background: var(--tt-bg-gradient);
 }
 
-/* NOTE: BalanceWidget visuals migrated to a CSS Module:
-   features/transactionTable/components/BalanceWidget/BalanceWidget.module.css
-   If you still need a global fallback, add a minimal rule here, but prefer the module.
-*/
-
-/* Toolbar styled to match YNAB top-left links look */
-.tt-toolbar-ynab {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 6px;
-    gap: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
-.tt-toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.tt-toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.tt-link-btn {
-    background: transparent;
-    border: none;
-    color: var(--color-accent);
-    font-weight: 700;
-    padding: 6px 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.tt-link-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
-.tt-link-btn:hover:not(:disabled) {
-    background: rgba(141,176,255,0.04);
-    transform: translateY(-1px);
-}
-
-/* Header row layout (grid columns) — kept here as a feature-level layout token.
-   Note: the visual surface for rows has been migrated to components/TransactionRow/TransactionRow.module.css.
-*/
-.tt-header-row {
-    display: grid;
-    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px; /* checkbox, name, amount, category, criticality, date, account, payment method */
-    gap: 12px;
-    padding: 6px 12px;
-    font-weight: 700;
-    color: #cbd5e1;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    position: sticky;
-    top: 0;
-    background: linear-gradient(180deg, rgba(20,22,24,0.95), rgba(28,28,30,0.95));
-    z-index: 3;
-    font-size: 0.85rem;
-}
-
 /* Body container */
 .tt-body {
     display: flex;
@@ -125,16 +55,14 @@
     padding: 6px;
 }
 
-/* Generic global helpers (still used across small components).
-   Prefer moving these into modules; keep them here as temporary shared tokens. */
+/* Minimal legacy fallbacks for left-over global classes.
+   Prefer migrating consumers to modules; remove these when safe. */
 .tt-checkbox-col {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-/* Generic cell and input helper (kept as a shared helper for backwards compatibility).
-   Prefer migrating components to the module .cell/.input classes and then removing these. */
 .tt-cell {
     padding: 4px 6px;
     overflow: hidden;
@@ -147,6 +75,7 @@
     text-align: right;
 }
 
+/* Keep global input helper as a temporary fallback for migration */
 .tt-input {
     width: 100%;
     padding: 6px 8px;
@@ -163,18 +92,7 @@
     border-color: rgba(120,170,255,0.6);
 }
 
-.tt-input-number {
-    text-align: right;
-}
-
-/* Empty / placeholders */
-.tt-empty {
-    padding: 22px;
-    text-align: center;
-    color: var(--color-muted);
-}
-
-/* small inline saving text (fallback) */
+/* Small inline saving text (fallback) */
 .tt-row-controls > span {
     margin-left: 8px;
     color: var(--color-success);
@@ -188,10 +106,6 @@
 
 /* Reduce spacing for small screens */
 @media (max-width: 900px) {
-    .tt-header-row {
-        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
-    }
-
     .tt-input {
         padding: 6px 8px;
     }

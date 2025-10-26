@@ -2,9 +2,9 @@ import React from 'react';
 import { useTransactionTable } from './hooks/useTransactionTable';
 import './TransactionTable.css';
 import BalanceWidget from './components/BalanceWidget/BalanceWidget';
-import TransactionToolbar from './components/TransactionToolbar';
-import TransactionHeaderRow from './components/TransactionHeaderRow';
-import TransactionRow from './components/TransactionRow/TransactionRow';
+import TransactionTableToolbar from './components/TransactionTableToolbar/TransactionTableToolbar';
+import TransactionTableHeader from './components/TransactionTableHeader/TransactionTableHeader';
+import TransactionTableRow from './components/TransactionTableRow/TransactionTableRow';
 
 // Currency formatter, colocated for presentation
 const fmt = new Intl.NumberFormat('en-US', {
@@ -63,7 +63,7 @@ export default function TransactionTable(props) {
                     joint={jointBalance}
                     personal={personalBalance}
                 />
-                <TransactionToolbar
+                <TransactionTableToolbar
                     onAdd={handleAddTransaction}
                     onImport={openFilePicker}
                     onDelete={handleDeleteSelected}
@@ -74,7 +74,7 @@ export default function TransactionTable(props) {
                     total={fmt.format(total)}
                 />
                 {/* Keep the header so the table shell is visible during loading */}
-                <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
+                <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
                 <div className="tt-body">{loading ? null : <div className="tt-empty">No transactions</div>}</div>
             </div>
         );
@@ -86,7 +86,7 @@ export default function TransactionTable(props) {
                 joint={jointBalance}
                 personal={personalBalance}
             />
-            <TransactionToolbar
+            <TransactionTableToolbar
                 onAdd={handleAddTransaction}
                 onImport={openFilePicker}
                 onDelete={handleDeleteSelected}
@@ -96,10 +96,10 @@ export default function TransactionTable(props) {
                 loading={loading}
                 total={fmt.format(total)}
             />
-            <TransactionHeaderRow isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
+            <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
             <div className="tt-body">
                 {localTx.map((tx) => (
-                    <TransactionRow
+                    <TransactionTableRow
                         key={tx.id}
                         tx={tx}
                         selected={selectedIds.has(tx.id)}

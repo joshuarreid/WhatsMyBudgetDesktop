@@ -1,17 +1,84 @@
-/* Minimal styling to blend with tt-link-btn styles already used in the app */
+/* StatementPeriodDropdown.css
+ *
+ * Updated to explicitly style the statement period dropdown so it matches
+ * the toolbar "link" look even after the toolbar was moved to CSS Modules.
+ *
+ * This file targets both:
+ *  - the component-specific classes (statement-period-*)
+ *  - the combined selectors used by the component (tt-link-btn statement-period-*)
+ *
+ * It relies on feature tokens (CSS variables) defined in TransactionTable.css:
+ *   --color-accent, --color-success
+ *
+ * Keep this file lightweight — consider migrating it to a CSS Module
+ * later when the shared component is moved into the feature/component tree.
+ */
 
+.statement-period-dropdown,
+.statement-period-dropdown * {
+    box-sizing: border-box;
+}
+
+/* Container */
 .statement-period-dropdown {
     position: relative;
     display: inline-block;
+    line-height: 1;
 }
 
-.statement-period-button {
-    padding: 6px 10px;
-    font-weight: 800;
+/* Button: match toolbar link appearance */
+/* Also match selectors when component still has tt-link-btn applied */
+.statement-period-button,
+.tt-link-btn.statement-period-button {
+    display: inline-flex;
+    align-items: center;
     gap: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
+    color: var(--color-accent, #8db0ff);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease, opacity 120ms ease;
+    font-size: 0.95rem;
+    text-decoration: none;
 }
 
-.statement-period-popover {
+/* Disabled state */
+.statement-period-button[disabled],
+.tt-link-btn.statement-period-button[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Hover */
+.statement-period-button:hover:not([disabled]),
+.tt-link-btn.statement-period-button:hover:not([disabled]) {
+    background: rgba(141, 176, 255, 0.04);
+    transform: translateY(-1px);
+}
+
+/* Icon + label inside button */
+.statement-period-button .tt-icon,
+.statement-period-button .icon {
+    font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Saving indicator (small, subtle) */
+.statement-period-button .saving {
+    margin-left: 8px;
+    opacity: 0.85;
+    font-size: 0.9rem;
+    color: var(--color-text, #e6eef8);
+}
+
+/* Popover (listbox) */
+.statement-period-popover,
+.popover {
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
@@ -20,11 +87,14 @@
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 8px;
     padding: 8px;
-    z-index: 90;
+    z-index: 900;
     box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    box-sizing: border-box;
 }
 
-.statement-period-list {
+/* List */
+.statement-period-list,
+.list {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -33,35 +103,68 @@
     gap: 6px;
 }
 
-.statement-period-option {
+/* Item wrapper */
+.statement-period-item,
+.item {
+    display: block;
+}
+
+/* Option button: re-implement the toolbar link look at full-width */
+.statement-period-option,
+.tt-link-btn.statement-period-option,
+.option {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
     background: transparent;
     border: none;
-    color: #8db0ff;
+    color: var(--color-accent, #8db0ff);
     padding: 6px 8px;
     text-align: left;
     cursor: pointer;
     border-radius: 6px;
-}
-
-.statement-period-option:hover:not(.selected) {
-    background: rgba(141,176,255,0.03);
-    transform: none;
-}
-
-.statement-period-option.selected {
-    color: #9be3a7;
-    background: rgba(155,213,150,0.04);
-}
-
-.statement-period-label {
     font-weight: 700;
 }
 
-.statement-period-check {
-    width: 20px;
+/* Hover state for option */
+.statement-period-option:hover:not(.selected),
+.tt-link-btn.statement-period-option:hover:not(.selected),
+.option:hover:not(.selected) {
+    background: rgba(141, 176, 255, 0.03);
+    transform: none;
+}
+
+/* Selected option */
+.statement-period-option.selected,
+.tt-link-btn.statement-period-option.selected,
+.option.selected {
+    color: var(--color-success, #9be3a7);
+    background: rgba(155, 213, 150, 0.04);
+}
+
+/* Option label & check */
+.statement-period-label,
+.optionLabel {
+    font-weight: 700;
+}
+
+.statement-period-check,
+.optionCheck {
+    width: 24px;
     text-align: right;
+    font-weight: 700;
+}
+
+/* Small screen adjustments */
+@media (max-width: 900px) {
+    .statement-period-popover,
+    .popover {
+        min-width: 160px;
+    }
+    .statement-period-button,
+    .tt-link-btn.statement-period-button {
+        padding: 6px 8px;
+        font-size: 0.9rem;
+    }
 }

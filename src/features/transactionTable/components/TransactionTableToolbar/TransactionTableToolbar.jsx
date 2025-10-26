@@ -1,22 +1,16 @@
 import React from "react";
 import PropTypes from "prop-types";
-import StatementPeriodDropdown from "../../../components/statementPeriodDropdown/StatementPeriodDropdown";
 
+import styles from "./TransactionTableToolbar.module.css";
+import StatementPeriodDropdown from "../../../../components/statementPeriodDropdown/StatementPeriodDropdown";
 
 /**
- * TransactionToolbar
+ * TransactionTableToolbar
  *
- * Props:
- * - onAdd: function
- * - onImport: function
- * - onDelete: function
- * - selectedCount: number
- * - fileInputRef: ref
- * - onFileChange: function
- * - loading?: boolean
- * - total: string (formatted currency)
+ * - Presentational toolbar for transaction actions.
+ * - Uses a CSS module to scope toolbar visuals.
  */
-export default function TransactionToolbar({
+export default function TransactionTableToolbar({
                                                onAdd,
                                                onImport,
                                                onDelete,
@@ -26,14 +20,28 @@ export default function TransactionToolbar({
                                                loading = false,
                                                total,
                                            }) {
+    const logger = {
+        info: (...args) => console.log("[TransactionTableToolbar]", ...args),
+        error: (...args) => console.error("[TransactionTableToolbar]", ...args),
+    };
+    logger.info("render", { selectedCount, loading });
+
     return (
-        <div className="tt-toolbar tt-toolbar-ynab" role="toolbar" aria-label="Transaction actions">
-            <div className="tt-toolbar-left">
-                <button className="tt-link-btn" onClick={onAdd} disabled={loading}>
-                    <span className="tt-icon">＋</span> Add Transaction
+        <div className={styles.toolbar} role="toolbar" aria-label="Transaction actions">
+            <div className={styles.left}>
+                <button
+                    className={styles.linkBtn}
+                    onClick={onAdd}
+                    disabled={loading}
+                >
+                    <span className={styles.icon}>＋</span> Add Transaction
                 </button>
-                <button className="tt-link-btn" onClick={onImport} disabled={loading}>
-                    <span className="tt-icon">📁</span> File Import
+                <button
+                    className={styles.linkBtn}
+                    onClick={onImport}
+                    disabled={loading}
+                >
+                    <span className={styles.icon}>📁</span> File Import
                 </button>
                 <input
                     ref={fileInputRef}
@@ -43,24 +51,25 @@ export default function TransactionToolbar({
                     onChange={onFileChange}
                 />
                 <button
-                    className="tt-link-btn"
+                    className={styles.linkBtn}
                     onClick={onDelete}
                     disabled={selectedCount === 0 || loading}
                 >
-                    <span className="tt-icon">🗑️</span> Delete Selected
+                    <span className={styles.icon}>🗑️</span> Delete Selected
                 </button>
 
                 {/* Statement period dropdown (UI-only Step 1) */}
                 <StatementPeriodDropdown />
             </div>
-            <div className="tt-toolbar-right">
-                <div className="tt-totals">Total: {total}</div>
+
+            <div className={styles.right}>
+                <div className={styles.totals}>Total: {total}</div>
             </div>
         </div>
     );
 }
 
-TransactionToolbar.propTypes = {
+TransactionTableToolbar.propTypes = {
     onAdd: PropTypes.func.isRequired,
     onImport: PropTypes.func.isRequired,
     onDelete: PropTypes.func.isRequired,

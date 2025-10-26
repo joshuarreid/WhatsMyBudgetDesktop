@@ -1,6 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
-import SmartSelect from "./SmartSelect/SmartSelect";
+import SmartSelect from "../SmartSelect/SmartSelect";
+import styles from "./TransactionRowDropdown.module.css";
 
 const logger = {
     info: (...args) => console.log("[TransactionRowDropdown]", ...args),
@@ -10,11 +11,9 @@ const logger = {
 /**
  * TransactionRowDropdown
  *
- * Pure presentational component that renders the appropriate input control for
- * field-level editing. All business logic (persistence, derived defaults, filters)
- * is expected to be provided via props from the useTransactionRow hook / parent.
- *
- * Props are intentionally explicit so this component remains simple and testable.
+ * Presentational component for field-level editing inputs.
+ * - Keeps logic-free; behavior provided via props.
+ * - Uses a CSS module for scoped styles; merges with global input class for incremental migration.
  */
 export default function TransactionRowDropdown({
                                                    field,
@@ -39,11 +38,16 @@ export default function TransactionRowDropdown({
                                                    DEFAULT_CRITICALITY,
                                                    className = "tt-input",
                                                }) {
+    // Merge provided global class with module class for incremental compatibility.
+    const finalInputClass = `${className} ${styles.input}`.trim();
+    const finalNumberClass = `${className} ${styles.input} ${styles.inputNumber}`.trim();
+    const finalSelectClass = `${className} ${styles.select}`.trim();
+
     // Numeric amount input
     if (field === "amount") {
         return (
             <input
-                className="tt-input tt-input-number"
+                className={finalNumberClass}
                 type="number"
                 step="0.01"
                 autoFocus
@@ -62,7 +66,7 @@ export default function TransactionRowDropdown({
     if (field === "transactionDate") {
         return (
             <input
-                className={className}
+                className={finalInputClass}
                 type="date"
                 autoFocus
                 defaultValue={toInputDate ? toInputDate(tx.transactionDate) : tx.transactionDate}
@@ -81,7 +85,7 @@ export default function TransactionRowDropdown({
         const dv = (String(value ?? "").trim() !== "") ? value : DEFAULT_CRITICALITY;
         return (
             <select
-                className={className}
+                className={finalSelectClass}
                 autoFocus
                 defaultValue={dv}
                 onChange={(e) => (editValueRef.current = e.target.value)}
@@ -115,7 +119,7 @@ export default function TransactionRowDropdown({
                 onBlur={onBlur}
                 getMappedDefault={getMappedDefault}
                 applyMappedDefault={applyMappedDefault}
-                className={className}
+                className={finalInputClass}
                 ariaLabel={`${field} input`}
             />
         );
@@ -124,7 +128,7 @@ export default function TransactionRowDropdown({
     // Default text input (name, payee, memo, etc.)
     return (
         <input
-            className={className}
+            className={finalInputClass}
             autoFocus
             defaultValue={String(value ?? tx[field] ?? "")}
             onChange={(e) => (editValueRef.current = e.target.value)}

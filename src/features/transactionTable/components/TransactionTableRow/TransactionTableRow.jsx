@@ -2,7 +2,7 @@ import React from "react";
 import PropTypes from "prop-types";
 import { useTransactionRow } from "../../hooks/useTransactionRow";
 import SmartSelect from "../SmartSelect/SmartSelect";
-import TransactionRowDropdown from "../TransactionRowDropdown";
+import TransactionRowDropdown from "../TransactionRowDropdown/TransactionRowDropdown";
 import styles from "./TransactionRow.module.css";
 import {
     INLINE_ERROR_COLOR,
@@ -13,11 +13,11 @@ import {
 } from "../../utils/constants";
 
 const logger = {
-    info: (...args) => console.log('[TransactionRow]', ...args),
-    error: (...args) => console.error('[TransactionRow]', ...args),
+    info: (...args) => console.log('[TransactionTableRow]', ...args),
+    error: (...args) => console.error('[TransactionTableRow]', ...args),
 };
 
-export default function TransactionRow({
+export default function TransactionTableRow({
                                            tx,
                                            selected,
                                            onSelect,
@@ -412,7 +412,7 @@ export default function TransactionRow({
     );
 }
 
-TransactionRow.propTypes = {
+TransactionTableRow.propTypes = {
     tx: PropTypes.object.isRequired,
     selected: PropTypes.bool.isRequired,
     onSelect: PropTypes.func.isRequired,

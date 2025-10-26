@@ -1,0 +1,58 @@
+/* Scoped styles for TransactionTableToolbar component
+ *
+ * - Migrated from global .tt-toolbar-ynab, .tt-link-btn, .tt-totals etc.
+ * - Keeps layout & spacing consistent with feature tokens in TransactionTable.css.
+ */
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 6px;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.linkBtn {
+    background: transparent;
+    border: none;
+    color: var(--color-accent);
+    font-weight: 700;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.linkBtnDisabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.linkBtnHover:hover:not(.linkBtnDisabled) {
+    background: rgba(141,176,255,0.04);
+    transform: translateY(-1px);
+}
+
+.icon {
+    font-weight: 900;
+}
+
+.totals {
+    color: var(--color-success);
+    font-weight: 800;
+}

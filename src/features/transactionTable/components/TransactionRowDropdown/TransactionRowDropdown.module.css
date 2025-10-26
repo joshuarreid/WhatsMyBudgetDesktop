@@ -1,0 +1,48 @@
+/* Scoped styles for TransactionRowDropdown
+ *
+ * - Co-locate visual rules for field-level inputs used during editing (amount, date, selects, SmartSelect).
+ * - Keep class names small and focused. Merge with global DEFAULT_INPUT_CLASS for incremental migration.
+ */
+
+.container {
+    display: block;
+}
+
+/* Generic input styling to complement global tt-input */
+.input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.5);
+    color: #e6eef8;
+    outline: none;
+    font-size: 0.85rem;
+}
+
+.input:focus {
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    border-color: rgba(120,170,255,0.6);
+}
+
+/* Numeric input specifics */
+.inputNumber {
+    text-align: right;
+}
+
+/* Select element styling */
+.select {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.5);
+    color: #e6eef8;
+    font-size: 0.85rem;
+}
+
+/* Small helper for inline error / spacing (used by parent components) */
+.inlineError {
+    color: #ff8a8a;
+    margin-top: 6px;
+}

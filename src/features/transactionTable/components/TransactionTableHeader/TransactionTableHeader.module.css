@@ -1,0 +1,46 @@
+/* TransactionTableHeader.module.css
+ *
+ * Scoped styles for the transaction table header row.
+ * Migrated from global .tt-header-row and .tt-checkbox-col to a component CSS Module.
+ *
+ * Keep layout (grid-template-columns) consistent with the table rows so columns align.
+ * Use feature-level tokens from TransactionTable.css for colors and spacing.
+ */
+
+.header {
+    display: grid;
+    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px; /* checkbox, name, amount, category, criticality, date, account, payment method */
+    gap: 12px;
+    padding: 6px 12px;
+    font-weight: 700;
+    color: var(--color-text, #cbd5e1);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, rgba(20,22,24,0.95), rgba(28,28,30,0.95));
+    z-index: 3;
+    font-size: 0.85rem;
+    align-items: center;
+}
+
+/* checkbox column */
+.checkboxCol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* generic column header cell (allows per-cell overrides via inline style or by adding extra module classes) */
+.column {
+    /* Minimal reset to ensure consistent spacing & overflow handling */
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* amount column helper for right-aligned header */
+.columnRight {
+    text-align: right;
+}
