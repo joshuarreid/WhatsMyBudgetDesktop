@@ -18,22 +18,22 @@ const logger = {
 };
 
 export default function TransactionTableRow({
-                                           tx,
-                                           selected,
-                                           onSelect,
-                                           editing,
-                                           editValueRef,
-                                           onCellDoubleClick,
-                                           onEditKey,
-                                           onSaveEdit,
-                                           onSaveRow,
-                                           onCancelRow,
-                                           toInputDate,
-                                           setEditing,
-                                           savingIds = new Set(),
-                                           saveErrors = {},
-                                           startEditingRow,
-                                       }) {
+                                                tx,
+                                                selected,
+                                                onSelect,
+                                                editing,
+                                                editValueRef,
+                                                onCellDoubleClick,
+                                                onEditKey,
+                                                onSaveEdit,
+                                                onSaveRow,
+                                                onCancelRow,
+                                                toInputDate,
+                                                setEditing,
+                                                savingIds = new Set(),
+                                                saveErrors = {},
+                                                startEditingRow,
+                                            }) {
     const {
         isFieldEditing,
         isRowEditing,
@@ -271,7 +271,8 @@ export default function TransactionTableRow({
                     <input
                         className={inputClass}
                         type="date"
-                        value={draft.transactionDate ? draft.transactionDate.slice(0, 10) : ''}
+                        /* use toInputDate helper to render a browser-friendly yyyy-mm-dd value */
+                        value={draft.transactionDate ? toInputDate(draft.transactionDate) : ''}
                         onChange={(e) => updateDraft('transactionDate', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();

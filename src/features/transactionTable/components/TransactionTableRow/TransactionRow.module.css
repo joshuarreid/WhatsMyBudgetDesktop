@@ -9,7 +9,8 @@
 /* Root row surface (replaces .tt-row) */
 .row {
     display: grid;
-    grid-template-columns: 36px 1fr 120px 150px 100px 120px 100px 120px;
+    /* increased the date column slightly (was 120px) to avoid truncation of native date control */
+    grid-template-columns: 36px 1fr 120px 150px 100px 140px 100px 120px;
     gap: 12px;
     padding: 10px;
     border-radius: 8px;
@@ -48,6 +49,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    /* IMPORTANT: allow grid children to shrink below their content size.
+       Without this, native controls (like date) can be clipped. */
+    min-width: 0;
 }
 
 /* amount cell tweaks */
@@ -66,6 +71,9 @@
     color: #e6eef8;
     outline: none;
     font-size: 0.85rem;
+
+    /* make sizing predictable when using width:100% inside grid cells */
+    box-sizing: border-box;
 }
 
 /* ensure focus looks good even when using module class */
@@ -77,6 +85,11 @@
 /* numeric input tweak (keeps text aligned right) */
 .inputNumber {
     text-align: right;
+}
+
+/* Small tweak to ensure native date control icon has room and content isn't clipped */
+.input[type="date"] {
+    padding-right: 10px;
 }
 
 /* row-level controls (replaces .tt-row-controls) */
@@ -147,7 +160,8 @@
 /* responsive adjustments that mirror the global layout reductions */
 @media (max-width: 900px) {
     .row {
-        grid-template-columns: 36px 1fr 100px 120px 90px 110px 90px 120px;
+        /* bumped the date column slightly on mobile */
+        grid-template-columns: 36px 1fr 100px 120px 90px 120px 90px 120px;
     }
 
     .actionBtn {
