@@ -1,17 +1,14 @@
 /* StatementPeriodDropdown.css
  *
- * Updated to explicitly style the statement period dropdown so it matches
- * the toolbar "link" look even after the toolbar was moved to CSS Modules.
+ * Updated to ensure the dropdown visually aligns with toolbar link buttons.
+ * - Use inline-flex + align-items:center + vertical-align:middle so the button
+ *   sits on the same baseline as neighboring toolbar buttons.
+ * - Add a small min-height so the control lines up with other toolbar controls
+ *   that may enforce a minimum button height.
  *
- * This file targets both:
- *  - the component-specific classes (statement-period-*)
- *  - the combined selectors used by the component (tt-link-btn statement-period-*)
- *
- * It relies on feature tokens (CSS variables) defined in TransactionTable.css:
- *   --color-accent, --color-success
- *
- * Keep this file lightweight — consider migrating it to a CSS Module
- * later when the shared component is moved into the feature/component tree.
+ * This file still targets both the local .statement-period-* classes and the
+ * combined .tt-link-btn selectors so it continues to work while the toolbar is
+ * migrating to CSS Modules.
  */
 
 .statement-period-dropdown,
@@ -19,21 +16,22 @@
     box-sizing: border-box;
 }
 
-/* Container */
+/* Container: use inline-flex so vertical centering is consistent with other buttons */
 .statement-period-dropdown {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle; /* ensures inline alignment with sibling controls */
     line-height: 1;
 }
 
-/* Button: match toolbar link appearance */
-/* Also match selectors when component still has tt-link-btn applied */
+/* Button: match toolbar link appearance and align vertically */
 .statement-period-button,
 .tt-link-btn.statement-period-button {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 10px;
+    padding: 6px 10px; /* match toolbar spacing */
     font-weight: 700;
     color: var(--color-accent, #8db0ff);
     background: transparent;
@@ -43,6 +41,9 @@
     transition: background 120ms ease, transform 120ms ease, opacity 120ms ease;
     font-size: 0.95rem;
     text-decoration: none;
+    vertical-align: middle;
+    min-height: 36px; /* helps match the visual height of other toolbar actions */
+    box-sizing: border-box;
 }
 
 /* Disabled state */
@@ -66,6 +67,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
 }
 
 /* Saving indicator (small, subtle) */
@@ -109,7 +111,7 @@
     display: block;
 }
 
-/* Option button: re-implement the toolbar link look at full-width */
+/* Option button: full-width link-like button */
 .statement-period-option,
 .tt-link-btn.statement-period-option,
 .option {
@@ -125,6 +127,7 @@
     cursor: pointer;
     border-radius: 6px;
     font-weight: 700;
+    box-sizing: border-box;
 }
 
 /* Hover state for option */
@@ -166,5 +169,6 @@
     .tt-link-btn.statement-period-button {
         padding: 6px 8px;
         font-size: 0.9rem;
+        min-height: 32px;
     }
 }
