@@ -50,6 +50,23 @@ export const BLUR_DELAY_MS = 120;
 export const SUGGESTION_POPUP_ZINDEX = 2000;
 export const SUGGESTION_POPUP_MAX_HEIGHT = 220; // px
 
+/* ---------- Transaction / local row helpers (added) ---------- */
+// Prefix used for temporary (client-only) transaction IDs
+export const TEMP_ID_PREFIX = 'new-';
+
+// Config keys used with your config module (centralize string keys for easier refactor)
+export const CONFIG_KEYS = {
+    CRITICALITY_OPTIONS: 'criticalityOptions',
+    CATEGORIES: 'categories',
+    PAYMENT_METHODS: 'paymentMethods',
+};
+
+// Fallback/explicit default category value (if categories not configured)
+export const DEFAULT_CATEGORY_FALLBACK = '';
+
+// Length of YYYY-MM-DD date string used in some places (e.g. toInputDate checks)
+export const INPUT_DATE_LENGTH = 10;
+
 /* ---------- Helpers ---------- */
 /**
  * Normalizes a criticality value into an exact option from `options`.
@@ -150,6 +167,10 @@ const constants = {
     BLUR_DELAY_MS,
     SUGGESTION_POPUP_ZINDEX,
     SUGGESTION_POPUP_MAX_HEIGHT,
+    TEMP_ID_PREFIX,
+    CONFIG_KEYS,
+    DEFAULT_CATEGORY_FALLBACK,
+    INPUT_DATE_LENGTH,
     normalizeCriticality,
     toStatementPeriodValue,
     parseStatementPeriodValue,
@@ -157,4 +178,3 @@ const constants = {
 };
 
 export default constants;
-

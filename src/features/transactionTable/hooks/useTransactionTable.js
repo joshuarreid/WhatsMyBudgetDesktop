@@ -16,10 +16,19 @@ import {
     getDefaultPaymentMethodForAccount
 } from '../../../config/config.ts';
 
-const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
+// constants moved out for scalability / debugging
+import {
+    DEFAULT_CRITICALITY_OPTIONS,
+    DEFAULT_CRITICALITY,
+    STATEMENT_PERIOD_CACHE_KEY,
+    TEMP_ID_PREFIX,
+    CONFIG_KEYS,
+    INPUT_DATE_LENGTH,
+} from '../utils/constants';
+
 const CRITICALITY_OPTIONS = (() => {
     try {
-        const opts = getConfig('criticalityOptions');
+        const opts = getConfig(CONFIG_KEYS.CRITICALITY_OPTIONS);
         if (Array.isArray(opts) && opts.length > 0) return opts.map(String);
         logger.info('useTransactionTable: criticalityOptions not found in config; using defaults', { fallback: DEFAULT_CRITICALITY_OPTIONS });
         return DEFAULT_CRITICALITY_OPTIONS;
@@ -28,8 +37,6 @@ const CRITICALITY_OPTIONS = (() => {
         return DEFAULT_CRITICALITY_OPTIONS;
     }
 })();
-
-const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
 
 /* Category options: if config provides categories, expose them and treat category as a dropdown.
    Otherwise consumers should render a freeform textbox. */
@@ -52,6 +59,8 @@ const CATEGORY_OPTIONS = (() => {
 const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS.length > 0;
 const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
 
+// -------------------- hook implementation --------------------
+
 /**
  * useTransactionTable(filters, statementPeriod)
  *
@@ -63,7 +72,7 @@ const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
  *
  * Enhancement:
  * - If statementPeriod is not provided via props, read the cached value from LocalCacheService
- *   (cacheKey = 'currentStatementPeriod') and use it when creating/updating/uploading transactions.
+ *   (cacheKey = STATEMENT_PERIOD_CACHE_KEY) and use it when creating/updating/uploading transactions.
  */
 export function useTransactionTable(filters, statementPeriod) {
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -82,13 +91,13 @@ export function useTransactionTable(filters, statementPeriod) {
         [txResult.personalTransactions, txResult.jointTransactions]
     );
 
-    // localTx state contains any local new rows (id starts with 'new-') + serverTx (server authoritative)
+    // localTx state contains any local new rows (id starts with TEMP_ID_PREFIX) + serverTx (server authoritative)
     const [localTx, setLocalTx] = useState(() => serverTx);
 
     // keep localTx in sync with server results while preserving local-only "new-" rows
     useEffect(() => {
         setLocalTx((prev) => {
-            const localOnly = (prev || []).filter((t) => String(t.id).startsWith('new-'));
+            const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
             return [...localOnly, ...serverTx];
         });
     }, [serverTx]);
@@ -121,8 +130,8 @@ export function useTransactionTable(filters, statementPeriod) {
     useEffect(() => {
         let mounted = true;
         if (!cachedStatementPeriod) {
-            logger.info('Attempting to load statementPeriod from local cache');
-            localCacheService.get('currentStatementPeriod')
+            logger.info('Attempting to load statementPeriod from local cache', { cacheKey: STATEMENT_PERIOD_CACHE_KEY });
+            localCacheService.get(STATEMENT_PERIOD_CACHE_KEY)
                 .then((data) => {
                     const val = data?.cacheValue ?? data?.value ?? data ?? null;
                     if (mounted) {
@@ -160,7 +169,7 @@ export function useTransactionTable(filters, statementPeriod) {
     }, [localTx, isAllSelected]);
 
     // Utility to generate a unique temp id for new rows
-    const makeTempId = useCallback(() => `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
+    const makeTempId = useCallback(() => `${TEMP_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
     // Add transaction (local-only draft) — default criticality is wired from config (DEFAULT_CRITICALITY)
     // Now also pick the default payment method for the current account (screen) so new rows get a sensible default immediately.
@@ -193,7 +202,7 @@ export function useTransactionTable(filters, statementPeriod) {
     // Cancel row editing (new or existing)
     const handleCancelRow = useCallback((id) => {
         // if it's a local-only new row, remove it entirely
-        if (String(id).startsWith('new-')) {
+        if (String(id).startsWith(TEMP_ID_PREFIX)) {
             setLocalTx((prev) => {
                 const beforeCount = (prev || []).length;
                 const next = (prev || []).filter((t) => t.id !== id);
@@ -225,8 +234,8 @@ export function useTransactionTable(filters, statementPeriod) {
         async () => {
             if (selectedIds.size === 0) return;
             const ids = Array.from(selectedIds);
-            const localOnly = ids.filter((id) => String(id).startsWith('new-'));
-            const toDeleteFromAPI = ids.filter((id) => !String(id).startsWith('new-'));
+            const localOnly = ids.filter((id) => String(id).startsWith(TEMP_ID_PREFIX));
+            const toDeleteFromAPI = ids.filter((id) => !String(id).startsWith(TEMP_ID_PREFIX));
 
             if (localOnly.length) {
                 setLocalTx((prev) => prev.filter((t) => !localOnly.includes(t.id)));
@@ -402,7 +411,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 txToPersist = { ...txToPersist, statementPeriod: effectiveStatementPeriod };
             }
 
-            const isNew = String(id).startsWith('new-') || txToPersist.__isNew;
+            const isNew = String(id).startsWith(TEMP_ID_PREFIX) || txToPersist.__isNew;
             if (isNew) {
                 const validationErrors = validateForCreate(txToPersist);
                 if (validationErrors.length > 0) {
