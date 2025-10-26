@@ -123,7 +123,6 @@ export function useSmartSelect(opts = {}) {
         } catch (err) {
             logger.error("applyMappedDefault on mount failed", err);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run only once on mount
 
     /**
