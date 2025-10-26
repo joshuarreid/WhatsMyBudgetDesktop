@@ -87,6 +87,55 @@ export default function TransactionTableRow({
     // Helper to merge the global input class with local module class for backward compatibility
     const inputClass = `${DEFAULT_INPUT_CLASS} ${styles.input}`;
 
+    // Ref for the date input so the calendar icon can focus/showPicker
+    const dateInputRef = React.useRef(null);
+
+    const handleOpenNativeDatePicker = (e) => {
+        // used in row-edit mode: call showPicker when available, otherwise focus
+        e?.stopPropagation?.();
+        if (!dateInputRef.current) {
+            logger.error('date input ref missing', tx.id);
+            return;
+        }
+
+        try {
+            const el = dateInputRef.current;
+            // modern browsers expose showPicker() for date inputs
+            if (typeof el.showPicker === "function") {
+                el.showPicker();
+                logger.info('showPicker invoked for tx', tx.id);
+            } else {
+                // fallback: focus the input so native UI appears (or user can type)
+                el.focus();
+                logger.info('focused date input for tx', tx.id);
+            }
+        } catch (err) {
+            // defensive: fallback to focus and log
+            logger.error('failed to open native date picker, focusing instead', tx.id, err);
+            try { dateInputRef.current.focus(); } catch (_) {}
+        }
+    };
+
+    const handleOpenEditorFromDisplayIcon = (e) => {
+        // When in display mode, clicking the small calendar icon should start editing the date
+        e?.stopPropagation?.();
+        logger.info('date icon clicked to start editing', tx.id);
+        // Reuse existing double-click handler behavior so upstream logic stays centralized
+        try {
+            onCellDoubleClick(tx, "transactionDate");
+        } catch (err) {
+            logger.error('onCellDoubleClick call failed', err);
+            // last resort: try startEditingRow prop if provided
+            if (typeof startEditingRow === 'function') {
+                try {
+                    startEditingRow(tx.id);
+                } catch (err2) {
+                    logger.error('startEditingRow fallback failed', err2);
+                }
+            }
+        }
+    };
+
     return (
         <div className={`${styles.row} ${selected ? styles.rowSelected : ""}`} key={tx.id}>
             <div className={styles.checkboxCol}>
@@ -268,21 +317,42 @@ export default function TransactionTableRow({
                         onEditKey={onEditKey}
                     />
                 ) : isRowEditing ? (
-                    <input
-                        className={inputClass}
-                        type="date"
-                        /* use toInputDate helper to render a browser-friendly yyyy-mm-dd value */
-                        value={draft.transactionDate ? toInputDate(draft.transactionDate) : ''}
-                        onChange={(e) => updateDraft('transactionDate', e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSaveRowClick();
-                            if (e.key === 'Escape') onCancelRowLocal();
-                        }}
-                    />
+                    <div className={styles.dateWrapper}>
+                        <input
+                            ref={dateInputRef}
+                            className={inputClass}
+                            type="date"
+                            /* use toInputDate helper to render a browser-friendly yyyy-mm-dd value */
+                            value={draft.transactionDate ? toInputDate(draft.transactionDate) : ''}
+                            onChange={(e) => updateDraft('transactionDate', e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') onSaveRowClick();
+                                if (e.key === 'Escape') onCancelRowLocal();
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className={styles.datePickerBtn}
+                            aria-label="Open date picker"
+                            onClick={handleOpenNativeDatePicker}
+                            title="Open calendar"
+                        >
+                            {/* Calendar SVG (keeps styling via .calendarIcon) */}
+                            <svg className={styles.calendarIcon} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M7 11h5v5H7z" fill="currentColor" opacity="0.14"/>
+                                <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14l.002 11H5z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                        {inlineError && <div className={styles.inlineError}>{inlineError}</div>}
+                    </div>
                 ) : tx.transactionDate ? (
-                    new Date(tx.transactionDate).toLocaleDateString(DEFAULT_LOCALE, { timeZone: 'UTC' })
+                    /* IMPORTANT: icon removed from display mode as requested.
+                       The calendar icon is only shown when adding/editing (isRowEditing). */
+                    <div onDoubleClick={() => onCellDoubleClick(tx, "transactionDate")}>
+                        {new Date(tx.transactionDate).toLocaleDateString(DEFAULT_LOCALE, { timeZone: 'UTC' })}
+                    </div>
                 ) : (
-                    ""
+                    <div onDoubleClick={() => onCellDoubleClick(tx, "transactionDate")}>{""}</div>
                 )}
             </div>
 

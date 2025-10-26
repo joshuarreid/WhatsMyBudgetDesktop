@@ -87,9 +87,52 @@
     text-align: right;
 }
 
-/* Small tweak to ensure native date control icon has room and content isn't clipped */
+/* Small tweak to ensure native date control icon has room and content isn't clipped
+   KEEP original padding-right so we don't change native control/layout */
 .input[type="date"] {
     padding-right: 10px;
+}
+
+/* date input + icon wrapper */
+.dateWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* button to invoke date picker (to the right of the input)
+   absolutely positioned so it does not affect surrounding layout (row controls stay identical) */
+.datePickerBtn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 28px;
+    width: 28px;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #e6eef8;
+    transition: background 120ms ease, transform 120ms ease;
+    z-index: 2; /* ensure icon sits above the input */
+}
+
+.datePickerBtn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.02);
+    transform: translateY(calc(-50% - 2px));
+}
+
+/* subtle style for the calendar icon (svg inherits color) */
+.calendarIcon {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 /* row-level controls (replaces .tt-row-controls) */
@@ -102,7 +145,8 @@
     align-items: center;
 }
 
-/* action buttons used in row-edit mode (replaces .tt-action-btn) */
+/* action buttons used in row-edit mode (replaces .tt-action-btn)
+   RESTORED to original sizes/spacing so Save/Cancel buttons remain unchanged */
 .actionBtn {
     border: none;
     padding: 8px 14px;
@@ -171,5 +215,20 @@
 
     .savingText {
         margin-left: 6px;
+    }
+
+    .input[type="date"] {
+        padding-right: 10px;
+    }
+
+    .datePickerBtn {
+        right: 4px;
+        height: 26px;
+        width: 26px;
+    }
+
+    .calendarIcon {
+        width: 14px;
+        height: 14px;
     }
 }
