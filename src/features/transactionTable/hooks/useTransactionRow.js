@@ -24,9 +24,9 @@ import {
     getAccounts,
     getPaymentMethods,
     getDefaultPaymentMethodForAccount
-} from '../../config/config.ts';
+} from '../../../config/config.ts';
 
-import SmartSelect from './components/SmartSelect';
+import SmartSelect from '../components/SmartSelect';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
 const CRITICALITY_OPTIONS = (() => {

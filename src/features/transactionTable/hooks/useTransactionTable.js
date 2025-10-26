@@ -4,9 +4,9 @@ const logger = {
 };
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import budgetTransactionService from '../../services/BudgetTransactionService';
-import localCacheService from '../../services/LocalCacheService';
-import { useTransactionsForAccount } from "../../hooks/useTransactions";
+import budgetTransactionService from '../../../services/BudgetTransactionService';
+import localCacheService from '../../../services/LocalCacheService';
+import { useTransactionsForAccount } from "../../../hooks/useTransactions";
 // Use the centralized config accessor instead of reading the raw JSON.
 // Adjust the relative path if your config module lives elsewhere.
 import {
@@ -14,7 +14,7 @@ import {
     getCriticalityForCategory,
     getCategories,
     getDefaultPaymentMethodForAccount
-} from '../../config/config.ts';
+} from '../../../config/config.ts';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
 const CRITICALITY_OPTIONS = (() => {

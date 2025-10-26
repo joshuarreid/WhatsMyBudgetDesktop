@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTransactionTable } from './useTransactionTable';
+import { useTransactionTable } from './hooks/useTransactionTable';
 import './TransactionTable.css';
 import TransactionBalanceRow from './components/TransactionBalanceRow';
 import TransactionToolbar from './components/TransactionToolbar';

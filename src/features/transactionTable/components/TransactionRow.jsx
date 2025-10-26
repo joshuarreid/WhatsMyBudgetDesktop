@@ -1,6 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { useTransactionRow } from "../useTransactionRow";
+import { useTransactionRow } from "../hooks/useTransactionRow";
 import SmartSelect from "./SmartSelect";
 import TransactionRowDropdown from "./TransactionRowDropdown";
 

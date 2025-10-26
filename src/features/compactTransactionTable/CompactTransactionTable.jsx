@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { useTransactionTable } from '../transactionTable/useTransactionTable';
+import { useTransactionTable } from '../transactionTable/hooks/useTransactionTable';
 import CompactTransactionHeader from './components/CompactTransactionHeader';
 import CompactTransactionRow from './components/CompactTransactionRow';
 import CompactTransactionBalanceRow from './components/CompactTransactionBalanceRow';
