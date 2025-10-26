@@ -7,6 +7,9 @@
  *
  * Follow Bulletproof React conventions: pure helpers, stable exports, and
  * small responsibilities.
+ *
+ * NOTE: Additions here should remain pure (no side effects). Use the exported
+ * helpers from other modules (hooks / components) to keep logic testable.
  */
 
 const logger = {
@@ -15,63 +18,145 @@ const logger = {
 };
 
 /* ---------- Presentation / UI ---------- */
-// Inline error color used for field-level error messages
+
+/**
+ * INLINE_ERROR_COLOR
+ * - Color used for small inline field validation messages in rows.
+ * - Centralized so it can be tuned in one place for consistent UI.
+ */
 export const INLINE_ERROR_COLOR = '#ff8a8a';
-// Small green used for a saving indicator
+
+/**
+ * SAVING_TEXT_COLOR
+ * - Color used for lightweight "Saving…" indicators shown inline in the row controls.
+ */
 export const SAVING_TEXT_COLOR = '#9be3a7';
 
-// Default input classname for lightweight theming/overrides
+/**
+ * DEFAULT_INPUT_CLASS
+ * - Default CSS classname used for lightweight input theming across the feature.
+ * - Components may override by passing a className prop.
+ */
 export const DEFAULT_INPUT_CLASS = 'tt-input';
 
 /* ---------- Locale / Currency ---------- */
+
+/**
+ * DEFAULT_LOCALE
+ * - Locale used for date / month name generation when building statement period labels.
+ */
 export const DEFAULT_LOCALE = 'en-US';
+
+/**
+ * DEFAULT_CURRENCY
+ * - Currency code used by presentation helpers if needed.
+ */
 export const DEFAULT_CURRENCY = 'USD';
 
 /* ---------- Criticality & SmartSelect ---------- */
-// Criticality options fallback (use configuration where possible)
+
+/**
+ * DEFAULT_CRITICALITY_OPTIONS
+ * - Fallback list of criticality strings used when config doesn't provide them.
+ */
 export const DEFAULT_CRITICALITY_OPTIONS = ['Essential', 'Nonessential'];
+
+/**
+ * DEFAULT_CRITICALITY
+ * - Default criticality string (first from DEFAULT_CRITICALITY_OPTIONS).
+ */
 export const DEFAULT_CRITICALITY = DEFAULT_CRITICALITY_OPTIONS[0];
 
-// Default SmartSelect mode
+/**
+ * DEFAULT_SMARTSELECT_MODE
+ * - Default mode for SmartSelect presentation when callers don't explicitly pass one.
+ */
 export const DEFAULT_SMARTSELECT_MODE = 'autocomplete';
 
 /* ---------- Statement Period (defaults) ---------- */
-// Statement period server-backed cache key
+
+/**
+ * STATEMENT_PERIOD_CACHE_KEY
+ * - Cache key used when reading/writing the server-backed "current statement period".
+ * - Keep centralized to avoid string-literal drift.
+ */
 export const STATEMENT_PERIOD_CACHE_KEY = 'currentStatementPeriod';
-// How many months before/after "now" we generate by default (i = -prev .. +forward)
+
+/**
+ * STATEMENT_PERIOD_LOOKBACK / STATEMENT_PERIOD_FORWARD
+ * - Used by statement-period generator to compute the list range (i = -lookback .. +forward).
+ */
 export const STATEMENT_PERIOD_LOOKBACK = 1;
 export const STATEMENT_PERIOD_FORWARD = 5;
 
 /* ---------- Autocomplete / suggestion behaviour ---------- */
+
+/**
+ * MAX_AUTOCOMPLETE_SUGGESTIONS
+ * - Maximum number of suggestions returned by SmartSelect's filter function.
+ */
 export const MAX_AUTOCOMPLETE_SUGGESTIONS = 8;
-// Small delay used in blur handlers to allow suggestion clicks to register.
+
+/**
+ * BLUR_DELAY_MS
+ * - Small delay used on blur handlers to allow suggestion click events to fire
+ *   before the suggestion list is hidden.
+ */
 export const BLUR_DELAY_MS = 120;
-// Suggestion popup styling defaults (kept here so they can be tuned centrally)
+
+/**
+ * SUGGESTION_POPUP_ZINDEX / SUGGESTION_POPUP_MAX_HEIGHT
+ * - UI tokens for suggestion popup. Kept here to tune centrally and to document intent.
+ */
 export const SUGGESTION_POPUP_ZINDEX = 2000;
 export const SUGGESTION_POPUP_MAX_HEIGHT = 220; // px
 
 /* ---------- Transaction / local row helpers (added) ---------- */
-// Prefix used for temporary (client-only) transaction IDs
+
+/**
+ * TEMP_ID_PREFIX
+ * - Prefix used for temporary client-only transaction IDs.
+ * - Used consistently across hooks and components to detect & handle local-only rows.
+ */
 export const TEMP_ID_PREFIX = 'new-';
 
-// Config keys used with your config module (centralize string keys for easier refactor)
+/**
+ * CONFIG_KEYS
+ * - Centralized keys used to request values from the config accessor.
+ * - Using constants reduces risk of typo-induced bugs and makes auditing easier.
+ */
 export const CONFIG_KEYS = {
     CRITICALITY_OPTIONS: 'criticalityOptions',
     CATEGORIES: 'categories',
     PAYMENT_METHODS: 'paymentMethods',
 };
 
-// Fallback/explicit default category value (if categories not configured)
+/**
+ * DEFAULT_CATEGORY_FALLBACK
+ * - Explicit default for category when categories are not configured.
+ */
 export const DEFAULT_CATEGORY_FALLBACK = '';
 
-// Length of YYYY-MM-DD date string used in some places (e.g. toInputDate checks)
+/**
+ * INPUT_DATE_LENGTH
+ * - Length of YYYY-MM-DD strings used when converting dates to input values.
+ * - Centralize the magic number to improve readability and avoid scatter.
+ */
 export const INPUT_DATE_LENGTH = 10;
 
 /* ---------- Helpers ---------- */
+
 /**
- * Normalizes a criticality value into an exact option from `options`.
- * - Case-insensitive match preferred.
- * - Falls back to defaultOption if no match found.
+ * normalizeCriticality(val, options = DEFAULT_CRITICALITY_OPTIONS, defaultOption = DEFAULT_CRITICALITY)
+ *
+ * - Normalizes a user-provided criticality string to one of the configured options.
+ * - Case-insensitive match; falls back to the provided defaultOption when no match found.
+ * - Useful for validation and for normalizing user input before persistence.
+ *
+ * @param {string} val - user-supplied string (may be null/undefined)
+ * @param {string[]} options - available criticality options (strings)
+ * @param {string} defaultOption - fallback option to use
+ * @returns {string} - matched option or defaultOption
  */
 export function normalizeCriticality(val, options = DEFAULT_CRITICALITY_OPTIONS, defaultOption = DEFAULT_CRITICALITY) {
     try {
@@ -87,9 +172,13 @@ export function normalizeCriticality(val, options = DEFAULT_CRITICALITY_OPTIONS,
 }
 
 /**
- * Convert a Date instance to the server value format for statement periods:
+ * toStatementPeriodValue(date = new Date())
+ *
+ * - Converts a Date instance into the canonical "statement period" object used across the UI.
  * - label: MONTHNAME in ALL CAPS (e.g., OCTOBER)
  * - value: MONTHNAMEALLCAPS + YEAR (e.g., OCTOBER2025)
+ *
+ * Returns: { label: string, value: string }
  */
 export function toStatementPeriodValue(date = new Date()) {
     try {
@@ -101,7 +190,7 @@ export function toStatementPeriodValue(date = new Date()) {
         };
     } catch (err) {
         logger.error('toStatementPeriodValue failed', err);
-        // fallback to ISO-like safe value
+        // fallback to an ISO-like safe value
         const d = new Date(date);
         const fallback = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
         return { label: fallback, value: fallback };
@@ -109,13 +198,17 @@ export function toStatementPeriodValue(date = new Date()) {
 }
 
 /**
- * Parse server-stored statement period string (e.g. "OCTOBER2025") into { label, year }.
- * If parsing fails, returns null.
+ * parseStatementPeriodValue(v)
+ *
+ * - Parses server-stored statement period strings such as "OCTOBER2025" into { label, year }.
+ * - Returns null if parsing is unsuccessful.
+ *
+ * @param {string} v
+ * @returns {{ label: string, year: number } | null}
  */
 export function parseStatementPeriodValue(v) {
     try {
         if (!v || typeof v !== 'string') return null;
-        // find trailing year digits
         const m = v.match(/^([A-Z]+)(\d{4})$/i);
         if (!m) return null;
         const label = m[1].toUpperCase();
@@ -128,9 +221,16 @@ export function parseStatementPeriodValue(v) {
 }
 
 /**
- * Generate statement period options for UI.
- * Produces an array for i = -prev .. +forward relative to `anchor` (default: now).
- * Each item: { label: 'OCTOBER', value: 'OCTOBER2025', date: Date }
+ * generateStatementPeriodOptions(anchor = new Date(), prev = STATEMENT_PERIOD_LOOKBACK, forward = STATEMENT_PERIOD_FORWARD)
+ *
+ * - Produces the UI list for the statement period dropdown.
+ * - Items cover i = -prev .. +forward months relative to anchor (normalized to the first of month).
+ * - Each item contains: { label, value, date } so downstream code can use the date directly.
+ *
+ * @param {Date} anchor - reference date (default: now)
+ * @param {number} prev - months to look back (inclusive)
+ * @param {number} forward - months to look forward (inclusive)
+ * @returns {{ label: string, value: string, date: Date }[]}
  */
 export function generateStatementPeriodOptions(anchor = new Date(), prev = STATEMENT_PERIOD_LOOKBACK, forward = STATEMENT_PERIOD_FORWARD) {
     try {
@@ -144,7 +244,6 @@ export function generateStatementPeriodOptions(anchor = new Date(), prev = STATE
         return list;
     } catch (err) {
         logger.error('generateStatementPeriodOptions failed', err);
-        // return at least current month as fallback
         const cur = toStatementPeriodValue(new Date());
         return [{ label: cur.label, value: cur.value, date: new Date() }];
     }

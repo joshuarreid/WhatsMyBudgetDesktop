@@ -40,26 +40,39 @@ const logger = {
 };
 
 /**
- * useSmartSelect options
  * @typedef {Object} UseSmartSelectOptions
- * @property {string} name
- * @property {'dropdown'|'autocomplete'} [mode]
- * @property {string[]} [options]
- * @property {string[]} [allOptions]
- * @property {string} [value]
- * @property {(val:string)=>void} [onChange]
- * @property {(val:string)=>Promise<void>|void} [onSelectImmediate]
- * @property {React.RefObject} [inputRef]
- * @property {(ev:Event)=>void} [onBlur]
- * @property {(val:string)=>any} [getMappedDefault]
- * @property {(mapped)=>any} [applyMappedDefault]
- * @property {number} [maxSuggestions]
- * @property {number} [blurDelayMs]
+ * @property {string} name - Field name used for aria labels and logging.
+ * @property {'dropdown'|'autocomplete'} [mode] - Presentation mode; defaults to DEFAULT_SMARTSELECT_MODE.
+ * @property {string[]} [options] - Options used for native select dropdown mode.
+ * @property {string[]} [allOptions] - Options used for autocomplete filtering (alias of options).
+ * @property {string} [value] - Controlled value for the input/select.
+ * @property {(val:string)=>void} [onChange] - Controlled onChange handler (row editing flow).
+ * @property {(val:string)=>Promise<void>|void} [onSelectImmediate] - Async handler for immediate persistence (field editing flow).
+ * @property {React.RefObject} [inputRef] - Optional ref forwarded to the input element.
+ * @property {(ev:Event)=>void} [onBlur] - Optional onBlur callback invoked after suggestions are hidden.
+ * @property {(val:string)=>any} [getMappedDefault] - Optional mapper to derive another field (e.g., category -> criticality).
+ * @property {(mapped)=>any} [applyMappedDefault] - Function that applies the mapped default (updateDraft or persistence).
+ * @property {number} [maxSuggestions] - Max number of suggestions to show (defaults to MAX_AUTOCOMPLETE_SUGGESTIONS).
+ * @property {number} [blurDelayMs] - Milliseconds to delay hiding suggestions on blur (defaults to BLUR_DELAY_MS).
  */
 
 /**
- * Hook implementation
- * @param {UseSmartSelectOptions} opts
+ * useSmartSelect
+ *
+ * Hook that provides all state and handlers required by a SmartSelect component.
+ *
+ * Returns an object containing:
+ * - refs & state: internalRef, query, suggestions, showSuggestions, highlightIndex
+ * - setters for advanced usage: setQuery, setSuggestions, setShowSuggestions, setHighlightIndex
+ * - core helpers: filter, applySelection
+ * - event handlers: handleNativeSelectChange, handleInputChange, handleSuggestionMouseDown, handleKeyDown, handleBlur
+ * - meta: name, mode, placeholder, className
+ *
+ * The hook intentionally keeps behavior-only logic here so the presentational SmartSelect
+ * component can remain thin and focused on markup/styling.
+ *
+ * @param {UseSmartSelectOptions} [opts={}] options object
+ * @returns {Object} API consumed by SmartSelect component
  */
 export function useSmartSelect(opts = {}) {
     const {
@@ -110,9 +123,17 @@ export function useSmartSelect(opts = {}) {
         } catch (err) {
             logger.error("applyMappedDefault on mount failed", err);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // run only once on mount
 
-    // Filtering helper (memoization not required; cheap op)
+    /**
+     * filter
+     * - Filters the given allOptions by substring match and returns at most maxSuggestions items.
+     * - Cheap operation; no heavy memoization required for small option sets.
+     *
+     * @param {string} q - query string
+     * @returns {string[]} filtered suggestions
+     */
     const filter = useCallback(
         (q) => {
             if (!Array.isArray(allOptions) || allOptions.length === 0) return [];
@@ -123,7 +144,13 @@ export function useSmartSelect(opts = {}) {
         [allOptions, maxSuggestions]
     );
 
-    // Centralized selection application used by click/keyboard/native select
+    /**
+     * applySelection
+     * - Centralized selection handler invoked by clicks, keyboard enter, or native select changes.
+     * - Calls onChange (controlled) and/or onSelectImmediate (persist) and applies any mapped defaults.
+     *
+     * @param {string} val - selected value
+     */
     const applySelection = useCallback(
         async (val) => {
             try {
@@ -178,6 +205,12 @@ export function useSmartSelect(opts = {}) {
 
     // ---- Event handlers exposed to the component ----
 
+    /**
+     * handleNativeSelectChange(ev)
+     * - Handler for native <select> change events. Updates query and applies selection.
+     *
+     * @param {Event} ev
+     */
     const handleNativeSelectChange = useCallback(
         async (ev) => {
             const val = ev.target.value;
@@ -191,6 +224,12 @@ export function useSmartSelect(opts = {}) {
         [applySelection]
     );
 
+    /**
+     * handleInputChange(ev)
+     * - Handler for autocomplete input changes. Updates query and suggestions.
+     *
+     * @param {Event} ev
+     */
     const handleInputChange = useCallback(
         (ev) => {
             const v = ev.target.value;
@@ -202,6 +241,13 @@ export function useSmartSelect(opts = {}) {
         [filter]
     );
 
+    /**
+     * handleSuggestionMouseDown(ev, opt)
+     * - Used to handle suggestion clicks without losing focus (prevents blur before click).
+     *
+     * @param {Event} ev
+     * @param {string} opt
+     */
     const handleSuggestionMouseDown = useCallback(
         (ev, opt) => {
             // Prevent blur before click resolves
@@ -213,6 +259,12 @@ export function useSmartSelect(opts = {}) {
         [applySelection]
     );
 
+    /**
+     * handleKeyDown(ev)
+     * - Keyboard navigation for autocomplete mode: ArrowUp/Down, Enter, Escape.
+     *
+     * @param {KeyboardEvent} ev
+     */
     const handleKeyDown = useCallback(
         async (ev) => {
             if (mode === "autocomplete") {
@@ -250,6 +302,12 @@ export function useSmartSelect(opts = {}) {
         [mode, suggestions, highlightIndex, applySelection, query]
     );
 
+    /**
+     * handleBlur(ev)
+     * - Hides suggestions after a small delay so suggestion mouse clicks can register.
+     *
+     * @param {Event} ev
+     */
     const handleBlur = useCallback(
         (ev) => {
             // small delay to allow suggestion mouse clicks to register

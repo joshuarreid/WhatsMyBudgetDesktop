@@ -8,6 +8,11 @@
  *
  * NOTE: SmartSelect.jsx is expected to live next to this hook (same folder) for the
  * relative import below. Adjust import path if you place SmartSelect elsewhere.
+ *
+ * This file follows Bulletproof React conventions:
+ * - Hook is logic-only: returns primitives, refs, handlers, and state (no JSX).
+ * - Small helper functions are kept pure where possible.
+ * - Robust logging used for easier debugging in production.
  */
 
 const logger = {
@@ -29,6 +34,11 @@ import {
 import SmartSelect from '../components/SmartSelect';
 
 const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
+/**
+ * CRITICALITY_OPTIONS
+ * - Read from config at module load time to avoid repetitive reads during renders.
+ * - Falls back to DEFAULT_CRITICALITY_OPTIONS if not available.
+ */
 const CRITICALITY_OPTIONS = (() => {
     try {
         const cfg = getConfig('criticalityOptions');
@@ -42,6 +52,32 @@ const CRITICALITY_OPTIONS = (() => {
 })();
 const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
 
+/**
+ * useTransactionRow
+ *
+ * Hook that encapsulates per-row behavior and state for TransactionRow components.
+ *
+ * Inputs:
+ *  - tx: the transaction object (may be server or local temp)
+ *  - editing: global editing descriptor (id, mode, field)
+ *  - editValueRef: ref used for field-level editing flows
+ *  - onSaveEdit/onSaveRow/onCancelRow: callbacks provided by parent to persist data
+ *  - toInputDate: helper to normalize ISO date to yyyy-mm-dd for <input type="date" />
+ *  - setEditing/startEditingRow/onEditKey: editing controls from parent
+ *
+ * Returns:
+ *  - Boolean helpers: isFieldEditing, isRowEditing, isSaving
+ *  - Draft state & update helper for row-edit mode
+ *  - Input refs for SmartSelect instances
+ *  - Suggestion helpers (filter functions + show/hide)
+ *  - Selection and blur handlers for both field and row editing flows
+ *  - Save/cancel/start editing methods for row-level flows
+ *
+ * The hook intentionally returns fine-grained handlers to make the UI component
+ * (TransactionRow.jsx) small and testable.
+ *
+ * @param {Object} params hook parameters (see above)
+ */
 export function useTransactionRow({
                                       tx,
                                       editing,
@@ -146,11 +182,23 @@ export function useTransactionRow({
         }
     }, [tx, editing, isSaving]);
 
+    /**
+     * updateDraft(field, value)
+     * - Local helper used while in row-edit mode to update the draft object.
+     *
+     * @param {string} field
+     * @param {any} value
+     */
     const updateDraft = (field, value) => {
         setDraft((prev) => ({ ...prev, [field]: value }));
     };
 
     // --- Filtering helpers (still exposed if callers want them) ---
+    /**
+     * filterCategories(q)
+     * - Basic substring filter for categories with an 8-item limit.
+     * @param {string} q
+     */
     const filterCategories = (q) => {
         if (!q) return ALL_CATEGORIES.slice(0, 8);
         const lower = String(q).toLowerCase();
@@ -159,6 +207,10 @@ export function useTransactionRow({
             .slice(0, 8);
     };
 
+    /**
+     * filterAccounts(q) - filter helper for account suggestions
+     * @param {string} q
+     */
     const filterAccounts = (q) => {
         if (!q) return ALL_ACCOUNTS.slice(0, 8);
         const lower = String(q).toLowerCase();
@@ -167,6 +219,10 @@ export function useTransactionRow({
             .slice(0, 8);
     };
 
+    /**
+     * filterPaymentMethods(q) - filter helper for payment method suggestions
+     * @param {string} q
+     */
     const filterPaymentMethods = (q) => {
         if (!q) return ALL_PAYMENT_METHODS.slice(0, 8);
         const lower = String(q).toLowerCase();
@@ -189,6 +245,14 @@ export function useTransactionRow({
     };
 
     // --- Selection handlers for row-level suggestion selection ---
+
+    /**
+     * handleSelectCategoryForRow(value)
+     * - Called when a category suggestion is picked in row-edit mode.
+     * - Updates draft.category and applies mapped criticality if present.
+     *
+     * @param {string} value
+     */
     const handleSelectCategoryForRow = (value) => {
         try {
             logger.info('category suggestion selected (row)', { txId: tx.id, category: value });
@@ -206,6 +270,13 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handleSelectAccountForRow(value)
+     * - Called when an account suggestion is picked in row-edit mode.
+     * - Updates draft.account and applies default payment method if available.
+     *
+     * @param {string} value
+     */
     const handleSelectAccountForRow = (value) => {
         try {
             logger.info('account suggestion selected (row)', { txId: tx.id, account: value });
@@ -223,6 +294,12 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handleSelectPaymentForRow(value)
+     * - Called when a payment method suggestion is picked in row-edit mode.
+     *
+     * @param {string} value
+     */
     const handleSelectPaymentForRow = (value) => {
         try {
             logger.info('payment suggestion selected (row)', { txId: tx.id, paymentMethod: value });
@@ -236,6 +313,13 @@ export function useTransactionRow({
     };
 
     // --- Field-edit selection handlers (persist immediately) ---
+
+    /**
+     * handleSelectCategoryForFieldEdit(value)
+     * - Field-edit flow for category: persist immediately and then apply mapped criticality.
+     *
+     * @param {string} value
+     */
     const handleSelectCategoryForFieldEdit = async (value) => {
         try {
             logger.info('category suggestion selected (field)', { txId: tx.id, category: value });
@@ -255,6 +339,12 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handleSelectAccountForFieldEdit(value)
+     * - Field-edit flow for account: persist immediately and then apply default payment method if available.
+     *
+     * @param {string} value
+     */
     const handleSelectAccountForFieldEdit = async (value) => {
         try {
             logger.info('account suggestion selected (field)', { txId: tx.id, account: value });
@@ -274,6 +364,12 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handleSelectPaymentForFieldEdit(value)
+     * - Field-edit flow for paymentMethod: persist immediately.
+     *
+     * @param {string} value
+     */
     const handleSelectPaymentForFieldEdit = async (value) => {
         try {
             logger.info('payment suggestion selected (field)', { txId: tx.id, paymentMethod: value });
@@ -289,6 +385,10 @@ export function useTransactionRow({
     };
 
     // --- Blur handlers for row-level editing (apply mapped criticality for category) ---
+    /**
+     * handleCategoryBlurForRow()
+     * - On blur of category in row-edit mode derive & apply mapped criticality if applicable.
+     */
     const handleCategoryBlurForRow = () => {
         setTimeout(() => {
             try {
@@ -307,6 +407,10 @@ export function useTransactionRow({
         }, 150);
     };
 
+    /**
+     * handleAccountBlurForRow()
+     * - On blur of account in row-edit mode derive & apply default paymentMethod if applicable.
+     */
     const handleAccountBlurForRow = () => {
         setTimeout(() => {
             try {
@@ -325,6 +429,10 @@ export function useTransactionRow({
         }, 150);
     };
 
+    /**
+     * handlePaymentBlurForRow()
+     * - Hides payment suggestions on blur (row-edit mode).
+     */
     const handlePaymentBlurForRow = () => {
         setTimeout(() => {
             try {
@@ -336,6 +444,10 @@ export function useTransactionRow({
     };
 
     // --- Field-level blur handlers to persist changes on blur (similar to category) ---
+    /**
+     * handleCategoryBlurForField()
+     * - Field-edit blur handler that persists the typed category and mapped criticality.
+     */
     const handleCategoryBlurForField = async () => {
         try {
             const val = String(editValueRef.current ?? '').trim();
@@ -358,6 +470,10 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handleAccountBlurForField()
+     * - Field-edit blur handler that persists the typed account and default paymentMethod (if any).
+     */
     const handleAccountBlurForField = async () => {
         try {
             const val = String(editValueRef.current ?? '').trim();
@@ -380,6 +496,10 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * handlePaymentBlurForField()
+     * - Field-edit blur handler that persists a typed paymentMethod.
+     */
     const handlePaymentBlurForField = async () => {
         try {
             const val = String(editValueRef.current ?? '').trim();
@@ -397,7 +517,13 @@ export function useTransactionRow({
         }
     };
 
-    // Save whole-row (explicit Save). addAnother = boolean indicates "save and add another"
+    /**
+     * onSaveRowClick(addAnother = false)
+     * - Normalizes draft values and delegates to onSaveRow callback provided by parent.
+     * - If addAnother is true and the row is a new row, the parent may create another temp row.
+     *
+     * @param {boolean} addAnother
+     */
     const onSaveRowClick = (addAnother = false) => {
         const normalized = { ...draft };
         if (normalized.transactionDate && normalized.transactionDate.length === 10) {
@@ -413,6 +539,10 @@ export function useTransactionRow({
         onSaveRow(tx.id, normalized, addAnother);
     };
 
+    /**
+     * onCancelRowLocal()
+     * - Calls parent's onCancelRow if provided, otherwise reverts local draft and clears editing.
+     */
     const onCancelRowLocal = () => {
         try {
             if (onCancelRow && typeof onCancelRow === 'function') {
@@ -429,6 +559,10 @@ export function useTransactionRow({
         }
     };
 
+    /**
+     * onStartRowEdit()
+     * - Convenience wrapper to request the parent to start row editing for this tx id.
+     */
     const onStartRowEdit = () => {
         startEditingRow(tx.id);
         setDraft({ ...tx });
