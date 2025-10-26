@@ -1,5 +1,4 @@
 /**
- * Updated useTransactionRow
  *
  * Replaces the repetitive inline field renderers for category/account/payment with the
  * SmartSelect component for both field-level and row-level flows. The hook still
@@ -28,12 +27,21 @@ import {
     get as getConfig,
     getAccounts,
     getPaymentMethods,
-    getDefaultPaymentMethodForAccount
+    getDefaultPaymentMethodForAccount,
 } from '../../../config/config.ts';
 
 import SmartSelect from '../components/SmartSelect';
 
-const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
+// constants centralized for scalability & debugging
+import {
+    DEFAULT_CRITICALITY_OPTIONS,
+    DEFAULT_CRITICALITY,
+    CONFIG_KEYS,
+    MAX_AUTOCOMPLETE_SUGGESTIONS,
+    BLUR_DELAY_MS,
+    INPUT_DATE_LENGTH,
+} from '../utils/constants';
+
 /**
  * CRITICALITY_OPTIONS
  * - Read from config at module load time to avoid repetitive reads during renders.
@@ -41,7 +49,7 @@ const DEFAULT_CRITICALITY_OPTIONS = ["Essential", "Nonessential"];
  */
 const CRITICALITY_OPTIONS = (() => {
     try {
-        const cfg = getConfig('criticalityOptions');
+        const cfg = getConfig(CONFIG_KEYS.CRITICALITY_OPTIONS);
         if (Array.isArray(cfg) && cfg.length > 0) return cfg.map(String);
         logger.info('useTransactionRow: criticalityOptions not found; using defaults', { fallback: DEFAULT_CRITICALITY_OPTIONS });
         return DEFAULT_CRITICALITY_OPTIONS;
@@ -50,7 +58,8 @@ const CRITICALITY_OPTIONS = (() => {
         return DEFAULT_CRITICALITY_OPTIONS;
     }
 })();
-const DEFAULT_CRITICALITY = CRITICALITY_OPTIONS[0] || "Essential";
+
+const DEFAULT_CRIT = DEFAULT_CRITICALITY || (CRITICALITY_OPTIONS[0] || "Essential");
 
 /**
  * useTransactionRow
@@ -159,7 +168,7 @@ export function useTransactionRow({
     useEffect(() => {
         if (!isRowEditing) {
             if (tx?.__isNew) {
-                const derivedCrit = getCriticalityForCategory(tx.category) || DEFAULT_CRITICALITY;
+                const derivedCrit = getCriticalityForCategory(tx.category) || DEFAULT_CRIT;
                 const derivedPM = getDefaultPaymentMethodForAccount(tx.account) || tx.paymentMethod || '';
                 setDraft({ ...tx, criticality: derivedCrit, paymentMethod: derivedPM });
             } else {
@@ -196,15 +205,13 @@ export function useTransactionRow({
     // --- Filtering helpers (still exposed if callers want them) ---
     /**
      * filterCategories(q)
-     * - Basic substring filter for categories with an 8-item limit.
+     * - Basic substring filter for categories with a MAX_AUTOCOMPLETE_SUGGESTIONS limit.
      * @param {string} q
      */
     const filterCategories = (q) => {
-        if (!q) return ALL_CATEGORIES.slice(0, 8);
+        if (!q) return ALL_CATEGORIES.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
         const lower = String(q).toLowerCase();
-        return ALL_CATEGORIES
-            .filter((c) => String(c).toLowerCase().includes(lower))
-            .slice(0, 8);
+        return ALL_CATEGORIES.filter((c) => String(c).toLowerCase().includes(lower)).slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
     };
 
     /**
@@ -212,11 +219,9 @@ export function useTransactionRow({
      * @param {string} q
      */
     const filterAccounts = (q) => {
-        if (!q) return ALL_ACCOUNTS.slice(0, 8);
+        if (!q) return ALL_ACCOUNTS.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
         const lower = String(q).toLowerCase();
-        return ALL_ACCOUNTS
-            .filter((a) => String(a).toLowerCase().includes(lower))
-            .slice(0, 8);
+        return ALL_ACCOUNTS.filter((a) => String(a).toLowerCase().includes(lower)).slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
     };
 
     /**
@@ -224,11 +229,9 @@ export function useTransactionRow({
      * @param {string} q
      */
     const filterPaymentMethods = (q) => {
-        if (!q) return ALL_PAYMENT_METHODS.slice(0, 8);
+        if (!q) return ALL_PAYMENT_METHODS.slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
         const lower = String(q).toLowerCase();
-        return ALL_PAYMENT_METHODS
-            .filter((p) => String(p).toLowerCase().includes(lower))
-            .slice(0, 8);
+        return ALL_PAYMENT_METHODS.filter((p) => String(p).toLowerCase().includes(lower)).slice(0, MAX_AUTOCOMPLETE_SUGGESTIONS);
     };
 
     const hideCatSuggestions = () => {
@@ -404,7 +407,7 @@ export function useTransactionRow({
             } catch (err) {
                 logger.error('handleCategoryBlurForRow failed', err);
             }
-        }, 150);
+        }, BLUR_DELAY_MS);
     };
 
     /**
@@ -426,7 +429,7 @@ export function useTransactionRow({
             } catch (err) {
                 logger.error('handleAccountBlurForRow failed', err);
             }
-        }, 150);
+        }, BLUR_DELAY_MS);
     };
 
     /**
@@ -440,7 +443,7 @@ export function useTransactionRow({
             } catch (err) {
                 logger.error('handlePaymentBlurForRow failed', err);
             }
-        }, 150);
+        }, BLUR_DELAY_MS);
     };
 
     // --- Field-level blur handlers to persist changes on blur (similar to category) ---
@@ -526,15 +529,15 @@ export function useTransactionRow({
      */
     const onSaveRowClick = (addAnother = false) => {
         const normalized = { ...draft };
-        if (normalized.transactionDate && normalized.transactionDate.length === 10) {
+        if (normalized.transactionDate && normalized.transactionDate.length === INPUT_DATE_LENGTH) {
             normalized.transactionDate = new Date(normalized.transactionDate).toISOString();
         }
         const s = normalized.criticality;
         if (s == null || String(s).trim() === '') {
-            normalized.criticality = DEFAULT_CRITICALITY;
+            normalized.criticality = DEFAULT_CRIT;
         } else {
             const exact = CRITICALITY_OPTIONS.find((o) => String(o).toLowerCase() === String(s).toLowerCase());
-            normalized.criticality = exact || DEFAULT_CRITICALITY;
+            normalized.criticality = exact || DEFAULT_CRIT;
         }
         onSaveRow(tx.id, normalized, addAnother);
     };
@@ -626,7 +629,7 @@ export function useTransactionRow({
         onStartRowEdit,
         // expose config-driven helpers/values for the component
         CRITICALITY_OPTIONS,
-        DEFAULT_CRITICALITY,
+        DEFAULT_CRIT,
         getCriticalityForCategory,
         getDefaultPaymentMethodForAccount,
     };
