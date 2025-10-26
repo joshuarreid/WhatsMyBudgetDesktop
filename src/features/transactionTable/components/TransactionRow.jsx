@@ -1,6 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { useTransactionRow } from "../useTransactionRow";
+import SmartSelect from "./SmartSelect";
 
 const logger = {
     info: (...args) => console.log('[TransactionRow]', ...args),
@@ -153,96 +154,25 @@ export default function TransactionRow({
                 {isFieldEditing("category") ? (
                     renderFieldInput("category")
                 ) : isRowEditing ? (
-                    IS_CATEGORY_DROPDOWN ? (
-                        <select
-                            className="tt-input"
-                            value={draft.category || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                updateDraft('category', val);
-                                const mapped = getCriticalityForCategory(val);
-                                if (mapped) updateDraft('criticality', mapped);
-                            }}
-                            onBlur={handleCategoryBlurForRow}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') onSaveRowClick();
-                                if (e.key === 'Escape') onCancelRowLocal();
-                                if (e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                }
-                                if (e.key === 'ArrowUp') {
-                                    e.preventDefault();
-                                }
-                            }}
-                        >
-                            <option value="">{/* allow empty */}</option>
-                            {ALL_CATEGORIES.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
-                    ) : (
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                ref={categoryInputRef}
-                                className="tt-input"
-                                value={draft.category || ''}
-                                onChange={(e) => {
-                                    updateDraft('category', e.target.value);
-                                }}
-                                onBlur={handleCategoryBlurForRow}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') onSaveRowClick();
-                                    if (e.key === 'Escape') onCancelRowLocal();
-                                    if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'Tab') {
-                                        // let blur handler run
-                                    }
-                                }}
-                            />
-                            {catShowSuggestions && catSuggestions.length > 0 && (
-                                <div
-                                    role="listbox"
-                                    aria-label="Category suggestions"
-                                    style={{
-                                        position: 'absolute',
-                                        zIndex: 2000,
-                                        background: 'white',
-                                        border: '1px solid rgba(0,0,0,0.12)',
-                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                                        width: '100%',
-                                        maxHeight: 220,
-                                        overflowY: 'auto',
-                                        marginTop: 6,
-                                    }}
-                                >
-                                    {catSuggestions.map((opt, idx) => (
-                                        <div
-                                            key={opt}
-                                            role="option"
-                                            aria-selected={idx === catHighlightIndex}
-                                            onMouseDown={(ev) => {
-                                                ev.preventDefault();
-                                                handleSelectCategoryForRow(opt);
-                                            }}
-                                            onMouseEnter={() => { /* highlight handled inside hook state */ }}
-                                            style={{
-                                                padding: '6px 8px',
-                                                background: idx === catHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
-                                                cursor: 'pointer',
-                                            }}
-                                        >
-                                            {opt}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )
+                    <SmartSelect
+                        name="category"
+                        mode={IS_CATEGORY_DROPDOWN ? "dropdown" : "autocomplete"}
+                        options={ALL_CATEGORIES}
+                        allOptions={ALL_CATEGORIES}
+                        value={draft.category || ''}
+                        inputRef={categoryInputRef}
+                        onChange={(v) => {
+                            updateDraft('category', v);
+                            const mapped = getCriticalityForCategory(v);
+                            if (mapped) updateDraft('criticality', mapped);
+                        }}
+                        onSelectImmediate={handleSelectCategoryForRow}
+                        onBlur={handleCategoryBlurForRow}
+                        getMappedDefault={getCriticalityForCategory}
+                        applyMappedDefault={(mapped) => {
+                            if (mapped) updateDraft('criticality', mapped);
+                        }}
+                    />
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "category")}>{tx.category}</div>
                 )}
@@ -298,96 +228,25 @@ export default function TransactionRow({
                 {isFieldEditing("account") ? (
                     renderFieldInput("account")
                 ) : isRowEditing ? (
-                    IS_ACCOUNT_DROPDOWN ? (
-                        <select
-                            className="tt-input"
-                            value={draft.account || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                updateDraft('account', val);
-                                const defaultPm = getDefaultPaymentMethodForAccount(val);
-                                if (defaultPm) updateDraft('paymentMethod', defaultPm);
-                            }}
-                            onBlur={handleAccountBlurForRow}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') onSaveRowClick();
-                                if (e.key === 'Escape') onCancelRowLocal();
-                                if (e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                }
-                                if (e.key === 'ArrowUp') {
-                                    e.preventDefault();
-                                }
-                            }}
-                        >
-                            <option value="">{/* allow empty */}</option>
-                            {ALL_ACCOUNTS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
-                    ) : (
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                ref={accountInputRef}
-                                className="tt-input"
-                                value={draft.account || ''}
-                                onChange={(e) => {
-                                    updateDraft('account', e.target.value);
-                                }}
-                                onBlur={handleAccountBlurForRow}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') onSaveRowClick();
-                                    if (e.key === 'Escape') onCancelRowLocal();
-                                    if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'Tab') {
-                                        // let blur handler run
-                                    }
-                                }}
-                            />
-                            {accShowSuggestions && accSuggestions.length > 0 && (
-                                <div
-                                    role="listbox"
-                                    aria-label="Account suggestions"
-                                    style={{
-                                        position: 'absolute',
-                                        zIndex: 2000,
-                                        background: 'white',
-                                        border: '1px solid rgba(0,0,0,0.12)',
-                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                                        width: '100%',
-                                        maxHeight: 220,
-                                        overflowY: 'auto',
-                                        marginTop: 6,
-                                    }}
-                                >
-                                    {accSuggestions.map((opt, idx) => (
-                                        <div
-                                            key={opt}
-                                            role="option"
-                                            aria-selected={idx === accHighlightIndex}
-                                            onMouseDown={(ev) => {
-                                                ev.preventDefault();
-                                                handleSelectAccountForRow(opt);
-                                            }}
-                                            onMouseEnter={() => {}}
-                                            style={{
-                                                padding: '6px 8px',
-                                                background: idx === accHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
-                                                cursor: 'pointer',
-                                            }}
-                                        >
-                                            {opt}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )
+                    <SmartSelect
+                        name="account"
+                        mode={IS_ACCOUNT_DROPDOWN ? "dropdown" : "autocomplete"}
+                        options={ALL_ACCOUNTS}
+                        allOptions={ALL_ACCOUNTS}
+                        value={draft.account || ''}
+                        inputRef={accountInputRef}
+                        onChange={(v) => {
+                            updateDraft('account', v);
+                            const defaultPm = getDefaultPaymentMethodForAccount(v);
+                            if (defaultPm) updateDraft('paymentMethod', defaultPm);
+                        }}
+                        onSelectImmediate={handleSelectAccountForRow}
+                        onBlur={handleAccountBlurForRow}
+                        getMappedDefault={getDefaultPaymentMethodForAccount}
+                        applyMappedDefault={(mapped) => {
+                            if (mapped) updateDraft('paymentMethod', mapped);
+                        }}
+                    />
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "account")}>{tx.account}</div>
                 )}
@@ -398,94 +257,17 @@ export default function TransactionRow({
                 {isFieldEditing("paymentMethod") ? (
                     renderFieldInput("paymentMethod")
                 ) : isRowEditing ? (
-                    IS_PAYMENT_DROPDOWN ? (
-                        <select
-                            className="tt-input"
-                            value={draft.paymentMethod || ''}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                updateDraft('paymentMethod', val);
-                            }}
-                            onBlur={handlePaymentBlurForRow}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') onSaveRowClick();
-                                if (e.key === 'Escape') onCancelRowLocal();
-                                if (e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                }
-                                if (e.key === 'ArrowUp') {
-                                    e.preventDefault();
-                                }
-                            }}
-                        >
-                            <option value="">{/* allow empty */}</option>
-                            {ALL_PAYMENT_METHODS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
-                    ) : (
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                ref={paymentInputRef}
-                                className="tt-input"
-                                value={draft.paymentMethod || ''}
-                                onChange={(e) => {
-                                    updateDraft('paymentMethod', e.target.value);
-                                }}
-                                onBlur={handlePaymentBlurForRow}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') onSaveRowClick();
-                                    if (e.key === 'Escape') onCancelRowLocal();
-                                    if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                    }
-                                    if (e.key === 'Tab') {
-                                        // let blur handler run
-                                    }
-                                }}
-                            />
-                            {pmShowSuggestions && pmSuggestions.length > 0 && (
-                                <div
-                                    role="listbox"
-                                    aria-label="Payment method suggestions"
-                                    style={{
-                                        position: 'absolute',
-                                        zIndex: 2000,
-                                        background: 'white',
-                                        border: '1px solid rgba(0,0,0,0.12)',
-                                        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                                        width: '100%',
-                                        maxHeight: 220,
-                                        overflowY: 'auto',
-                                        marginTop: 6,
-                                    }}
-                                >
-                                    {pmSuggestions.map((opt, idx) => (
-                                        <div
-                                            key={opt}
-                                            role="option"
-                                            aria-selected={idx === pmHighlightIndex}
-                                            onMouseDown={(ev) => {
-                                                ev.preventDefault();
-                                                handleSelectPaymentForRow(opt);
-                                            }}
-                                            onMouseEnter={() => {}}
-                                            style={{
-                                                padding: '6px 8px',
-                                                background: idx === pmHighlightIndex ? 'rgba(0,0,0,0.04)' : 'white',
-                                                cursor: 'pointer',
-                                            }}
-                                        >
-                                            {opt}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )
+                    <SmartSelect
+                        name="paymentMethod"
+                        mode={IS_PAYMENT_DROPDOWN ? "dropdown" : "autocomplete"}
+                        options={ALL_PAYMENT_METHODS}
+                        allOptions={ALL_PAYMENT_METHODS}
+                        value={draft.paymentMethod || ''}
+                        inputRef={paymentInputRef}
+                        onChange={(v) => updateDraft('paymentMethod', v)}
+                        onSelectImmediate={handleSelectPaymentForRow}
+                        onBlur={handlePaymentBlurForRow}
+                    />
                 ) : (
                     <div onDoubleClick={() => onCellDoubleClick(tx, "paymentMethod")}>{tx.paymentMethod}</div>
                 )}
