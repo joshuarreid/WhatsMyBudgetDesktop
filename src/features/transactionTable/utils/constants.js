@@ -14,53 +14,47 @@ const logger = {
     error: (...args) => console.error('[constants]', ...args),
 };
 
-/* ---------- Defaults ---------- */
-
-// Criticality options fallback (use configuration where possible)
-export const DEFAULT_CRITICALITY_OPTIONS = ['Essential', 'Nonessential'];
-export const DEFAULT_CRITICALITY = DEFAULT_CRITICALITY_OPTIONS[0];
-
-// Statement period server-backed cache key
-export const STATEMENT_PERIOD_CACHE_KEY = 'currentStatementPeriod';
-
-// How many months before/after "now" we generate by default (i = -prev .. +forward)
-export const STATEMENT_PERIOD_LOOKBACK = 1;
-export const STATEMENT_PERIOD_FORWARD = 5;
-
-// Autocomplete / suggestion behaviour
-export const MAX_AUTOCOMPLETE_SUGGESTIONS = 8;
-
-// Presentation defaults
-export const DEFAULT_LOCALE = 'en-US';
-export const DEFAULT_CURRENCY = 'USD';
-
-/* ---------- SmartSelect-specific UI constants ---------- */
-
-// Default SmartSelect mode
-export const DEFAULT_SMARTSELECT_MODE = 'autocomplete';
-
-// Small delay used in blur handlers to allow suggestion clicks to register.
-// Keep this consistent across components that use similar onBlur + suggestion lists.
-export const BLUR_DELAY_MS = 120;
-
-// Suggestion popup styling defaults (kept here so they can be tuned centrally)
-export const SUGGESTION_POPUP_ZINDEX = 2000;
-export const SUGGESTION_POPUP_MAX_HEIGHT = 220; // px
+/* ---------- Presentation / UI ---------- */
+// Inline error color used for field-level error messages
+export const INLINE_ERROR_COLOR = '#ff8a8a';
+// Small green used for a saving indicator
+export const SAVING_TEXT_COLOR = '#9be3a7';
 
 // Default input classname for lightweight theming/overrides
 export const DEFAULT_INPUT_CLASS = 'tt-input';
 
-/* ---------- Helpers ---------- */
+/* ---------- Locale / Currency ---------- */
+export const DEFAULT_LOCALE = 'en-US';
+export const DEFAULT_CURRENCY = 'USD';
 
+/* ---------- Criticality & SmartSelect ---------- */
+// Criticality options fallback (use configuration where possible)
+export const DEFAULT_CRITICALITY_OPTIONS = ['Essential', 'Nonessential'];
+export const DEFAULT_CRITICALITY = DEFAULT_CRITICALITY_OPTIONS[0];
+
+// Default SmartSelect mode
+export const DEFAULT_SMARTSELECT_MODE = 'autocomplete';
+
+/* ---------- Statement Period (defaults) ---------- */
+// Statement period server-backed cache key
+export const STATEMENT_PERIOD_CACHE_KEY = 'currentStatementPeriod';
+// How many months before/after "now" we generate by default (i = -prev .. +forward)
+export const STATEMENT_PERIOD_LOOKBACK = 1;
+export const STATEMENT_PERIOD_FORWARD = 5;
+
+/* ---------- Autocomplete / suggestion behaviour ---------- */
+export const MAX_AUTOCOMPLETE_SUGGESTIONS = 8;
+// Small delay used in blur handlers to allow suggestion clicks to register.
+export const BLUR_DELAY_MS = 120;
+// Suggestion popup styling defaults (kept here so they can be tuned centrally)
+export const SUGGESTION_POPUP_ZINDEX = 2000;
+export const SUGGESTION_POPUP_MAX_HEIGHT = 220; // px
+
+/* ---------- Helpers ---------- */
 /**
  * Normalizes a criticality value into an exact option from `options`.
  * - Case-insensitive match preferred.
  * - Falls back to defaultOption if no match found.
- *
- * @param {string} val
- * @param {string[]} options
- * @param {string} defaultOption
- * @returns {string}
  */
 export function normalizeCriticality(val, options = DEFAULT_CRITICALITY_OPTIONS, defaultOption = DEFAULT_CRITICALITY) {
     try {
@@ -79,9 +73,6 @@ export function normalizeCriticality(val, options = DEFAULT_CRITICALITY_OPTIONS,
  * Convert a Date instance to the server value format for statement periods:
  * - label: MONTHNAME in ALL CAPS (e.g., OCTOBER)
  * - value: MONTHNAMEALLCAPS + YEAR (e.g., OCTOBER2025)
- *
- * @param {Date} date
- * @returns {{ label: string, value: string }}
  */
 export function toStatementPeriodValue(date = new Date()) {
     try {
@@ -103,9 +94,6 @@ export function toStatementPeriodValue(date = new Date()) {
 /**
  * Parse server-stored statement period string (e.g. "OCTOBER2025") into { label, year }.
  * If parsing fails, returns null.
- *
- * @param {string} v
- * @returns {{ label: string, year: number } | null}
  */
 export function parseStatementPeriodValue(v) {
     try {
@@ -126,11 +114,6 @@ export function parseStatementPeriodValue(v) {
  * Generate statement period options for UI.
  * Produces an array for i = -prev .. +forward relative to `anchor` (default: now).
  * Each item: { label: 'OCTOBER', value: 'OCTOBER2025', date: Date }
- *
- * @param {Date} anchor
- * @param {number} prev
- * @param {number} forward
- * @returns {{label: string, value: string, date: Date}[]}
  */
 export function generateStatementPeriodOptions(anchor = new Date(), prev = STATEMENT_PERIOD_LOOKBACK, forward = STATEMENT_PERIOD_FORWARD) {
     try {
@@ -150,22 +133,23 @@ export function generateStatementPeriodOptions(anchor = new Date(), prev = STATE
     }
 }
 
-/* ---------- Exports (default) ---------- */
-
+/* ---------- Default export (convenience) ---------- */
 const constants = {
+    INLINE_ERROR_COLOR,
+    SAVING_TEXT_COLOR,
+    DEFAULT_INPUT_CLASS,
+    DEFAULT_LOCALE,
+    DEFAULT_CURRENCY,
     DEFAULT_CRITICALITY_OPTIONS,
     DEFAULT_CRITICALITY,
+    DEFAULT_SMARTSELECT_MODE,
     STATEMENT_PERIOD_CACHE_KEY,
     STATEMENT_PERIOD_LOOKBACK,
     STATEMENT_PERIOD_FORWARD,
     MAX_AUTOCOMPLETE_SUGGESTIONS,
-    DEFAULT_LOCALE,
-    DEFAULT_CURRENCY,
-    DEFAULT_SMARTSELECT_MODE,
     BLUR_DELAY_MS,
     SUGGESTION_POPUP_ZINDEX,
     SUGGESTION_POPUP_MAX_HEIGHT,
-    DEFAULT_INPUT_CLASS,
     normalizeCriticality,
     toStatementPeriodValue,
     parseStatementPeriodValue,
@@ -173,3 +157,4 @@ const constants = {
 };
 
 export default constants;
+

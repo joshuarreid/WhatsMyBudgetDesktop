@@ -3,6 +3,13 @@ import PropTypes from "prop-types";
 import { useTransactionRow } from "../hooks/useTransactionRow";
 import SmartSelect from "./SmartSelect";
 import TransactionRowDropdown from "./TransactionRowDropdown";
+import {
+    INLINE_ERROR_COLOR,
+    SAVING_TEXT_COLOR,
+    DEFAULT_INPUT_CLASS,
+    DEFAULT_LOCALE,
+    DEFAULT_CURRENCY,
+} from "../utils/constants";
 
 const logger = {
     info: (...args) => console.log('[TransactionRow]', ...args),
@@ -111,12 +118,12 @@ export default function TransactionRow({
                             setEditing={setEditing}
                             onEditKey={onEditKey}
                         />
-                        {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
+                        {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
                     <>
                         <input
-                            className="tt-input"
+                            className={DEFAULT_INPUT_CLASS}
                             autoFocus
                             value={draft.name || ''}
                             onChange={(e) => updateDraft('name', e.target.value)}
@@ -145,12 +152,12 @@ export default function TransactionRow({
                             setEditing={setEditing}
                             onEditKey={onEditKey}
                         />
-                        {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
+                        {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
                     </>
                 ) : isRowEditing ? (
                     <>
                         <input
-                            className="tt-input tt-input-number"
+                            className={`${DEFAULT_INPUT_CLASS} tt-input-number`}
                             type="number"
                             step="0.01"
                             value={draft.amount ?? 0}
@@ -163,7 +170,7 @@ export default function TransactionRow({
                         />
                     </>
                 ) : (
-                    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(tx.amount) || 0)
+                    new Intl.NumberFormat(DEFAULT_LOCALE, { style: "currency", currency: DEFAULT_CURRENCY }).format(Number(tx.amount) || 0)
                 )}
             </div>
 
@@ -236,7 +243,7 @@ export default function TransactionRow({
                     />
                 ) : isRowEditing ? (
                     <select
-                        className="tt-input"
+                        className={DEFAULT_INPUT_CLASS}
                         value={draft.criticality ? draft.criticality : DEFAULT_CRITICALITY}
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
@@ -268,7 +275,7 @@ export default function TransactionRow({
                     />
                 ) : isRowEditing ? (
                     <input
-                        className="tt-input"
+                        className={DEFAULT_INPUT_CLASS}
                         type="date"
                         value={draft.transactionDate ? draft.transactionDate.slice(0, 10) : ''}
                         onChange={(e) => updateDraft('transactionDate', e.target.value)}
@@ -278,7 +285,7 @@ export default function TransactionRow({
                         }}
                     />
                 ) : tx.transactionDate ? (
-                    new Date(tx.transactionDate).toLocaleDateString('en-US', { timeZone: 'UTC' })
+                    new Date(tx.transactionDate).toLocaleDateString(DEFAULT_LOCALE, { timeZone: 'UTC' })
                 ) : (
                     ""
                 )}
@@ -403,8 +410,8 @@ export default function TransactionRow({
                         </button>
                     ) : null}
 
-                    {isSaving && <span style={{ color: '#9be3a7', marginLeft: 8 }}>Saving…</span>}
-                    {inlineError && <div style={{ color: '#ff8a8a', marginTop: 6 }}>{inlineError}</div>}
+                    {isSaving && <span style={{ color: SAVING_TEXT_COLOR, marginLeft: 8 }}>Saving…</span>}
+                    {inlineError && <div style={{ color: INLINE_ERROR_COLOR, marginTop: 6 }}>{inlineError}</div>}
                 </div>
             )}
         </div>
