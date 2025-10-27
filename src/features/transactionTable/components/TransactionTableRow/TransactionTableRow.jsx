@@ -2,7 +2,7 @@ import React from "react";
 import PropTypes from "prop-types";
 import { useTransactionRow } from "../../hooks/useTransactionRow";
 import SmartSelect from "../SmartSelect/SmartSelect";
-import TransactionRowDropdown from "../TransactionRowDropdown/TransactionRowDropdown";
+import TransactionRowInput from "../TransactionRowInput/TransactionRowInput";
 
 import styles from "./TransactionRow.module.css";
 import {
@@ -184,7 +184,7 @@ export default function TransactionTableRow({
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("name") ? (
                     <>
-                        <TransactionRowDropdown
+                        <TransactionRowInput
                             field="name"
                             tx={tx}
                             value={tx.name}
@@ -218,7 +218,7 @@ export default function TransactionTableRow({
             <div className={`${styles.cell} ${styles.amount}`} title="Double click to edit" style={{ textAlign: "right" }}>
                 {isFieldEditing("amount") ? (
                     <>
-                        <TransactionRowDropdown
+                        <TransactionRowInput
                             field="amount"
                             tx={tx}
                             value={tx.amount}
@@ -251,7 +251,7 @@ export default function TransactionTableRow({
             {/* Category */}
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("category") ? (
-                    <TransactionRowDropdown
+                    <TransactionRowInput
                         field="category"
                         tx={tx}
                         value={tx.category}
@@ -303,7 +303,7 @@ export default function TransactionTableRow({
             {/* Criticality (dropdown) */}
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("criticality") ? (
-                    <TransactionRowDropdown
+                    <TransactionRowInput
                         field="criticality"
                         tx={tx}
                         value={tx.criticality}
@@ -337,7 +337,7 @@ export default function TransactionTableRow({
             {/* Date */}
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("transactionDate") ? (
-                    <TransactionRowDropdown
+                    <TransactionRowInput
                         field="transactionDate"
                         tx={tx}
                         value={tx.transactionDate}
@@ -388,7 +388,7 @@ export default function TransactionTableRow({
             {/* Account */}
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("account") ? (
-                    <TransactionRowDropdown
+                    <TransactionRowInput
                         field="account"
                         tx={tx}
                         value={tx.account}
@@ -440,7 +440,7 @@ export default function TransactionTableRow({
             {/* Payment Method */}
             <div className={styles.cell} title="Double click to edit">
                 {isFieldEditing("paymentMethod") ? (
-                    <TransactionRowDropdown
+                    <TransactionRowInput
                         field="paymentMethod"
                         tx={tx}
                         value={tx.paymentMethod}

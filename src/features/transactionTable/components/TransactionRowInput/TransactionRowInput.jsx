@@ -6,18 +6,18 @@ import MoneyInput from "../../../../components/MoneyInput/MoneyInput";
 
 
 const logger = {
-    info: (...args) => console.log("[TransactionRowDropdown]", ...args),
-    error: (...args) => console.error("[TransactionRowDropdown]", ...args),
+    info: (...args) => console.log("[TransactionRowInput]", ...args),
+    error: (...args) => console.error("[TransactionRowInput]", ...args),
 };
 
 /**
- * TransactionRowDropdown
+ * TransactionRowInput
  *
  * Presentational component for field-level editing inputs.
  * - Keeps logic-free; behavior provided via props.
  * - Uses a CSS module for scoped styles; merges with global input class for incremental migration.
  */
-export default function TransactionRowDropdown({
+export default function TransactionRowInput({
                                                    field,
                                                    tx,
                                                    value,
@@ -158,7 +158,7 @@ export default function TransactionRowDropdown({
     );
 }
 
-TransactionRowDropdown.propTypes = {
+TransactionRowInput.propTypes = {
     field: PropTypes.string.isRequired,
     tx: PropTypes.object.isRequired,
     value: PropTypes.any,

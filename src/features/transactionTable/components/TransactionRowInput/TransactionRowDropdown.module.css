@@ -1,4 +1,4 @@
-/* Scoped styles for TransactionRowDropdown
+/* Scoped styles for TransactionRowInput
  *
  * - Co-locate visual rules for field-level inputs used during editing (amount, date, selects, SmartSelect).
  * - Keep class names small and focused. Merge with global DEFAULT_INPUT_CLASS for incremental migration.
