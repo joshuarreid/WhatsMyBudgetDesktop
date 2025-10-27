@@ -5,25 +5,12 @@
  * selection application and blur handling) so the SmartSelect component can remain
  * a small presentational component that consumes this hook.
  *
- * Usage (example):
- *  const smart = useSmartSelect({
- *    name: 'category',
- *    value,
- *    allOptions,
- *    onChange: (v) => updateDraft(v),
- *    onSelectImmediate: async (v) => await saveField(v),
- *    getMappedDefault,
- *    applyMappedDefault,
- *  });
+ * Change: removed the mount-time auto-application of mapped defaults. Mapped defaults
+ * are now applied only when a user explicitly selects a value (applySelection), which
+ * matches the requested behaviour: leave fields blank by default, apply mapping only
+ * when user selects a category.
  *
- *  // In component:
- *  <input ref={smart.internalRef} value={smart.query} onChange={smart.handleInputChange} ... />
- *  // render suggestions with smart.suggestions, smart.highlightIndex, smart.handleSuggestionMouseDown
- *
- * Principles:
- * - Keep side-effects local and testable.
- * - Expose only primitives and handlers (no JSX).
- * - Use callbacks and refs to keep stable identities for consumers.
+ * @module useSmartSelect
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,38 +27,23 @@ const logger = {
 };
 
 /**
- * @typedef {Object} UseSmartSelectOptions
- * @property {string} name - Field name used for aria labels and logging.
- * @property {'dropdown'|'autocomplete'} [mode] - Presentation mode; defaults to DEFAULT_SMARTSELECT_MODE.
- * @property {string[]} [options] - Options used for native select dropdown mode.
- * @property {string[]} [allOptions] - Options used for autocomplete filtering (alias of options).
- * @property {string} [value] - Controlled value for the input/select.
- * @property {(val:string)=>void} [onChange] - Controlled onChange handler (row editing flow).
- * @property {(val:string)=>Promise<void>|void} [onSelectImmediate] - Async handler for immediate persistence (field editing flow).
- * @property {React.RefObject} [inputRef] - Optional ref forwarded to the input element.
- * @property {(ev:Event)=>void} [onBlur] - Optional onBlur callback invoked after suggestions are hidden.
- * @property {(val:string)=>any} [getMappedDefault] - Optional mapper to derive another field (e.g., category -> criticality).
- * @property {(mapped)=>any} [applyMappedDefault] - Function that applies the mapped default (updateDraft or persistence).
- * @property {number} [maxSuggestions] - Max number of suggestions to show (defaults to MAX_AUTOCOMPLETE_SUGGESTIONS).
- * @property {number} [blurDelayMs] - Milliseconds to delay hiding suggestions on blur (defaults to BLUR_DELAY_MS).
- */
-
-/**
  * useSmartSelect
  *
- * Hook that provides all state and handlers required by a SmartSelect component.
- *
- * Returns an object containing:
- * - refs & state: internalRef, query, suggestions, showSuggestions, highlightIndex
- * - setters for advanced usage: setQuery, setSuggestions, setShowSuggestions, setHighlightIndex
- * - core helpers: filter, applySelection
- * - event handlers: handleNativeSelectChange, handleInputChange, handleSuggestionMouseDown, handleKeyDown, handleBlur
- * - meta: name, mode, placeholder, className
- *
- * The hook intentionally keeps behavior-only logic here so the presentational SmartSelect
- * component can remain thin and focused on markup/styling.
- *
- * @param {UseSmartSelectOptions} [opts={}] options object
+ * @param {Object} opts
+ * @param {string} opts.name
+ * @param {'dropdown'|'autocomplete'} [opts.mode]
+ * @param {string[]} [opts.options]
+ * @param {string[]} [opts.allOptions]
+ * @param {string} [opts.value]
+ * @param {(val:string)=>void} [opts.onChange]
+ * @param {(val:string)=>Promise<void>|void} [opts.onSelectImmediate]
+ * @param {React.RefObject} [opts.inputRef]
+ * @param {(ev:Event)=>void} [opts.onBlur]
+ * @param {string} [opts.placeholder]
+ * @param {(val:string)=>any} [opts.getMappedDefault]
+ * @param {(mapped)=>any} [opts.applyMappedDefault]
+ * @param {number} [opts.maxSuggestions]
+ * @param {number} [opts.blurDelayMs]
  * @returns {Object} API consumed by SmartSelect component
  */
 export function useSmartSelect(opts = {}) {
@@ -110,28 +82,15 @@ export function useSmartSelect(opts = {}) {
         }
     }, [value]);
 
-    // On mount: if value empty and there's a mapper, try to derive & apply a mapped default
-    useEffect(() => {
-        try {
-            if ((value == null || String(value).trim() === "") && typeof getMappedDefault === "function") {
-                const derived = getMappedDefault(value);
-                if (derived && typeof applyMappedDefault === "function") {
-                    logger.info("derived mapped default on mount", { name, derived });
-                    applyMappedDefault(derived);
-                }
-            }
-        } catch (err) {
-            logger.error("applyMappedDefault on mount failed", err);
-        }
-    }, []); // run only once on mount
+    // NOTE:
+    // We intentionally DO NOT auto-apply mapped defaults on mount when value is empty.
+    // This prevents fields like "criticality" from being filled without explicit user action.
+    // Mapped defaults will be applied only via applySelection when the user selects a value.
 
     /**
      * filter
-     * - Filters the given allOptions by substring match and returns at most maxSuggestions items.
-     * - Cheap operation; no heavy memoization required for small option sets.
-     *
-     * @param {string} q - query string
-     * @returns {string[]} filtered suggestions
+     * @param {string} q
+     * @returns {string[]}
      */
     const filter = useCallback(
         (q) => {
@@ -145,10 +104,9 @@ export function useSmartSelect(opts = {}) {
 
     /**
      * applySelection
-     * - Centralized selection handler invoked by clicks, keyboard enter, or native select changes.
-     * - Calls onChange (controlled) and/or onSelectImmediate (persist) and applies any mapped defaults.
+     * - Invoked when the user selects a suggestion or presses Enter.
      *
-     * @param {string} val - selected value
+     * @param {string} val
      */
     const applySelection = useCallback(
         async (val) => {
@@ -159,7 +117,6 @@ export function useSmartSelect(opts = {}) {
                     try {
                         onChange(val);
                     } catch (err) {
-                        // do not throw — log and continue to allow onSelectImmediate to run
                         logger.error("onChange handler threw", err);
                     }
                 }
@@ -170,7 +127,6 @@ export function useSmartSelect(opts = {}) {
                         await onSelectImmediate(val);
                     } catch (err) {
                         logger.error("onSelectImmediate failed", err);
-                        // rethrow to signal caller if they need it (we swallow below)
                         throw err;
                     }
                 }
@@ -202,14 +158,6 @@ export function useSmartSelect(opts = {}) {
         [name, onChange, onSelectImmediate, getMappedDefault, applyMappedDefault, internalRef]
     );
 
-    // ---- Event handlers exposed to the component ----
-
-    /**
-     * handleNativeSelectChange(ev)
-     * - Handler for native <select> change events. Updates query and applies selection.
-     *
-     * @param {Event} ev
-     */
     const handleNativeSelectChange = useCallback(
         async (ev) => {
             const val = ev.target.value;
@@ -217,18 +165,12 @@ export function useSmartSelect(opts = {}) {
             try {
                 await applySelection(val);
             } catch (err) {
-                // already logged in applySelection
+                // logged above
             }
         },
         [applySelection]
     );
 
-    /**
-     * handleInputChange(ev)
-     * - Handler for autocomplete input changes. Updates query and suggestions.
-     *
-     * @param {Event} ev
-     */
     const handleInputChange = useCallback(
         (ev) => {
             const v = ev.target.value;
@@ -240,30 +182,14 @@ export function useSmartSelect(opts = {}) {
         [filter]
     );
 
-    /**
-     * handleSuggestionMouseDown(ev, opt)
-     * - Used to handle suggestion clicks without losing focus (prevents blur before click).
-     *
-     * @param {Event} ev
-     * @param {string} opt
-     */
     const handleSuggestionMouseDown = useCallback(
         (ev, opt) => {
-            // Prevent blur before click resolves
             ev.preventDefault();
-            applySelection(opt).catch(() => {
-                /* errors logged in applySelection */
-            });
+            applySelection(opt).catch(() => {});
         },
         [applySelection]
     );
 
-    /**
-     * handleKeyDown(ev)
-     * - Keyboard navigation for autocomplete mode: ArrowUp/Down, Enter, Escape.
-     *
-     * @param {KeyboardEvent} ev
-     */
     const handleKeyDown = useCallback(
         async (ev) => {
             if (mode === "autocomplete") {
@@ -292,7 +218,6 @@ export function useSmartSelect(opts = {}) {
                     return;
                 }
             } else {
-                // native select: let default handler run; optionally handle Escape
                 if (ev.key === "Escape") {
                     // nothing special
                 }
@@ -301,19 +226,10 @@ export function useSmartSelect(opts = {}) {
         [mode, suggestions, highlightIndex, applySelection, query]
     );
 
-    /**
-     * handleBlur(ev)
-     * - Hides suggestions after a small delay so suggestion mouse clicks can register.
-     *
-     * @param {Event} ev
-     */
     const handleBlur = useCallback(
         (ev) => {
-            // small delay to allow suggestion mouse clicks to register
             try {
-                if (blurTimerRef.current) {
-                    clearTimeout(blurTimerRef.current);
-                }
+                if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
                 blurTimerRef.current = setTimeout(() => {
                     setShowSuggestions(false);
                     setHighlightIndex(-1);
@@ -330,7 +246,6 @@ export function useSmartSelect(opts = {}) {
         [onBlur, blurDelayMs]
     );
 
-    // cleanup pending timers on unmount
     useEffect(() => {
         return () => {
             try {
@@ -341,33 +256,23 @@ export function useSmartSelect(opts = {}) {
         };
     }, []);
 
-    // Expose a small API to allow programmatic control in tests or parents
     return {
-        // refs & state
         internalRef,
         query,
         suggestions,
         showSuggestions,
         highlightIndex,
-
-        // setters (for advanced usage)
         setQuery,
         setSuggestions,
         setShowSuggestions,
         setHighlightIndex,
-
-        // core helpers
         filter,
         applySelection,
-
-        // event handlers (bind these to inputs / select / suggestion elements)
         handleNativeSelectChange,
         handleInputChange,
         handleSuggestionMouseDown,
         handleKeyDown,
         handleBlur,
-
-        // meta
         name,
         mode,
         placeholder,

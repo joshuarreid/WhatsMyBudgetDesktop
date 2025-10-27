@@ -14,6 +14,10 @@
  * - Hook returns only data/primitives/handlers (no JSX) per Bulletproof React
  */
 
+/**
+ * @module useTransactionTable
+ */
+
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
     error: (...args) => console.error('[useTransactionTable]', ...args),
@@ -83,6 +87,7 @@ const CATEGORY_OPTIONS = (() => {
 })();
 
 const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS.length > 0;
+/* Keep DEFAULT_CATEGORY unchanged (compat). We'll initialize new rows with explicit blank category per request. */
 const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
 
 /* -------------------- hook implementation -------------------- */
@@ -100,6 +105,12 @@ const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
  * Important:
  * - The hook tries to load a server-stored statementPeriod from LocalCacheService
  *   if one isn't provided via the statementPeriod param.
+ */
+
+/**
+ * @param {Object} filters
+ * @param {string} statementPeriod
+ * @returns {Object} API surface for table UI
  */
 export function useTransactionTable(filters, statementPeriod) {
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -225,18 +236,18 @@ export function useTransactionTable(filters, statementPeriod) {
     /**
      * handleAddTransaction()
      * - Creates a local-only transaction row (not persisted yet).
-     * - Initializes fields with sensible defaults (criticality, default payment method).
+     * - Initializes fields with sensible defaults (category & criticality blank per request).
      * - Puts the table into row-edit mode for the new item.
      */
     const handleAddTransaction = useCallback(() => {
-        const defaultCrit = DEFAULT_CRITICALITY;
+        const defaultCrit = ''; // blank in UI by default
         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
         const newTx = {
             id: makeTempId(),
             name: '',
             amount: 0,
-            category: DEFAULT_CATEGORY,
-            criticality: defaultCrit,
+            category: '',           // blank per request
+            criticality: defaultCrit, // blank per request
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
             paymentMethod: defaultPM,
@@ -465,6 +476,10 @@ export function useTransactionTable(filters, statementPeriod) {
      * - Persists a whole row (create or update).
      * - Validation is performed for new rows. On success, server results replace local rows or table is refetched.
      * - The function handles optimistic local updates and ensures savingIds / saveErrors are maintained.
+     *
+     * @param {string} id
+     * @param {Object} updatedFields
+     * @param {boolean} addAnother
      */
     const handleSaveRow = useCallback(
         async (id, updatedFields = {}, addAnother = false) => {
@@ -534,8 +549,8 @@ export function useTransactionTable(filters, statementPeriod) {
                             id: makeTempId(),
                             name: '',
                             amount: 0,
-                            category: DEFAULT_CATEGORY,
-                            criticality: DEFAULT_CRITICALITY,
+                            category: '', // keep blank per requested behaviour
+                            criticality: '', // keep blank per requested behaviour
                             transactionDate: new Date().toISOString(),
                             account: filters?.account || '',
                             paymentMethod: defaultPM,

@@ -86,48 +86,38 @@ export default function TransactionTableRow({
         onEditKey,
     });
 
-    // Helper to merge the global input class with local module class for backward compatibility
     const inputClass = `${DEFAULT_INPUT_CLASS} ${styles.input}`;
 
-    // Ref for the date input so the calendar icon can focus/showPicker
     const dateInputRef = React.useRef(null);
 
     const handleOpenNativeDatePicker = (e) => {
-        // used in row-edit mode: call showPicker when available, otherwise focus
         e?.stopPropagation?.();
         if (!dateInputRef.current) {
             logger.error('date input ref missing', tx.id);
             return;
         }
-
         try {
             const el = dateInputRef.current;
-            // modern browsers expose showPicker() for date inputs
             if (typeof el.showPicker === "function") {
                 el.showPicker();
                 logger.info('showPicker invoked for tx', tx.id);
             } else {
-                // fallback: focus the input so native UI appears (or user can type)
                 el.focus();
                 logger.info('focused date input for tx', tx.id);
             }
         } catch (err) {
-            // defensive: fallback to focus and log
             logger.error('failed to open native date picker, focusing instead', tx.id, err);
             try { dateInputRef.current.focus(); } catch (_) {}
         }
     };
 
     const handleOpenEditorFromDisplayIcon = (e) => {
-        // When in display mode, clicking the small calendar icon should start editing the date
         e?.stopPropagation?.();
         logger.info('date icon clicked to start editing', tx.id);
-        // Reuse existing double-click handler behavior so upstream logic stays centralized
         try {
             onCellDoubleClick(tx, "transactionDate");
         } catch (err) {
             logger.error('onCellDoubleClick call failed', err);
-            // last resort: try startEditingRow prop if provided
             if (typeof startEditingRow === 'function') {
                 try {
                     startEditingRow(tx.id);
@@ -138,24 +128,14 @@ export default function TransactionTableRow({
         }
     };
 
-    // Row-level double-click: start full-row edit (exactly like "Add Transaction" UX but populated).
-    // Use onDoubleClickCapture to ensure this handler runs before child double-click handlers
-    // (so double-click anywhere opens full-row edit rather than field-only editors).
     const handleRowDoubleClickCapture = (e) => {
-        // If already editing this row, do nothing.
         if (isRowEditing) return;
-
-        // Prevent child double-click handlers from also firing.
         e.stopPropagation();
-
         logger.info('row double-click -> start full-row edit', { txId: tx.id });
-
         try {
-            // onStartRowEdit is provided by useTransactionRow; it should populate the draft with tx values
             if (typeof onStartRowEdit === 'function') {
                 onStartRowEdit(tx);
             } else if (typeof startEditingRow === 'function') {
-                // fallback to parent-provided startEditingRow if hook doesn't expose onStartRowEdit
                 startEditingRow(tx.id);
             } else {
                 logger.error('no row-start-edit handler available', tx.id);
@@ -318,13 +298,15 @@ export default function TransactionTableRow({
                 ) : isRowEditing ? (
                     <select
                         className={inputClass}
-                        value={draft.criticality ? draft.criticality : DEFAULT_CRITICALITY}
+                        value={draft.criticality ?? ''}
                         onChange={(e) => updateDraft('criticality', e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') onSaveRowClick();
                             if (e.key === 'Escape') onCancelRowLocal();
                         }}
                     >
+                        {/* blank option so default is empty in UI */}
+                        <option value="">{/* blank */}</option>
                         {CRITICALITY_OPTIONS.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                         ))}
@@ -353,7 +335,6 @@ export default function TransactionTableRow({
                             ref={dateInputRef}
                             className={inputClass}
                             type="date"
-                            /* use toInputDate helper to render a browser-friendly yyyy-mm-dd value */
                             value={draft.transactionDate ? toInputDate(draft.transactionDate) : ''}
                             onChange={(e) => updateDraft('transactionDate', e.target.value)}
                             onKeyDown={(e) => {
@@ -368,7 +349,6 @@ export default function TransactionTableRow({
                             onClick={handleOpenNativeDatePicker}
                             title="Open calendar"
                         >
-                            {/* Calendar SVG (keeps styling via .calendarIcon) */}
                             <svg className={styles.calendarIcon} viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M7 11h5v5H7z" fill="currentColor" opacity="0.14"/>
                                 <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14l.002 11H5z" fill="currentColor"/>
@@ -475,7 +455,6 @@ export default function TransactionTableRow({
                 )}
             </div>
 
-            {/* Row-level controls that span across the data columns (appears underneath inputs) */}
             {isRowEditing && (
                 <div className={styles.rowControls} role="group" aria-label="Row actions">
                     <button

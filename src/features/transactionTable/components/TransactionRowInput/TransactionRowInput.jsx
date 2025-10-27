@@ -4,16 +4,12 @@ import SmartSelect from "../SmartSelect/SmartSelect";
 import MoneyInput from "../../../../components/MoneyInput/MoneyInput";
 import useTransactionRowInput from "../../hooks/useTransactionInput";
 
-
 /**
  * TransactionRowInput
  *
  * Presentational component for field-level editing inputs.
- * - Keeps logic-free; behavior provided via props.
- * - Uses a CSS module for scoped styles; merges with global input class for incremental migration.
- *
- * NOTE: The UI-only component delegates classnames and common handlers to the
- * useTransactionRowInput hook so the code is smaller and easier to test.
+ * Only change: ensure criticality native select includes an explicit empty option
+ * so the UI can show blank by default and the user can select a mapped default later.
  */
 export default function TransactionRowInput({
                                                 field,
@@ -24,7 +20,6 @@ export default function TransactionRowInput({
                                                 onSaveEdit,
                                                 setEditing,
                                                 onEditKey,
-                                                // SmartSelect-related props (for category/account/paymentMethod)
                                                 ALL_OPTIONS,
                                                 IS_DROPDOWN,
                                                 inputRef,
@@ -33,7 +28,6 @@ export default function TransactionRowInput({
                                                 onBlur,
                                                 getMappedDefault,
                                                 applyMappedDefault,
-                                                // criticality helpers
                                                 CRITICALITY_OPTIONS,
                                                 DEFAULT_CRITICALITY,
                                                 className = "tt-input",
@@ -49,7 +43,6 @@ export default function TransactionRowInput({
         getSmartSelectProps,
     } = useTransactionRowInput({ className });
 
-    // Numeric amount input
     if (field === "amount") {
         const numProps = getNumberProps({
             tx,
@@ -70,7 +63,6 @@ export default function TransactionRowInput({
         );
     }
 
-    // Date input
     if (field === "transactionDate") {
         const dateProps = getDateProps({
             tx,
@@ -93,7 +85,6 @@ export default function TransactionRowInput({
         );
     }
 
-    // Criticality native select
     if (field === "criticality") {
         const selProps = getSelectProps({
             tx,
@@ -115,6 +106,8 @@ export default function TransactionRowInput({
                 onChange={selProps.onChange}
                 onKeyDown={selProps.onKeyDown}
             >
+                {/* explicit empty option so UI shows blank by default */}
+                <option value="">{/* blank */}</option>
                 {options.map((opt) => (
                     <option key={opt} value={opt}>
                         {opt}
@@ -124,7 +117,6 @@ export default function TransactionRowInput({
         );
     }
 
-    // Fields that use SmartSelect: category, account, paymentMethod
     if (["category", "account", "paymentMethod"].includes(field)) {
         const smartProps = getSmartSelectProps({
             field,
@@ -141,7 +133,6 @@ export default function TransactionRowInput({
         return <SmartSelect {...smartProps} />;
     }
 
-    // Default text input (name, payee, memo, etc.)
     const inputProps = getInputProps({
         tx,
         field,
