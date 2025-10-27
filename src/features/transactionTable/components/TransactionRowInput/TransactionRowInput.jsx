@@ -1,14 +1,9 @@
 import React from "react";
 import PropTypes from "prop-types";
 import SmartSelect from "../SmartSelect/SmartSelect";
-import styles from "./TransactionRowDropdown.module.css";
 import MoneyInput from "../../../../components/MoneyInput/MoneyInput";
+import useTransactionRowInput from "../../hooks/useTransactionInput";
 
-
-const logger = {
-    info: (...args) => console.log("[TransactionRowInput]", ...args),
-    error: (...args) => console.error("[TransactionRowInput]", ...args),
-};
 
 /**
  * TransactionRowInput
@@ -16,103 +11,111 @@ const logger = {
  * Presentational component for field-level editing inputs.
  * - Keeps logic-free; behavior provided via props.
  * - Uses a CSS module for scoped styles; merges with global input class for incremental migration.
+ *
+ * NOTE: The UI-only component delegates classnames and common handlers to the
+ * useTransactionRowInput hook so the code is smaller and easier to test.
  */
 export default function TransactionRowInput({
-                                                   field,
-                                                   tx,
-                                                   value,
-                                                   editValueRef,
-                                                   toInputDate,
-                                                   onSaveEdit,
-                                                   setEditing,
-                                                   onEditKey,
-                                                   // SmartSelect-related props (for category/account/paymentMethod)
-                                                   ALL_OPTIONS,
-                                                   IS_DROPDOWN,
-                                                   inputRef,
-                                                   onChange,
-                                                   onSelectImmediate,
-                                                   onBlur,
-                                                   getMappedDefault,
-                                                   applyMappedDefault,
-                                                   // criticality helpers
-                                                   CRITICALITY_OPTIONS,
-                                                   DEFAULT_CRITICALITY,
-                                                   className = "tt-input",
-                                               }) {
-    // Merge provided global class with module class for incremental compatibility.
-    const finalInputClass = `${className} ${styles.input}`.trim();
-    const finalNumberClass = `${className} ${styles.input} ${styles.inputNumber}`.trim();
-    const finalSelectClass = `${className} ${styles.select}`.trim();
+                                                field,
+                                                tx,
+                                                value,
+                                                editValueRef,
+                                                toInputDate,
+                                                onSaveEdit,
+                                                setEditing,
+                                                onEditKey,
+                                                // SmartSelect-related props (for category/account/paymentMethod)
+                                                ALL_OPTIONS,
+                                                IS_DROPDOWN,
+                                                inputRef,
+                                                onChange,
+                                                onSelectImmediate,
+                                                onBlur,
+                                                getMappedDefault,
+                                                applyMappedDefault,
+                                                // criticality helpers
+                                                CRITICALITY_OPTIONS,
+                                                DEFAULT_CRITICALITY,
+                                                className = "tt-input",
+                                            }) {
+    const {
+        finalInputClass,
+        finalNumberClass,
+        finalSelectClass,
+        getNumberProps,
+        getDateProps,
+        getSelectProps,
+        getInputProps,
+        getSmartSelectProps,
+    } = useTransactionRowInput({ className });
 
     // Numeric amount input
     if (field === "amount") {
+        const numProps = getNumberProps({
+            tx,
+            field,
+            editValueRef,
+            onSaveEdit,
+            setEditing,
+            onEditKey,
+        });
         return (
             <MoneyInput
-                className={finalNumberClass}
-                autoFocus
-                value={tx.amount ?? ""}
-                onChange={(valStr) => {
-                    // Keep the old convention: editValueRef.current stores the raw string
-                    if (editValueRef) editValueRef.current = valStr;
-                }}
-                onKeyDown={(e) => {
-                    // Forward Enter/Escape handling to parent key handler logic (kept same shape)
-                    if (e.key === "Enter") {
-                        try {
-                            onSaveEdit(tx.id, field, editValueRef.current);
-                        } catch (err) {
-                            logger.error('onSaveEdit failed', err);
-                        }
-                    } else if (e.key === "Escape") {
-                        setEditing(null);
-                    } else {
-                        // delegate other keys to caller (if they want)
-                        try {
-                            onEditKey(e, tx.id, field);
-                        } catch (err) {
-                            logger.error('onEditKey threw', err);
-                        }
-                    }
-                }}
+                className={numProps.className}
+                autoFocus={numProps.autoFocus}
+                value={numProps.value}
+                onChange={numProps.onChange}
+                onKeyDown={numProps.onKeyDown}
             />
         );
     }
 
     // Date input
     if (field === "transactionDate") {
+        const dateProps = getDateProps({
+            tx,
+            field,
+            editValueRef,
+            toInputDate,
+            onSaveEdit,
+            setEditing,
+            onEditKey,
+        });
         return (
             <input
-                className={finalInputClass}
-                type="date"
-                autoFocus
-                defaultValue={toInputDate ? toInputDate(tx.transactionDate) : tx.transactionDate}
-                onChange={(e) => (editValueRef.current = e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === "Enter") onSaveEdit(tx.id, field, editValueRef.current);
-                    else if (e.key === "Escape") setEditing(null);
-                    else onEditKey(e, tx.id, field);
-                }}
+                className={dateProps.className}
+                type={dateProps.type}
+                autoFocus={dateProps.autoFocus}
+                defaultValue={dateProps.defaultValue}
+                onChange={dateProps.onChange}
+                onKeyDown={dateProps.onKeyDown}
             />
         );
     }
 
     // Criticality native select
     if (field === "criticality") {
-        const dv = (String(value ?? "").trim() !== "") ? value : DEFAULT_CRITICALITY;
+        const selProps = getSelectProps({
+            tx,
+            field,
+            value,
+            editValueRef,
+            CRITICALITY_OPTIONS,
+            DEFAULT_CRITICALITY,
+            onSaveEdit,
+            setEditing,
+            onEditKey,
+        });
+        const options = selProps.CRITICALITY_OPTIONS;
         return (
             <select
-                className={finalSelectClass}
-                autoFocus
-                defaultValue={dv}
-                onChange={(e) => (editValueRef.current = e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === "Enter") onSaveEdit(tx.id, field, editValueRef.current);
-                    else if (e.key === "Escape") setEditing(null);
-                    else onEditKey(e, tx.id, field);
-                }}
+                className={selProps.className}
+                autoFocus={selProps.autoFocus}
+                defaultValue={selProps.defaultValue}
+                onChange={selProps.onChange}
+                onKeyDown={selProps.onKeyDown}
             >
-                {(Array.isArray(CRITICALITY_OPTIONS) ? CRITICALITY_OPTIONS : ["Essential", "Nonessential"]).map((opt) => (
+                {options.map((opt) => (
                     <option key={opt} value={opt}>
                         {opt}
                     </option>
@@ -123,37 +126,38 @@ export default function TransactionRowInput({
 
     // Fields that use SmartSelect: category, account, paymentMethod
     if (["category", "account", "paymentMethod"].includes(field)) {
-        return (
-            <SmartSelect
-                name={field}
-                mode={IS_DROPDOWN ? "dropdown" : "autocomplete"}
-                options={IS_DROPDOWN ? ALL_OPTIONS : undefined}
-                allOptions={ALL_OPTIONS}
-                value={String(value ?? "")}
-                inputRef={inputRef}
-                onChange={onChange}
-                onSelectImmediate={onSelectImmediate}
-                onBlur={onBlur}
-                getMappedDefault={getMappedDefault}
-                applyMappedDefault={applyMappedDefault}
-                className={finalInputClass}
-                ariaLabel={`${field} input`}
-            />
-        );
+        const smartProps = getSmartSelectProps({
+            field,
+            IS_DROPDOWN,
+            ALL_OPTIONS,
+            value,
+            inputRef,
+            onChange,
+            onSelectImmediate,
+            onBlur,
+            getMappedDefault,
+            applyMappedDefault,
+        });
+        return <SmartSelect {...smartProps} />;
     }
 
     // Default text input (name, payee, memo, etc.)
+    const inputProps = getInputProps({
+        tx,
+        field,
+        value,
+        editValueRef,
+        onSaveEdit,
+        setEditing,
+        onEditKey,
+    });
     return (
         <input
-            className={finalInputClass}
-            autoFocus
-            defaultValue={String(value ?? tx[field] ?? "")}
-            onChange={(e) => (editValueRef.current = e.target.value)}
-            onKeyDown={(e) => {
-                if (e.key === "Enter") onSaveEdit(tx.id, field, editValueRef.current);
-                else if (e.key === "Escape") setEditing(null);
-                else onEditKey(e, tx.id, field);
-            }}
+            className={inputProps.className}
+            autoFocus={inputProps.autoFocus}
+            defaultValue={inputProps.defaultValue}
+            onChange={inputProps.onChange}
+            onKeyDown={inputProps.onKeyDown}
         />
     );
 }
