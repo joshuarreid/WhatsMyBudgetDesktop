@@ -3,6 +3,7 @@ import PropTypes from "prop-types";
 import { useTransactionRow } from "../../hooks/useTransactionRow";
 import SmartSelect from "../SmartSelect/SmartSelect";
 import TransactionRowDropdown from "../TransactionRowDropdown/TransactionRowDropdown";
+
 import styles from "./TransactionRow.module.css";
 import {
     INLINE_ERROR_COLOR,
@@ -11,6 +12,7 @@ import {
     DEFAULT_LOCALE,
     DEFAULT_CURRENCY,
 } from "../../utils/constants";
+import MoneyInput from "../../../../components/MoneyInput/MoneyInput";
 
 const logger = {
     info: (...args) => console.log('[TransactionTableRow]', ...args),
@@ -230,17 +232,15 @@ export default function TransactionTableRow({
                     </>
                 ) : isRowEditing ? (
                     <>
-                        <input
+                        <MoneyInput
                             className={`${inputClass} ${styles.inputNumber}`}
-                            type="number"
-                            step="0.01"
                             value={draft.amount ?? 0}
-                            onChange={(e) => updateDraft('amount', e.target.value)}
+                            onChange={(valStr) => updateDraft('amount', valStr)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') onSaveRowClick();
                                 if (e.key === 'Escape') onCancelRowLocal();
                             }}
-                            style={{ textAlign: 'right' }}
+                            autoFocus
                         />
                     </>
                 ) : (

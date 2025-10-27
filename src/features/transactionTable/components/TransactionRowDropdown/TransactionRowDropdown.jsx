@@ -2,6 +2,8 @@ import React from "react";
 import PropTypes from "prop-types";
 import SmartSelect from "../SmartSelect/SmartSelect";
 import styles from "./TransactionRowDropdown.module.css";
+import MoneyInput from "../../../../components/MoneyInput/MoneyInput";
+
 
 const logger = {
     info: (...args) => console.log("[TransactionRowDropdown]", ...args),
@@ -46,17 +48,32 @@ export default function TransactionRowDropdown({
     // Numeric amount input
     if (field === "amount") {
         return (
-            <input
+            <MoneyInput
                 className={finalNumberClass}
-                type="number"
-                step="0.01"
                 autoFocus
-                defaultValue={String(tx.amount ?? "")}
-                onChange={(e) => (editValueRef.current = e.target.value)}
+                value={tx.amount ?? ""}
+                onChange={(valStr) => {
+                    // Keep the old convention: editValueRef.current stores the raw string
+                    if (editValueRef) editValueRef.current = valStr;
+                }}
                 onKeyDown={(e) => {
-                    if (e.key === "Enter") onSaveEdit(tx.id, field, editValueRef.current);
-                    else if (e.key === "Escape") setEditing(null);
-                    else onEditKey(e, tx.id, field);
+                    // Forward Enter/Escape handling to parent key handler logic (kept same shape)
+                    if (e.key === "Enter") {
+                        try {
+                            onSaveEdit(tx.id, field, editValueRef.current);
+                        } catch (err) {
+                            logger.error('onSaveEdit failed', err);
+                        }
+                    } else if (e.key === "Escape") {
+                        setEditing(null);
+                    } else {
+                        // delegate other keys to caller (if they want)
+                        try {
+                            onEditKey(e, tx.id, field);
+                        } catch (err) {
+                            logger.error('onEditKey threw', err);
+                        }
+                    }
                 }}
             />
         );
