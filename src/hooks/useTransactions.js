@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback} from 'react';
 import budgetTransactionService from '../services/BudgetTransactionService';
+import { subscribe as subscribeTransactionEvents } from '../services/TransactionEvents';
 
 /**
  * useTransactions - fetches transactions for given filters.
@@ -32,6 +33,18 @@ export default function useTransactions(filters) {
     useEffect(() => {
         fetchData(filters);
     }, [filters, fetchData]);
+
+    // Subscribe to transaction change events so we refetch when other parts of the app publish changes
+    useEffect(() => {
+        const unsub = subscribeTransactionEvents(() => {
+            try {
+                fetchData(filters);
+            } catch (err) {
+                console.error('[useTransactions] refetch on event failed', err);
+            }
+        });
+        return unsub;
+    }, [fetchData, filters]);
 
     const refetch = useCallback(() => fetchData(filters, [fetchData, filters]));
     return { data, loading, error, refetch };
@@ -77,6 +90,18 @@ export function useTransactionsForAccount(filters) {
     useEffect(() => {
         fetchData(filters);
     }, [filters, fetchData]);
+
+    // Subscribe to transaction change events so account-specific consumers refetch when transactions change
+    useEffect(() => {
+        const unsub = subscribeTransactionEvents(() => {
+            try {
+                fetchData(filters);
+            } catch (err) {
+                console.error('[useTransactionsForAccount] refetch on event failed', err);
+            }
+        });
+        return unsub;
+    }, [fetchData, filters]);
 
     const refetch = useCallback(() => fetchData(filters), [fetchData, filters]);
     return { ...data, loading, error, refetch };

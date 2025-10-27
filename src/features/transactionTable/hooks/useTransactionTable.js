@@ -27,6 +27,7 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import budgetTransactionService from '../../../services/BudgetTransactionService';
 import localCacheService from '../../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../../hooks/useTransactions";
+import { publish as publishTransactionEvents } from '../../../services/TransactionEvents';
 // Use the centralized config accessor instead of reading the raw JSON.
 // Adjust the relative path if your config module lives elsewhere.
 import {
@@ -325,6 +326,8 @@ export function useTransactionTable(filters, statementPeriod) {
                     )
                 );
                 await txResult.refetch();
+                // Notify listeners that transactions changed (deleted)
+                try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'delete', ids: toDeleteFromAPI }); } catch (err) { logger.error('publish transaction event failed', err); }
                 logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
@@ -349,6 +352,8 @@ export function useTransactionTable(filters, statementPeriod) {
                 logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod: effectiveStatementPeriod });
                 await budgetTransactionService.uploadTransactions(file, effectiveStatementPeriod);
                 await txResult.refetch();
+                // Notify listeners that transactions changed (upload)
+                try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'upload', fileName: file.name }); } catch (err) { logger.error('publish transaction event failed', err); }
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
                 logger.error('Upload failed', err);
@@ -540,6 +545,8 @@ export function useTransactionTable(filters, statementPeriod) {
                     const created = await budgetTransactionService.createTransaction(payload);
                     // replace temp id row with created row
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
+                    // Notify listeners that transactions changed (created)
+                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'create', transaction: created }); } catch (err) { logger.error('publish transaction event failed', err); }
                     logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
 
                     if (addAnother) {
@@ -570,6 +577,8 @@ export function useTransactionTable(filters, statementPeriod) {
                     // Do not include id in request body; id is provided in URL by updateTransaction
                     const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
                     await budgetTransactionService.updateTransaction(id, payload);
+                    // Notify listeners that transactions changed (updated)
+                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish transaction event failed', err); }
                     logger.info('handleSaveRow: updated', { id });
                     try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
                 }
