@@ -1,10 +1,10 @@
 /* TransactionTable.css - Feature-level styles and tokens
  *
- * After migrating toolbar/header/balance/rows to CSS Modules, this file keeps:
- * - feature tokens (CSS variables)
- * - layout helpers and minimal fallbacks for legacy consumers
+ * Adjusted to prevent layout shift during initial load by reserving
+ * the same card/body height used by CategorizedTable so the surrounding
+ * layout stays static while data is being fetched.
  *
- * Remove or reduce global selectors over time as components migrate.
+ * Keep feature tokens at top so they remain easy to tweak.
  */
 
 /* -----------------------
@@ -29,12 +29,15 @@
    Card + layout tokens
    ----------------------- */
 
+/* Increase the min-height to match CategorizedTable so the card size is stable
+   during loading and prevents the page from shifting when content is fetched. */
 .tt-card {
     box-sizing: border-box;
     width: var(--tt-card-width);
     border-radius: 12px;
     padding: 8px;
-    min-height: 500px;
+    /* Raised min-height to match CategorizedTable for consistent layout */
+    min-height: 1200px;
     margin: 12px 0;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     color: var(--color-text);
@@ -45,7 +48,9 @@
     background: var(--tt-bg-gradient);
 }
 
-/* Body container */
+/* Body container
+   Reserve vertical space so the header + toolbar + balance do not change layout
+   when the table rows load. This prevents the TransactionTable from moving on load. */
 .tt-body {
     display: flex;
     flex-direction: column;
@@ -53,6 +58,8 @@
     flex: 1 1 auto;
     overflow-y: auto;
     padding: 6px;
+    /* Reserve a minimum body height so the shell stays stable while loading */
+    min-height: 520px;
 }
 
 /* Minimal legacy fallbacks for left-over global classes.
@@ -108,5 +115,14 @@
 @media (max-width: 900px) {
     .tt-input {
         padding: 6px 8px;
+    }
+
+    /* Keep the body min height reasonable on small screens */
+    .tt-body {
+        min-height: 360px;
+    }
+
+    .tt-card {
+        min-height: 420px;
     }
 }
