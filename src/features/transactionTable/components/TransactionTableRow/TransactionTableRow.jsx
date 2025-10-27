@@ -136,8 +136,39 @@ export default function TransactionTableRow({
         }
     };
 
+    // Row-level double-click: start full-row edit (exactly like "Add Transaction" UX but populated).
+    // Use onDoubleClickCapture to ensure this handler runs before child double-click handlers
+    // (so double-click anywhere opens full-row edit rather than field-only editors).
+    const handleRowDoubleClickCapture = (e) => {
+        // If already editing this row, do nothing.
+        if (isRowEditing) return;
+
+        // Prevent child double-click handlers from also firing.
+        e.stopPropagation();
+
+        logger.info('row double-click -> start full-row edit', { txId: tx.id });
+
+        try {
+            // onStartRowEdit is provided by useTransactionRow; it should populate the draft with tx values
+            if (typeof onStartRowEdit === 'function') {
+                onStartRowEdit(tx);
+            } else if (typeof startEditingRow === 'function') {
+                // fallback to parent-provided startEditingRow if hook doesn't expose onStartRowEdit
+                startEditingRow(tx.id);
+            } else {
+                logger.error('no row-start-edit handler available', tx.id);
+            }
+        } catch (err) {
+            logger.error('failed to start row edit', err, tx.id);
+        }
+    };
+
     return (
-        <div className={`${styles.row} ${selected ? styles.rowSelected : ""}`} key={tx.id}>
+        <div
+            className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
+            key={tx.id}
+            onDoubleClickCapture={handleRowDoubleClickCapture}
+        >
             <div className={styles.checkboxCol}>
                 <input
                     type="checkbox"
@@ -346,13 +377,11 @@ export default function TransactionTableRow({
                         {inlineError && <div className={styles.inlineError}>{inlineError}</div>}
                     </div>
                 ) : tx.transactionDate ? (
-                    /* IMPORTANT: icon removed from display mode as requested.
-                       The calendar icon is only shown when adding/editing (isRowEditing). */
                     <div onDoubleClick={() => onCellDoubleClick(tx, "transactionDate")}>
                         {new Date(tx.transactionDate).toLocaleDateString(DEFAULT_LOCALE, { timeZone: 'UTC' })}
                     </div>
                 ) : (
-                    <div onDoubleClick={() => onCellDoubleClick(tx, "transactionDate")}>{""}</div>
+                    ""
                 )}
             </div>
 

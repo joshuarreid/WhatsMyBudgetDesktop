@@ -72,6 +72,24 @@ export default function SmartSelect({
 
     // Dropdown (native select) mode
     if (smart.mode === "dropdown" && Array.isArray(options) && options.length > 0) {
+        // Ensure the current value is present in the options list. If it isn't,
+        // inject it (without mutating the original options array) so the native
+        // select shows the correct selected value instead of the blank placeholder.
+        let finalOptions = Array.isArray(options) ? [...options] : [];
+
+        try {
+            // Only inject when value is non-empty and not already included.
+            const normalizedValue = value == null ? "" : String(value);
+            const hasValue = finalOptions.some((opt) => String(opt) === normalizedValue);
+            if (normalizedValue !== "" && !hasValue) {
+                logger.info("SmartSelect: injecting missing option into dropdown options", { name, value: normalizedValue });
+                // Prepend so it's visible at top; you could also append if preferred
+                finalOptions = [normalizedValue, ...finalOptions];
+            }
+        } catch (err) {
+            logger.error("SmartSelect: failed to normalize/inspect options", err);
+        }
+
         return (
             <select
                 id={id}
@@ -85,7 +103,7 @@ export default function SmartSelect({
                 aria-label={ariaLabel}
             >
                 <option value="">{/* allow empty */}</option>
-                {options.map((opt) => (
+                {finalOptions.map((opt) => (
                     <option key={opt} value={opt}>
                         {opt}
                     </option>
