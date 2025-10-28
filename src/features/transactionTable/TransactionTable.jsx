@@ -31,6 +31,7 @@ export default function TransactionTable(props) {
         toggleSelect,
         toggleSelectAll,
         handleAddTransaction,
+        handleAddProjection, // wired in from hook
         handleDeleteSelected,
         handleFileChange,
         openFilePicker,
@@ -65,6 +66,7 @@ export default function TransactionTable(props) {
                 />
                 <TransactionTableToolbar
                     onAdd={handleAddTransaction}
+                    onAddProjection={handleAddProjection}
                     onImport={openFilePicker}
                     onDelete={handleDeleteSelected}
                     selectedCount={selectedIds.size}
@@ -88,6 +90,7 @@ export default function TransactionTable(props) {
             />
             <TransactionTableToolbar
                 onAdd={handleAddTransaction}
+                onAddProjection={handleAddProjection}
                 onImport={openFilePicker}
                 onDelete={handleDeleteSelected}
                 selectedCount={selectedIds.size}

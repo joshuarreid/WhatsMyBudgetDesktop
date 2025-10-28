@@ -38,6 +38,7 @@ import {
     INPUT_DATE_LENGTH,
 } from '../utils/constants';
 import budgetTransactionService from "../../../services/BudgetTransactionService";
+import projectedTransactionService from "../../../services/ProjectedTransactionService";
 
 /**
  * CRITICALITY_OPTIONS - read once at module load
@@ -208,6 +209,10 @@ export function useTransactionTable(filters, statementPeriod) {
 
     const makeTempId = useCallback(() => `${TEMP_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
+    /**
+     * handleAddTransaction()
+     * - Adds a new local temporary budget transaction row and opens row editor.
+     */
     const handleAddTransaction = useCallback(() => {
         const defaultCrit = ''; // blank in UI by default
         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
@@ -230,6 +235,42 @@ export function useTransactionTable(filters, statementPeriod) {
         logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality, defaultCategory: newTx.category, defaultPaymentMethod: newTx.paymentMethod });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
+    /**
+     * handleAddProjection()
+     * - Adds a new local temporary projected transaction row and opens row editor.
+     * - Mirrors handleAddTransaction but marks the row as a projection so save flow will use the projection API.
+     *
+     * @returns {void}
+     */
+    const handleAddProjection = useCallback(() => {
+        const defaultCrit = ''; // blank by default
+        const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
+        const newProj = {
+            id: makeTempId(),
+            name: '',
+            amount: 0,
+            category: '',
+            criticality: defaultCrit,
+            transactionDate: new Date().toISOString(),
+            account: filters?.account || '',
+            paymentMethod: defaultPM,
+            memo: '',
+            __isNew: true,
+            __isProjection: true,
+            statementPeriod: cachedStatementPeriod || undefined,
+        };
+        setLocalTx((prev) => [newProj, ...(prev || [])]);
+        setEditing({ id: newProj.id, mode: 'row' });
+        editValueRef.current = '';
+        logger.info('handleAddProjection: created local new projected tx', { tempId: newProj.id, statementPeriod: newProj.statementPeriod });
+    }, [makeTempId, filters, cachedStatementPeriod]);
+
+    /**
+     * handleCancelRow
+     * - Cancels editing and removes local temp rows where applicable.
+     *
+     * @param {string|number} id
+     */
     const handleCancelRow = useCallback((id) => {
         if (String(id).startsWith(TEMP_ID_PREFIX)) {
             setLocalTx((prev) => {
@@ -256,6 +297,22 @@ export function useTransactionTable(filters, statementPeriod) {
         }
     }, []);
 
+    /**
+     * handleDeleteSelected
+     *
+     * Deletes selected transactions. Supports:
+     *  - local-only temp rows (removed from local state)
+     *  - server-backed budget transactions (budgetTransactionService.deleteTransaction)
+     *  - server-backed projected transactions (projectedTransactionService.deleteTransaction)
+     *
+     * After deletion:
+     *  - refetches the budget transactions if any budget transactions were deleted
+     *  - refetches projections if any projections were deleted
+     *  - publishes the appropriate TransactionEvents
+     *
+     * @async
+     * @returns {Promise<void>}
+     */
     const handleDeleteSelected = useCallback(
         async () => {
             if (selectedIds.size === 0) return;
@@ -276,23 +333,48 @@ export function useTransactionTable(filters, statementPeriod) {
             if (toDeleteFromAPI.length === 0) return;
 
             try {
-                await Promise.all(
-                    toDeleteFromAPI.map((id) =>
+                // Partition ids into budget vs projection based on localTx flag or presence in projectedTx
+                const budgetIds = [];
+                const projectionIds = [];
+
+                toDeleteFromAPI.forEach((id) => {
+                    const localItem = (localTx || []).find((t) => String(t.id) === String(id));
+                    const isProjection = localItem?.__isProjection === true || (Array.isArray(projectedTx) && projectedTx.some((p) => String(p.id) === String(id)));
+                    if (isProjection) projectionIds.push(id);
+                    else budgetIds.push(id);
+                });
+
+                // Fire deletions in parallel but capture individual errors
+                await Promise.all([
+                    ...budgetIds.map((id) =>
                         budgetTransactionService.deleteTransaction(id).catch((err) => {
-                            logger.error(`Failed to delete ${id}`, err);
+                            logger.error(`Failed to delete budget transaction ${id}`, err);
                         })
-                    )
-                );
-                await txResult.refetch();
-                try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'delete', ids: toDeleteFromAPI }); } catch (err) { logger.error('publish transaction event failed', err); }
-                // keep projections in sync
-                try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after delete failed', err); }
-                logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
+                    ),
+                    ...projectionIds.map((id) =>
+                        projectedTransactionService.deleteTransaction(id).catch((err) => {
+                            logger.error(`Failed to delete projected transaction ${id}`, err);
+                        })
+                    ),
+                ]);
+
+                // Refetch and publish events as appropriate
+                if (budgetIds.length > 0) {
+                    try { await txResult.refetch(); } catch (err) { logger.error('refetch after delete failed', err); }
+                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'delete', ids: budgetIds }); } catch (err) { logger.error('publish transaction event failed', err); }
+                }
+
+                if (projectionIds.length > 0) {
+                    try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after delete failed', err); }
+                    try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'delete', ids: projectionIds }); } catch (err) { logger.error('publish projection event failed', err); }
+                }
+
+                logger.info('handleDeleteSelected: deleted server ids', { budgetIds, projectionIds });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, txResult, refetchProjected]
+        [selectedIds, txResult, refetchProjected, localTx, projectedTx]
     );
 
     const handleFileChange = useCallback(
@@ -399,6 +481,7 @@ export function useTransactionTable(filters, statementPeriod) {
         const copy = { ...tx };
         delete copy.id;
         delete copy.__isNew;
+        delete copy.__isProjection;
         return copy;
     }, []);
 
@@ -451,45 +534,66 @@ export function useTransactionTable(filters, statementPeriod) {
 
             try {
                 if (isNew) {
-                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod: effectiveStatementPeriod });
+                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod: effectiveStatementPeriod, isProjection: !!txToPersist.__isProjection });
                     const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
-                    const created = await budgetTransactionService.createTransaction(payload);
-                    setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
-                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'create', transaction: created }); } catch (err) { logger.error('publish transaction event failed', err); }
-                    logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
-
-                    if (addAnother) {
-                        const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
-                        const newTx = {
-                            id: makeTempId(),
-                            name: '',
-                            amount: 0,
-                            category: '',
-                            criticality: '',
-                            transactionDate: new Date().toISOString(),
-                            account: filters?.account || '',
-                            paymentMethod: defaultPM,
-                            memo: '',
-                            __isNew: true,
-                            statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
-                        };
-                        setLocalTx((prev) => [newTx, ...(prev || [])]);
-                        setEditing({ id: newTx.id, mode: 'row' });
-                        logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality, defaultPaymentMethod: newTx.paymentMethod });
-                    } else {
-                        try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
-                        // refresh projections after successful create
+                    if (txToPersist.__isProjection) {
+                        // create projected transaction
+                        const created = await projectedTransactionService.createTransaction(payload);
+                        // mark created as projection so subsequent flows can identify it
+                        const createdWithFlag = { ...created, __isProjection: true };
+                        setLocalTx((prev) => prev.map((t) => (t.id === id ? createdWithFlag : t)));
+                        try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'create', transaction: createdWithFlag }); } catch (err) { logger.error('publish projection event failed', err); }
+                        logger.info('handleSaveRow: created projection', { tempId: id, createdId: created.id });
+                        // refresh projections
                         try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
+                        // do not call txResult.refetch() for projections (they are separate), but if desired you can also refresh server transactions
+                    } else {
+                        // create budget transaction
+                        const created = await budgetTransactionService.createTransaction(payload);
+                        setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
+                        try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'create', transaction: created }); } catch (err) { logger.error('publish transaction event failed', err); }
+                        logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
+
+                        if (addAnother) {
+                            const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
+                            const newTx = {
+                                id: makeTempId(),
+                                name: '',
+                                amount: 0,
+                                category: '',
+                                criticality: '',
+                                transactionDate: new Date().toISOString(),
+                                account: filters?.account || '',
+                                paymentMethod: defaultPM,
+                                memo: '',
+                                __isNew: true,
+                                statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
+                            };
+                            setLocalTx((prev) => [newTx, ...(prev || [])]);
+                            setEditing({ id: newTx.id, mode: 'row' });
+                            logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality, defaultPaymentMethod: newTx.paymentMethod });
+                        } else {
+                            try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
+                            // refresh projections after successful create
+                            try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
+                        }
                     }
                 } else {
-                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod: effectiveStatementPeriod });
+                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod: effectiveStatementPeriod, isProjection: !!txToPersist.__isProjection });
                     const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
-                    await budgetTransactionService.updateTransaction(id, payload);
-                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish transaction event failed', err); }
-                    logger.info('handleSaveRow: updated', { id });
-                    try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
-                    // refresh projections after update
-                    try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
+                    if (txToPersist.__isProjection) {
+                        await projectedTransactionService.updateTransaction(id, payload);
+                        try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish projection event failed', err); }
+                        logger.info('handleSaveRow: updated projection', { id });
+                        try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
+                    } else {
+                        await budgetTransactionService.updateTransaction(id, payload);
+                        try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish transaction event failed', err); }
+                        logger.info('handleSaveRow: updated', { id });
+                        try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
+                        // refresh projections after update
+                        try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
+                    }
                 }
             } catch (err) {
                 logger.error('handleSaveRow: persist failed', err);
@@ -539,6 +643,7 @@ export function useTransactionTable(filters, statementPeriod) {
         toggleSelect,
         toggleSelectAll,
         handleAddTransaction,
+        handleAddProjection, // expose new handler
         handleDeleteSelected,
         handleFileChange,
         openFilePicker,

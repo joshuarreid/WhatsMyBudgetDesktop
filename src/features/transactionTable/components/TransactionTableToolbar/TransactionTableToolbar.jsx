@@ -9,17 +9,29 @@ import StatementPeriodDropdown from "../../../../components/statementPeriodDropd
  *
  * - Presentational toolbar for transaction actions.
  * - Uses a CSS module to scope toolbar visuals.
+ *
+ * Props:
+ *  - onAdd: callback when "Add Transaction" is clicked
+ *  - onAddProjection: callback when "Add Projection" is clicked (creates a new ProjectedTransaction)
+ *  - onImport: callback to open file picker
+ *  - onDelete: callback to delete selected items
+ *  - selectedCount: number of selected items in the table
+ *  - fileInputRef: ref for hidden file input
+ *  - onFileChange: handler when file input changes
+ *  - loading: boolean to disable actions while loading
+ *  - total: formatted total string to display on the right
  */
 export default function TransactionTableToolbar({
-                                               onAdd,
-                                               onImport,
-                                               onDelete,
-                                               selectedCount,
-                                               fileInputRef,
-                                               onFileChange,
-                                               loading = false,
-                                               total,
-                                           }) {
+                                                    onAdd,
+                                                    onAddProjection,
+                                                    onImport,
+                                                    onDelete,
+                                                    selectedCount,
+                                                    fileInputRef,
+                                                    onFileChange,
+                                                    loading = false,
+                                                    total,
+                                                }) {
     const logger = {
         info: (...args) => console.log("[TransactionTableToolbar]", ...args),
         error: (...args) => console.error("[TransactionTableToolbar]", ...args),
@@ -36,6 +48,16 @@ export default function TransactionTableToolbar({
                 >
                     <span className={styles.icon}>＋</span> Add Transaction
                 </button>
+
+                {/* New: Add Projection button to the right of Add Transaction */}
+                <button
+                    className={styles.linkBtn}
+                    onClick={onAddProjection}
+                    disabled={loading}
+                >
+                    <span className={styles.icon}>＋</span> Add Projection
+                </button>
+
                 <button
                     className={styles.linkBtn}
                     onClick={onImport}
@@ -71,6 +93,7 @@ export default function TransactionTableToolbar({
 
 TransactionTableToolbar.propTypes = {
     onAdd: PropTypes.func.isRequired,
+    onAddProjection: PropTypes.func.isRequired,
     onImport: PropTypes.func.isRequired,
     onDelete: PropTypes.func.isRequired,
     selectedCount: PropTypes.number.isRequired,
