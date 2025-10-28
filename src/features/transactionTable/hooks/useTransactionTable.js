@@ -2,21 +2,17 @@
  * useTransactionTable.js
  *
  * Hook that orchestrates transactions for the TransactionTable feature.
- * Responsibilities:
- * - Fetch the personal & joint transactions for the active account (via useTransactionsForAccount)
- * - Maintain local-only "new" rows, selection, editing and save flows
- * - Provide helpers for adding, cancelling, saving, deleting, uploading transactions
- * - Respect a server-backed "statementPeriod" (read from LocalCache) and include it on writes/uploads
  *
- * Conventions & improvements:
- * - All UI text / small magic values are centralized in ../utils/constants.js
- * - Robust logging is used throughout to ease debugging in production
- * - Hook returns only data/primitives/handlers (no JSX) per Bulletproof React
- */
-
-/**
+ * Change: integrate projected transactions for the current statementPeriod by using
+ * useProjectedTransactions and merging projected rows (marked with __isProjected)
+ * into the table's localTx. Projected totals are included in computed `total`.
+ *
+ * All other behavior (create/update/delete/upload/save/cancel flows) is preserved.
+ *
  * @module useTransactionTable
  */
+import useProjectedTransactions from "../../../hooks/useProjectedTransactions";
+
 
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -24,12 +20,11 @@ const logger = {
 };
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import budgetTransactionService from '../../../services/BudgetTransactionService';
+
 import localCacheService from '../../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../../hooks/useTransactions";
 import { publish as publishTransactionEvents } from '../../../services/TransactionEvents';
 // Use the centralized config accessor instead of reading the raw JSON.
-// Adjust the relative path if your config module lives elsewhere.
 import {
     get as getConfig,
     getCriticalityForCategory,
@@ -37,7 +32,6 @@ import {
     getDefaultPaymentMethodForAccount
 } from '../../../config/config.ts';
 
-// constants moved out for scalability / debugging
 import {
     DEFAULT_CRITICALITY_OPTIONS,
     DEFAULT_CRITICALITY,
@@ -46,12 +40,11 @@ import {
     CONFIG_KEYS,
     INPUT_DATE_LENGTH,
 } from '../utils/constants';
+import budgetTransactionService from "../../../services/BudgetTransactionService";
+
 
 /**
- * CRITICALITY_OPTIONS
- * - Reads configured criticality options from the shared config accessor.
- * - If config doesn't supply them, falls back to DEFAULT_CRITICALITY_OPTIONS.
- * - Kept in the module scope so it's computed once per module load for efficiency.
+ * CRITICALITY_OPTIONS - read once at module load
  */
 const CRITICALITY_OPTIONS = (() => {
     try {
@@ -66,10 +59,7 @@ const CRITICALITY_OPTIONS = (() => {
 })();
 
 /**
- * CATEGORY_OPTIONS
- * - Loads configured category list (if available). If none, the consumer should render
- *   a freeform textbox for categories instead of a dropdown.
- * - Kept at module scope so callers don't repeatedly read config in rendering paths.
+ * CATEGORY_OPTIONS - read once
  */
 const CATEGORY_OPTIONS = (() => {
     try {
@@ -88,43 +78,25 @@ const CATEGORY_OPTIONS = (() => {
 })();
 
 const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS.length > 0;
-/* Keep DEFAULT_CATEGORY unchanged (compat). We'll initialize new rows with explicit blank category per request. */
 const DEFAULT_CATEGORY = IS_CATEGORY_DROPDOWN ? CATEGORY_OPTIONS[0] : '';
-
-/* -------------------- hook implementation -------------------- */
 
 /**
  * useTransactionTable(filters, statementPeriod)
  *
- * - filters: object used to scope transactions (must include account for display)
- * - statementPeriod: optional external selected statement period (server-provided)
- *
- * Returns:
- * - localTx: array of transactions (local new rows + server results)
- * - handlers and flags used by TransactionTable and children
- *
- * Important:
- * - The hook tries to load a server-stored statementPeriod from LocalCacheService
- *   if one isn't provided via the statementPeriod param.
- */
-
-/**
  * @param {Object} filters
  * @param {string} statementPeriod
- * @returns {Object} API surface for table UI
+ * @returns {Object} API surface for TransactionTable
  */
 export function useTransactionTable(filters, statementPeriod) {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
     const [savingIds, setSavingIds] = useState(() => new Set());
-    const [saveErrors, setSaveErrors] = useState(() => ({})); // { [id]: message }
-
+    const [saveErrors, setSaveErrors] = useState(() => ({}));
     const txResult = useTransactionsForAccount(filters || {});
 
     /**
      * serverTx (memo)
      * - Combines personal and joint transaction arrays into a single sorted list.
-     * - Sorted by transactionDate descending so the newest transactions appear first.
      */
     const serverTx = useMemo(
         () => [
@@ -134,31 +106,14 @@ export function useTransactionTable(filters, statementPeriod) {
         [txResult.personalTransactions, txResult.jointTransactions]
     );
 
-    // localTx state contains any local new rows (id starts with TEMP_ID_PREFIX) + serverTx (server authoritative)
-    const [localTx, setLocalTx] = useState(() => serverTx);
-
-    // keep localTx in sync with server results while preserving local-only rows
-    useEffect(() => {
-        setLocalTx((prev) => {
-            const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-            return [...localOnly, ...serverTx];
-        });
-    }, [serverTx]);
-
-    const total = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
-    const personalBalance = typeof txResult.personalTotal === 'number'
-        ? txResult.personalTotal
-        : Number(txResult.personalTotal) || 0;
-    const jointBalance = typeof txResult.jointTotal === 'number'
-        ? txResult.jointTotal
-        : Number(txResult.jointTotal) || 0;
-    const count = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
-    const loading = txResult.loading || false;
-    const error = txResult.error || null;
-
-    const editValueRef = useRef('');
-    const fileInputRef = useRef(null);
-
+    // ---------------------------------------------------------
+    // Important: ensure cachedStatementPeriod is declared BEFORE
+    // we call useProjectedTransactions so we can pass it in as
+    // the effective statementPeriod. Previously the hook was
+    // invoked before cachedStatementPeriod existed, causing the
+    // projection hook to see an empty statementPeriod and skip
+    // fetching (observed in your logs).
+    // ---------------------------------------------------------
     /**
      * cachedStatementPeriod (state)
      * - Tracks the current effective statementPeriod for the UI.
@@ -167,14 +122,12 @@ export function useTransactionTable(filters, statementPeriod) {
      */
     const [cachedStatementPeriod, setCachedStatementPeriod] = useState(statementPeriod || null);
 
-    // if parent passes a statementPeriod prop, keep state in sync
     useEffect(() => {
         if (statementPeriod) {
             setCachedStatementPeriod(statementPeriod);
         }
     }, [statementPeriod]);
 
-    // On mount (or when no statementPeriod present) attempt to read server cache for STATEMENT_PERIOD_CACHE_KEY
     useEffect(() => {
         let mounted = true;
         if (!cachedStatementPeriod) {
@@ -198,12 +151,59 @@ export function useTransactionTable(filters, statementPeriod) {
         return () => { mounted = false; };
     }, [cachedStatementPeriod]);
 
-    /* -------------------- Selection helpers -------------------- */
+    // --- Projected transactions integration --------------------------------
+    // Use the cachedStatementPeriod first, then prop statementPeriod as fallback.
+    // This ensures that when we read the persisted server value (cachedStatementPeriod)
+    // the projections hook will re-run and fetch projections for that period.
+    const effectiveStatementPeriod = cachedStatementPeriod || statementPeriod || undefined;
+    const { projectedTx = [], loading: projectedLoading = false, error: projectedError = null, refetch: refetchProjected } =
+        useProjectedTransactions({ statementPeriod: effectiveStatementPeriod, account: filters?.account || undefined });
 
-    /**
-     * toggleSelect(id)
-     * - Toggles presence of id in the selectedIds set (used for multi-select UI).
-     */
+    // localTx state contains any local new rows (id starts with TEMP_ID_PREFIX) + serverTx + projectedTx
+    const [localTx, setLocalTx] = useState(() => serverTx);
+
+    // Merge server + projected Tx into localTx while preserving local-only temp rows
+    useEffect(() => {
+        setLocalTx((prev) => {
+            const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
+            // Merge serverTx and projectedTx (projectedTx already marked with __isProjected)
+            const merged = [...serverTx];
+            if (Array.isArray(projectedTx) && projectedTx.length > 0) {
+                // sort projected by date descending and append
+                const projSorted = [...projectedTx].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+                merged.push(...projSorted);
+            }
+            const final = [...localOnly, ...merged];
+            return final;
+        });
+    }, [serverTx, projectedTx]);
+
+    // compute totals
+    const totalFromServer = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
+    const projectedTotal = useMemo(() => {
+        if (!Array.isArray(projectedTx)) return 0;
+        return projectedTx.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    }, [projectedTx]);
+
+    const total = (totalFromServer || 0) + (projectedTotal || 0);
+
+    const personalBalance = typeof txResult.personalTotal === 'number'
+        ? txResult.personalTotal
+        : Number(txResult.personalTotal) || 0;
+    const jointBalance = typeof txResult.jointTotal === 'number'
+        ? txResult.jointTotal
+        : Number(txResult.jointTotal) || 0;
+
+    const countFromServer = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
+    const count = countFromServer + (Array.isArray(projectedTx) ? projectedTx.length : 0);
+
+    const loading = txResult.loading || projectedLoading || false;
+    const error = txResult.error || projectedError || null;
+    // -----------------------------------------------------------------------
+
+    const editValueRef = useRef('');
+    const fileInputRef = useRef(null);
+
     const toggleSelect = useCallback((id) => {
         setSelectedIds((prev) => {
             const copy = new Set(prev);
@@ -215,11 +215,6 @@ export function useTransactionTable(filters, statementPeriod) {
 
     const isAllSelected = localTx.length > 0 && selectedIds.size === localTx.length;
 
-    /**
-     * toggleSelectAll()
-     * - Selects or clears all currently visible transaction ids.
-     * - Uses localTx (which contains server + local new rows).
-     */
     const toggleSelectAll = useCallback(() => {
         setSelectedIds((prev) => {
             if (isAllSelected) return new Set();
@@ -227,19 +222,8 @@ export function useTransactionTable(filters, statementPeriod) {
         });
     }, [localTx, isAllSelected]);
 
-    /**
-     * makeTempId()
-     * - Returns a unique temporary id for new local transactions using TEMP_ID_PREFIX.
-     * - Deterministic format: `${TEMP_ID_PREFIX}${Date.now()}-${random}`
-     */
     const makeTempId = useCallback(() => `${TEMP_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
-    /**
-     * handleAddTransaction()
-     * - Creates a local-only transaction row (not persisted yet).
-     * - Initializes fields with sensible defaults (category & criticality blank per request).
-     * - Puts the table into row-edit mode for the new item.
-     */
     const handleAddTransaction = useCallback(() => {
         const defaultCrit = ''; // blank in UI by default
         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
@@ -247,8 +231,8 @@ export function useTransactionTable(filters, statementPeriod) {
             id: makeTempId(),
             name: '',
             amount: 0,
-            category: '',           // blank per request
-            criticality: defaultCrit, // blank per request
+            category: '',
+            criticality: defaultCrit,
             transactionDate: new Date().toISOString(),
             account: filters?.account || '',
             paymentMethod: defaultPM,
@@ -262,11 +246,6 @@ export function useTransactionTable(filters, statementPeriod) {
         logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod, defaultCriticality: newTx.criticality, defaultCategory: newTx.category, defaultPaymentMethod: newTx.paymentMethod });
     }, [makeTempId, filters, cachedStatementPeriod]);
 
-    /**
-     * handleCancelRow(id)
-     * - Cancels row editing. If the row is a local-only new row (TEMP_ID_PREFIX), remove it.
-     * - Otherwise simply exit editing mode.
-     */
     const handleCancelRow = useCallback((id) => {
         if (String(id).startsWith(TEMP_ID_PREFIX)) {
             setLocalTx((prev) => {
@@ -293,11 +272,6 @@ export function useTransactionTable(filters, statementPeriod) {
         }
     }, []);
 
-    /**
-     * handleDeleteSelected()
-     * - Deletes selected transactions. Local-only rows are removed client-side.
-     * - Server-backed rows are deleted via budgetTransactionService and the table is refetched.
-     */
     const handleDeleteSelected = useCallback(
         async () => {
             if (selectedIds.size === 0) return;
@@ -326,21 +300,17 @@ export function useTransactionTable(filters, statementPeriod) {
                     )
                 );
                 await txResult.refetch();
-                // Notify listeners that transactions changed (deleted)
                 try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'delete', ids: toDeleteFromAPI }); } catch (err) { logger.error('publish transaction event failed', err); }
+                // keep projections in sync
+                try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after delete failed', err); }
                 logger.info('handleDeleteSelected: deleted server ids', { toDeleteFromAPI });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, txResult]
+        [selectedIds, txResult, refetchProjected]
     );
 
-    /**
-     * handleFileChange(ev)
-     * - Handles CSV/import file selection and uploads using the effective statementPeriod.
-     * - Resets the file input value after completion / failure.
-     */
     const handleFileChange = useCallback(
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
@@ -352,8 +322,9 @@ export function useTransactionTable(filters, statementPeriod) {
                 logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod: effectiveStatementPeriod });
                 await budgetTransactionService.uploadTransactions(file, effectiveStatementPeriod);
                 await txResult.refetch();
-                // Notify listeners that transactions changed (upload)
                 try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'upload', fileName: file.name }); } catch (err) { logger.error('publish transaction event failed', err); }
+                // refresh projections as well
+                try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after upload failed', err); }
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
                 logger.error('Upload failed', err);
@@ -361,37 +332,22 @@ export function useTransactionTable(filters, statementPeriod) {
                 ev.target.value = '';
             }
         },
-        [txResult, statementPeriod, cachedStatementPeriod]
+        [txResult, statementPeriod, cachedStatementPeriod, refetchProjected]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
 
-    /**
-     * startEditingField(id, field, initial)
-     * - Enters field-edit mode for a single field on a transaction.
-     * - Sets editValueRef.current to the provided initial string so the inline field input
-     *   component can read/write the value (field-level editing flow).
-     */
     const startEditingField = useCallback((id, field, initial = '') => {
         setEditing({ id, mode: 'field', field });
         editValueRef.current = initial;
         logger.info('startEditingField', { id, field, initial });
     }, []);
 
-    /**
-     * startEditingRow(id)
-     * - Enters row-edit mode for the specified transaction id.
-     */
     const startEditingRow = useCallback((id) => {
         setEditing({ id, mode: 'row' });
         logger.info('startEditingRow', { id });
     }, []);
 
-    /**
-     * toInputDate(iso)
-     * - Utility converting an ISO date string to YYYY-MM-DD string used by <input type="date" />.
-     * - Returns empty string on failure.
-     */
     function toInputDate(iso) {
         try {
             const d = new Date(iso);
@@ -427,19 +383,11 @@ export function useTransactionTable(filters, statementPeriod) {
         []
     );
 
-    /**
-     * validateForCreate(tx)
-     * - Validates a transaction before creation.
-     * - Ensures required fields (name, amount) exist and validates criticality/category
-     *   if those are configured.
-     * - Returns an array of error messages (empty array = no errors).
-     */
     const validateForCreate = useCallback((tx) => {
         const errors = [];
         if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
         if (tx.amount == null || Number.isNaN(Number(tx.amount))) errors.push('Amount must be a number');
 
-        // Validate criticality if present
         if (tx.criticality != null && String(tx.criticality).trim() !== '') {
             const val = String(tx.criticality).trim();
             const match = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === val.toLowerCase());
@@ -448,7 +396,6 @@ export function useTransactionTable(filters, statementPeriod) {
             }
         }
 
-        // If categories are configured, validate category against the configured options
         if (IS_CATEGORY_DROPDOWN) {
             const val = tx.category == null ? '' : String(tx.category).trim();
             if (val === '') {
@@ -464,11 +411,6 @@ export function useTransactionTable(filters, statementPeriod) {
         return errors;
     }, []);
 
-    /**
-     * stripClientFields(tx)
-     * - Removes client-only helper fields from a transaction before sending to the API.
-     * - Important: DO NOT send id or __isNew in the payload.
-     */
     const stripClientFields = useCallback((tx) => {
         const copy = { ...tx };
         delete copy.id;
@@ -476,19 +418,8 @@ export function useTransactionTable(filters, statementPeriod) {
         return copy;
     }, []);
 
-    /**
-     * handleSaveRow(id, updatedFields = {}, addAnother = false)
-     * - Persists a whole row (create or update).
-     * - Validation is performed for new rows. On success, server results replace local rows or table is refetched.
-     * - The function handles optimistic local updates and ensures savingIds / saveErrors are maintained.
-     *
-     * @param {string} id
-     * @param {Object} updatedFields
-     * @param {boolean} addAnother
-     */
     const handleSaveRow = useCallback(
         async (id, updatedFields = {}, addAnother = false) => {
-            // merge changes into localTx synchronously (functional update)
             let txToPersist = null;
             setLocalTx((prev) =>
                 prev.map((t) => {
@@ -506,7 +437,6 @@ export function useTransactionTable(filters, statementPeriod) {
                 return;
             }
 
-            // clear previous errors
             setSaveErrors((prev) => {
                 if (!prev[id]) return prev;
                 const copy = { ...prev };
@@ -514,7 +444,6 @@ export function useTransactionTable(filters, statementPeriod) {
                 return copy;
             });
 
-            // ensure effective statementPeriod is appended (use cached or prop)
             const effectiveStatementPeriod = txToPersist.statementPeriod || cachedStatementPeriod || statementPeriod || undefined;
             if (effectiveStatementPeriod) {
                 txToPersist = { ...txToPersist, statementPeriod: effectiveStatementPeriod };
@@ -530,7 +459,6 @@ export function useTransactionTable(filters, statementPeriod) {
                 }
             }
 
-            // mark saving
             setSavingIds((prev) => {
                 const copy = new Set(prev);
                 copy.add(id);
@@ -540,24 +468,20 @@ export function useTransactionTable(filters, statementPeriod) {
             try {
                 if (isNew) {
                     logger.info('handleSaveRow: creating new transaction', { id, statementPeriod: effectiveStatementPeriod });
-                    // DO NOT send id in payload (strip before sending)
                     const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
                     const created = await budgetTransactionService.createTransaction(payload);
-                    // replace temp id row with created row
                     setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
-                    // Notify listeners that transactions changed (created)
                     try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'create', transaction: created }); } catch (err) { logger.error('publish transaction event failed', err); }
                     logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
 
                     if (addAnother) {
-                        // create a fresh local new row and start editing it
                         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
                         const newTx = {
                             id: makeTempId(),
                             name: '',
                             amount: 0,
-                            category: '', // keep blank per requested behaviour
-                            criticality: '', // keep blank per requested behaviour
+                            category: '',
+                            criticality: '',
                             transactionDate: new Date().toISOString(),
                             account: filters?.account || '',
                             paymentMethod: defaultPM,
@@ -569,23 +493,23 @@ export function useTransactionTable(filters, statementPeriod) {
                         setEditing({ id: newTx.id, mode: 'row' });
                         logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality, defaultPaymentMethod: newTx.paymentMethod });
                     } else {
-                        // refresh server data to ensure consistency
                         try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
+                        // refresh projections after successful create
+                        try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
                     }
                 } else {
                     logger.info('handleSaveRow: updating transaction', { id, statementPeriod: effectiveStatementPeriod });
-                    // Do not include id in request body; id is provided in URL by updateTransaction
                     const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
                     await budgetTransactionService.updateTransaction(id, payload);
-                    // Notify listeners that transactions changed (updated)
                     try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish transaction event failed', err); }
                     logger.info('handleSaveRow: updated', { id });
                     try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
+                    // refresh projections after update
+                    try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
                 }
             } catch (err) {
                 logger.error('handleSaveRow: persist failed', err);
                 setSaveErrors((prev) => ({ ...prev, [id]: err.message || String(err) }));
-                // if create failed, we keep local new tx so user can retry — do not wipe it
                 if (!isNew) {
                     try {
                         await txResult.refetch();
@@ -601,14 +525,9 @@ export function useTransactionTable(filters, statementPeriod) {
                 });
             }
         },
-        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields, cachedStatementPeriod]
+        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields, cachedStatementPeriod, refetchProjected]
     );
 
-    /**
-     * handleSaveEdit(id, field, value)
-     * - Convenience wrapper for single-field inline saves that delegates to handleSaveRow.
-     * - Converts common typed fields (amount, transactionDate) into the server payload shape.
-     */
     const handleSaveEdit = useCallback(
         async (id, field, value) => {
             const patch = {};
@@ -619,8 +538,6 @@ export function useTransactionTable(filters, statementPeriod) {
         },
         [handleSaveRow]
     );
-
-    /* -------------------- public API (returned) -------------------- */
 
     return {
         localTx,
@@ -645,7 +562,7 @@ export function useTransactionTable(filters, statementPeriod) {
         handleEditKey,
         handleSaveEdit,
         handleSaveRow,
-        handleCancelRow, // new export
+        handleCancelRow,
         startEditingRow,
         startEditingField,
         toInputDate,
@@ -653,13 +570,13 @@ export function useTransactionTable(filters, statementPeriod) {
         savingIds,
         saveErrors,
         setLocalTx,
-        // expose the effective statementPeriod for consumers
+        // expose statementPeriod and projection helpers for consumers
         statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
-        // expose config-driven criticality options for consumers (read-only)
+        projectedTotal,
+        projectedTx,
+        refetchProjected,
         criticalityOptions: CRITICALITY_OPTIONS,
-        // expose helper to derive criticality by category
         getCriticalityForCategory,
-        // expose category options and whether consumers should render a dropdown
         categoryOptions: CATEGORY_OPTIONS || [],
         isCategoryDropdown: IS_CATEGORY_DROPDOWN,
     };
