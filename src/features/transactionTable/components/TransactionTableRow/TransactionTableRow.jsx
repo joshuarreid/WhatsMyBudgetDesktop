@@ -1,3 +1,20 @@
+/**
+ * TransactionTableRow.jsx
+ *
+ * Presentational component that renders a single transaction row.
+ * - Projected transactions (tx.__isProjected === true) are visually distinct:
+ *   - row receives styles.projectedRow
+ *   - name is shown with styles.projectedName and a small projected badge
+ *   - amount is shown with styles.projectedAmount
+ *
+ * Conventions:
+ * - UI-only: all business logic lives in hooks (useTransactionRow).
+ * - Robust logging used for lifecycle / interaction tracing.
+ *
+ * @param {Object} props
+ * @returns {JSX.Element}
+ */
+
 import React from "react";
 import PropTypes from "prop-types";
 import { useTransactionRow } from "../../hooks/useTransactionRow";
@@ -19,6 +36,26 @@ const logger = {
     error: (...args) => console.error('[TransactionTableRow]', ...args),
 };
 
+/**
+ * TransactionTableRow
+ *
+ * @param {Object} props
+ * @param {Object} props.tx - transaction object
+ * @param {boolean} props.selected - whether row is selected
+ * @param {Function} props.onSelect - called when checkbox toggles
+ * @param {Object} props.editing - editing state from parent hook
+ * @param {Object} props.editValueRef - ref for inline edit value
+ * @param {Function} props.onCellDoubleClick - handler to enter field edit
+ * @param {Function} props.onEditKey - key handler for inline edit
+ * @param {Function} props.onSaveEdit - single-field save handler
+ * @param {Function} props.onSaveRow - full-row save handler
+ * @param {Function} props.onCancelRow - cancel handler
+ * @param {Function} props.toInputDate - helper to format date input
+ * @param {Function} props.setEditing - setter for editing state
+ * @param {Set} props.savingIds - ids currently saving
+ * @param {Object} props.saveErrors - save error map
+ * @param {Function} props.startEditingRow - start full-row edit
+ */
 export default function TransactionTableRow({
                                                 tx,
                                                 selected,
@@ -145,10 +182,12 @@ export default function TransactionTableRow({
         }
     };
 
+    // conditional className for projected rows
+    const rowClassName = `${styles.row} ${selected ? styles.rowSelected : ""} ${tx?.__isProjected ? styles.projectedRow : ""}`;
+
     return (
         <div
-            className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
-            key={tx.id}
+            className={rowClassName}
             onDoubleClickCapture={handleRowDoubleClickCapture}
         >
             <div className={styles.checkboxCol}>
@@ -190,7 +229,12 @@ export default function TransactionTableRow({
                         />
                     </>
                 ) : (
-                    <div onDoubleClick={() => onCellDoubleClick(tx, "name")}>{tx.name}</div>
+                    <div onDoubleClick={() => onCellDoubleClick(tx, "name")}>
+                        <span className={tx?.__isProjected ? styles.projectedName : undefined}>{tx.name}</span>
+                        {tx?.__isProjected ? (
+                            <span className={styles.projectedBadge} aria-hidden="true">Projected</span>
+                        ) : null}
+                    </div>
                 )}
             </div>
 
@@ -224,7 +268,9 @@ export default function TransactionTableRow({
                         />
                     </>
                 ) : (
-                    new Intl.NumberFormat(DEFAULT_LOCALE, { style: "currency", currency: DEFAULT_CURRENCY }).format(Number(tx.amount) || 0)
+                    <span className={tx?.__isProjected ? styles.projectedAmount : undefined}>
+                        {new Intl.NumberFormat(DEFAULT_LOCALE, { style: "currency", currency: DEFAULT_CURRENCY }).format(Number(tx.amount) || 0)}
+                    </span>
                 )}
             </div>
 

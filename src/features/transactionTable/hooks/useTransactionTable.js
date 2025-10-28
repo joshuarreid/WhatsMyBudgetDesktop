@@ -3,11 +3,9 @@
  *
  * Hook that orchestrates transactions for the TransactionTable feature.
  *
- * Change: integrate projected transactions for the current statementPeriod by using
- * useProjectedTransactions and merging projected rows (marked with __isProjected)
- * into the table's localTx. Projected totals are included in computed `total`.
- *
- * All other behavior (create/update/delete/upload/save/cancel flows) is preserved.
+ * Change: ensure projected transactions are merged into localTx at the top
+ * of the list (after local temp rows) so they always appear first. Kept all
+ * other behaviours intact.
  *
  * @module useTransactionTable
  */
@@ -24,7 +22,6 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import localCacheService from '../../../services/LocalCacheService';
 import { useTransactionsForAccount } from "../../../hooks/useTransactions";
 import { publish as publishTransactionEvents } from '../../../services/TransactionEvents';
-// Use the centralized config accessor instead of reading the raw JSON.
 import {
     get as getConfig,
     getCriticalityForCategory,
@@ -41,7 +38,6 @@ import {
     INPUT_DATE_LENGTH,
 } from '../utils/constants';
 import budgetTransactionService from "../../../services/BudgetTransactionService";
-
 
 /**
  * CRITICALITY_OPTIONS - read once at module load
@@ -106,20 +102,7 @@ export function useTransactionTable(filters, statementPeriod) {
         [txResult.personalTransactions, txResult.jointTransactions]
     );
 
-    // ---------------------------------------------------------
-    // Important: ensure cachedStatementPeriod is declared BEFORE
-    // we call useProjectedTransactions so we can pass it in as
-    // the effective statementPeriod. Previously the hook was
-    // invoked before cachedStatementPeriod existed, causing the
-    // projection hook to see an empty statementPeriod and skip
-    // fetching (observed in your logs).
-    // ---------------------------------------------------------
-    /**
-     * cachedStatementPeriod (state)
-     * - Tracks the current effective statementPeriod for the UI.
-     * - Preferred source: statementPeriod param passed in by parent.
-     * - Fallback: value read from server cache via STATEMENT_PERIOD_CACHE_KEY.
-     */
+    // cachedStatementPeriod must be declared before calling useProjectedTransactions so hook sees the correct value
     const [cachedStatementPeriod, setCachedStatementPeriod] = useState(statementPeriod || null);
 
     useEffect(() => {
@@ -152,28 +135,29 @@ export function useTransactionTable(filters, statementPeriod) {
     }, [cachedStatementPeriod]);
 
     // --- Projected transactions integration --------------------------------
-    // Use the cachedStatementPeriod first, then prop statementPeriod as fallback.
-    // This ensures that when we read the persisted server value (cachedStatementPeriod)
-    // the projections hook will re-run and fetch projections for that period.
     const effectiveStatementPeriod = cachedStatementPeriod || statementPeriod || undefined;
-    const { projectedTx = [], loading: projectedLoading = false, error: projectedError = null, refetch: refetchProjected } =
-        useProjectedTransactions({ statementPeriod: effectiveStatementPeriod, account: filters?.account || undefined });
+    const {
+        projectedTx = [],
+        loading: projectedLoading = false,
+        error: projectedError = null,
+        refetch: refetchProjected
+    } = useProjectedTransactions({ statementPeriod: effectiveStatementPeriod, account: filters?.account || undefined });
 
-    // localTx state contains any local new rows (id starts with TEMP_ID_PREFIX) + serverTx + projectedTx
-    const [localTx, setLocalTx] = useState(() => serverTx);
+    // localTx state contains any local new rows (id starts with TEMP_ID_PREFIX) + projectedTx + serverTx
+    const [localTx, setLocalTx] = useState(() => {
+        // initial: local-only + projected (none initially) + serverTx
+        return [...serverTx];
+    });
 
-    // Merge server + projected Tx into localTx while preserving local-only temp rows
+    // Merge localOnly -> projected -> serverTx so projected rows always appear at top (after local temp rows)
     useEffect(() => {
         setLocalTx((prev) => {
             const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-            // Merge serverTx and projectedTx (projectedTx already marked with __isProjected)
-            const merged = [...serverTx];
-            if (Array.isArray(projectedTx) && projectedTx.length > 0) {
-                // sort projected by date descending and append
-                const projSorted = [...projectedTx].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
-                merged.push(...projSorted);
-            }
-            const final = [...localOnly, ...merged];
+            const projSorted = Array.isArray(projectedTx) && projectedTx.length > 0
+                ? [...projectedTx].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
+                : [];
+            // serverTx is already sorted by date desc
+            const final = [...localOnly, ...projSorted, ...serverTx];
             return final;
         });
     }, [serverTx, projectedTx]);

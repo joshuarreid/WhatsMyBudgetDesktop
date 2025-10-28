@@ -201,6 +201,45 @@
     margin-top: 6px;
 }
 
+/* =========================
+   Projected transaction styles (added)
+   ========================= */
+
+/* Projected row: subtle left border and muted background */
+.projectedRow {
+    background: rgba(99, 102, 241, 0.03); /* subtle indigo tint */
+    border-left: 3px solid rgba(99, 102, 241, 0.22);
+}
+
+/* Projected name appearance (slightly muted / italic) */
+.projectedName {
+    color: #374151; /* neutral-700 */
+    font-style: italic;
+    opacity: 0.95;
+}
+
+/* Small badge shown next to name for projected transactions */
+.projectedBadge {
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: rgba(99, 102, 241, 0.12);
+    color: #4f46e5; /* indigo-600 */
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+/* Projected amount: muted color to visually separate from confirmed amounts */
+.projectedAmount {
+    color: #6b7280; /* neutral-500 */
+    opacity: 0.95;
+}
+
+/* =========================
+   End projected styles
+   ========================= */
+
 /* responsive adjustments that mirror the global layout reductions */
 @media (max-width: 900px) {
     .row {
