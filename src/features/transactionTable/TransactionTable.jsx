@@ -77,7 +77,7 @@ export default function TransactionTable(props) {
                 />
                 {/* Keep the header so the table shell is visible during loading */}
                 <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
-                <div className="tt-body">{loading ? null : <div className="tt-empty">No transactions</div>}</div>
+                <div className="tt-body">{loading ? null : <div className="tt-empty"></div>}</div>
             </div>
         );
 

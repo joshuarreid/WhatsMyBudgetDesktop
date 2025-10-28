@@ -5,7 +5,7 @@ export default function CategoryTableBody({ rows, totalSum, fmt, loading, onRowC
     return (
         <div className="ct-body">
             {rows.length === 0 ? (
-                loading ? null : <div className="ct-empty">No transactions</div>
+                loading ? null : <div className="ct-empty"></div>
             ) : (
                 rows.map(([category, total]) => (
                     <CategoryTableRow
