@@ -73,11 +73,23 @@ export default function CategorizedTable(props) {
         statementPeriod,
         account: props.account ?? filters?.account,
     });
+
+    /**
+     * Calculates projected total for this table's criticality.
+     * Filters projected transactions by criticality so each table only
+     * displays projected sum for its own category, case-insensitive.
+     *
+     * @constant
+     * @type {number}
+     */
     const projectedTotal = useMemo(() => {
+        const crit = String(mergedFilters.criticality || '').toLowerCase();
         return Array.isArray(projectedTx)
-            ? projectedTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+            ? projectedTx
+                .filter(tx => String(tx.criticality || '').toLowerCase() === crit)
+                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
             : 0;
-    }, [projectedTx]);
+    }, [projectedTx, mergedFilters.criticality]);
 
     logger.info('render data', {
         loading,
