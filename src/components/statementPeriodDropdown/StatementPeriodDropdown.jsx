@@ -22,6 +22,7 @@ export default function StatementPeriodDropdown() {
         setIsOpen,
         onButtonKeyDown,
         onOptionKeyDown,
+        isLoaded, // <-- get isLoaded from context
     } = useStatementPeriodContext();
 
     /**
@@ -34,6 +35,25 @@ export default function StatementPeriodDropdown() {
         await updateStatementPeriod(value);
         setIsOpen(false); // Ensure dropdown closes after selecting
     };
+
+    // Only show dropdown when context is loaded and statementPeriod is defined
+    if (!isLoaded || statementPeriod === undefined) {
+        return (
+            <div className="statement-period-dropdown" aria-busy="true">
+                <button
+                    type="button"
+                    className="tt-link-btn statement-period-button"
+                    aria-haspopup="listbox"
+                    aria-expanded={false}
+                    disabled
+                    title="Statement Period"
+                >
+                    <span className="tt-icon">📅</span>
+                    Loading...
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="statement-period-dropdown" ref={containerRef} aria-busy={isSaving}>
