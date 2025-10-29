@@ -126,7 +126,7 @@ export default function TransactionTable(props) {
                 />
                 <TransactionTableHeader isAllSelected={false} toggleSelectAll={() => {}} />
                 <div className="tt-body">
-                    <div className="tt-empty">Loading statement period…</div>
+                    <div className="tt-empty"></div>
                 </div>
             </div>
         );
@@ -156,8 +156,8 @@ export default function TransactionTable(props) {
                 <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
                 <div className="tt-body">
                     {loading
-                        ? <div className="tt-empty">Loading transactions…</div>
-                        : <div className="tt-empty">No transactions for this period.</div>
+                        ? <div className="tt-empty"></div>
+                        : <div className="tt-empty"></div>
                     }
                 </div>
             </div>

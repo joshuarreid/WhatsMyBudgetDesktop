@@ -1,18 +1,5 @@
-/**
- * useTransactionTable.js
- *
- * Hook that orchestrates transactions for the TransactionTable feature.
- * Responsibilities:
- * - Combines server budget transactions and projected transactions into a single localTx list
- *   with local temporary rows always at the top, then projected rows, then server transactions.
- * - Ensures projected rows are annotated with __isProjected so UI can display a visual indicator.
- * - Provides handlers for adding, editing, saving, deleting, importing transactions.
- * - Exposes toolbar logic via useTransactionToolbar for UI isolation.
- *
- * @module useTransactionTable
- */
-
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useStatementPeriodContext } from '../../../context/StatementPeriodProvider';
 import useProjectedTransactions from '../../../hooks/useProjectedTransactions';
 import localCacheService from '../../../services/LocalCacheService';
 import { useTransactionsForAccount } from '../../../hooks/useTransactions';
@@ -34,7 +21,7 @@ import projectedTransactionService from '../../../services/ProjectedTransactionS
 import useTransactionToolbar from './useTransactionToolbar';
 
 /**
- * Logger for useTransactionTable
+ * Logger for useTransactionTable.
  */
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -108,21 +95,35 @@ function annotateProjection(arr) {
 /**
  * useTransactionTable
  * Main hook for TransactionTable business logic and state management.
+ * Passes statementPeriod from StatementPeriodContext as a filter.
  *
  * @function useTransactionTable
  * @param {Object} filters
- * @param {string} statementPeriod
  * @returns {Object} Transaction table API surface
  */
-export function useTransactionTable(filters, statementPeriod) {
+export function useTransactionTable(filters) {
+    const { statementPeriod } = useStatementPeriodContext();
+
     // --- Table state ---
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
     const [savingIds, setSavingIds] = useState(() => new Set());
     const [saveErrors, setSaveErrors] = useState(() => ({}));
-    const txResult = useTransactionsForAccount(filters || {});
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
+
+    // --- Compose filters with statement period from context ---
+    /** @type {Object} */
+    const accountFilters = useMemo(() => ({
+        ...(filters || {}),
+        statementPeriod,
+    }), [filters, statementPeriod]);
+
+    /**
+     * Fetches transactions for account and statement period.
+     * @type {Object}
+     */
+    const txResult = useTransactionsForAccount(accountFilters);
 
     // --- Transactions integration ---
     const serverTx = useMemo(
@@ -133,36 +134,12 @@ export function useTransactionTable(filters, statementPeriod) {
         [txResult.personalTransactions, txResult.jointTransactions]
     );
 
-    const [cachedStatementPeriod, setCachedStatementPeriod] = useState(statementPeriod || null);
-    useEffect(() => {
-        if (statementPeriod) setCachedStatementPeriod(statementPeriod);
-    }, [statementPeriod]);
-    useEffect(() => {
-        let mounted = true;
-        if (!cachedStatementPeriod) {
-            logger.info('Attempting to load statementPeriod from local cache', { cacheKey: STATEMENT_PERIOD_CACHE_KEY });
-            localCacheService.get(STATEMENT_PERIOD_CACHE_KEY)
-                .then((data) => {
-                    const val = data?.cacheValue ?? data?.value ?? data ?? null;
-                    if (mounted && val) {
-                        setCachedStatementPeriod(String(val));
-                        logger.info('Loaded statementPeriod from cache', { value: val });
-                    }
-                })
-                .catch((err) => {
-                    logger.error('Failed to load statementPeriod from cache', err);
-                });
-        }
-        return () => { mounted = false; };
-    }, [cachedStatementPeriod]);
-
-    const effectiveStatementPeriod = cachedStatementPeriod || statementPeriod || undefined;
     const {
         projectedTx = [],
         loading: projectedLoading = false,
         error: projectedError = null,
         refetch: refetchProjected
-    } = useProjectedTransactions({ statementPeriod: effectiveStatementPeriod, account: filters?.account || undefined });
+    } = useProjectedTransactions({ statementPeriod, account: filters?.account || undefined });
 
     const [localTx, setLocalTx] = useState(() => [...serverTx]);
     useEffect(() => {
@@ -231,13 +208,13 @@ export function useTransactionTable(filters, statementPeriod) {
             paymentMethod: defaultPM,
             memo: '',
             __isNew: true,
-            statementPeriod: cachedStatementPeriod || undefined,
+            statementPeriod,
         };
         setLocalTx((prev) => [newTx, ...(prev || [])]);
         setEditing({ id: newTx.id, mode: 'row' });
         editValueRef.current = '';
         logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod });
-    }, [makeTempId, filters, cachedStatementPeriod]);
+    }, [makeTempId, filters, statementPeriod]);
 
     /**
      * Handles addition of new projected transaction row and opens editor.
@@ -258,13 +235,13 @@ export function useTransactionTable(filters, statementPeriod) {
             memo: '',
             __isNew: true,
             __isProjected: true,
-            statementPeriod: cachedStatementPeriod || undefined,
+            statementPeriod,
         };
         setLocalTx((prev) => [newProj, ...(prev || [])]);
         setEditing({ id: newProj.id, mode: 'row' });
         editValueRef.current = '';
         logger.info('handleAddProjection: created local new projected tx', { tempId: newProj.id, statementPeriod: newProj.statementPeriod });
-    }, [makeTempId, filters, cachedStatementPeriod]);
+    }, [makeTempId, filters, statementPeriod]);
 
     /**
      * Cancels editing and removes temp rows where applicable.
@@ -346,7 +323,7 @@ export function useTransactionTable(filters, statementPeriod) {
                     try {
                         const acct = filters?.account || undefined;
                         const acctList = acct
-                            ? await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod: effectiveStatementPeriod }).catch((err) => {
+                            ? await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
                                 logger.error('getTransactionsForAccount after delete failed', err);
                                 return null;
                             })
@@ -365,14 +342,14 @@ export function useTransactionTable(filters, statementPeriod) {
                     } catch (err) {
                         logger.error('refetchProjected/account list update failed', err);
                     }
-                    try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'delete', ids: projectionIds, account: filters?.account, statementPeriod: effectiveStatementPeriod }); } catch (err) { logger.error('publish projection event failed', err); }
+                    try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'delete', ids: projectionIds, account: filters?.account, statementPeriod }); } catch (err) { logger.error('publish projection event failed', err); }
                 }
                 logger.info('handleDeleteSelected: deleted server ids', { budgetIds, projectionIds });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, txResult, refetchProjected, localTx, projectedTx, serverTx, effectiveStatementPeriod, filters]
+        [selectedIds, txResult, refetchProjected, localTx, projectedTx, serverTx, statementPeriod, filters]
     );
 
     /**
@@ -384,10 +361,9 @@ export function useTransactionTable(filters, statementPeriod) {
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
             if (!file) return;
-            const effectiveStatementPeriod = cachedStatementPeriod || statementPeriod || undefined;
             try {
-                logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod: effectiveStatementPeriod });
-                await budgetTransactionService.uploadTransactions(file, effectiveStatementPeriod);
+                logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod });
+                await budgetTransactionService.uploadTransactions(file, statementPeriod);
                 await txResult.refetch();
                 try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'upload', fileName: file.name }); } catch (err) { logger.error('publish transaction event failed', err); }
                 try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after upload failed', err); }
@@ -398,7 +374,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 ev.target.value = '';
             }
         },
-        [txResult, statementPeriod, cachedStatementPeriod, refetchProjected]
+        [txResult, statementPeriod, refetchProjected]
     );
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
     const startEditingField = useCallback((id, field, initial = '') => {
@@ -500,9 +476,8 @@ export function useTransactionTable(filters, statementPeriod) {
                 delete copy[id];
                 return copy;
             });
-            const effectiveStatementPeriod = txToPersist.statementPeriod || cachedStatementPeriod || statementPeriod || undefined;
-            if (effectiveStatementPeriod) {
-                txToPersist = { ...txToPersist, statementPeriod: effectiveStatementPeriod };
+            if (statementPeriod) {
+                txToPersist = { ...txToPersist, statementPeriod };
             }
             const isNew = String(id).startsWith(TEMP_ID_PREFIX) || txToPersist.__isNew;
             if (isNew) {
@@ -520,8 +495,8 @@ export function useTransactionTable(filters, statementPeriod) {
             });
             try {
                 if (isNew) {
-                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod: effectiveStatementPeriod, isProjection: !!txToPersist.__isProjected });
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
+                    logger.info('handleSaveRow: creating new transaction', { id, statementPeriod, isProjection: !!txToPersist.__isProjected });
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
                     if (txToPersist.__isProjected) {
                         const created = await projectedTransactionService.createTransaction(payload);
                         const createdWithFlag = { ...created, __isProjected: true };
@@ -539,7 +514,7 @@ export function useTransactionTable(filters, statementPeriod) {
                         try {
                             const acct = filters?.account || payload.account || undefined;
                             if (acct) {
-                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod: effectiveStatementPeriod }).catch((err) => {
+                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
                                     logger.error('getTransactionsForAccount after create failed', err);
                                     return null;
                                 });
@@ -578,7 +553,7 @@ export function useTransactionTable(filters, statementPeriod) {
                                 paymentMethod: defaultPM,
                                 memo: '',
                                 __isNew: true,
-                                statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
+                                statementPeriod,
                             };
                             setLocalTx((prev) => [newTx, ...(prev || [])]);
                             setEditing({ id: newTx.id, mode: 'row' });
@@ -589,8 +564,8 @@ export function useTransactionTable(filters, statementPeriod) {
                         }
                     }
                 } else {
-                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod: effectiveStatementPeriod, isProjection: !!txToPersist.__isProjected });
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod: effectiveStatementPeriod });
+                    logger.info('handleSaveRow: updating transaction', { id, statementPeriod, isProjection: !!txToPersist.__isProjected });
+                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
                     if (txToPersist.__isProjected) {
                         await projectedTransactionService.updateTransaction(id, payload);
                         try {
@@ -600,14 +575,14 @@ export function useTransactionTable(filters, statementPeriod) {
                                 id,
                                 payload,
                                 account: payload.account || filters?.account,
-                                statementPeriod: payload.statementPeriod || cachedStatementPeriod || statementPeriod
+                                statementPeriod: payload.statementPeriod || statementPeriod
                             });
                         } catch (err) { logger.error('publish projection event failed', err); }
                         logger.info('handleSaveRow: updated projection', { id });
                         try {
                             const acct = filters?.account || payload.account || undefined;
                             if (acct) {
-                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod: effectiveStatementPeriod }).catch((err) => {
+                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
                                     logger.error('getTransactionsForAccount after update failed', err);
                                     return null;
                                 });
@@ -654,7 +629,7 @@ export function useTransactionTable(filters, statementPeriod) {
                 });
             }
         },
-        [makeTempId, txResult, validateForCreate, filters, statementPeriod, stripClientFields, cachedStatementPeriod, refetchProjected, serverTx]
+        [makeTempId, txResult, validateForCreate, filters, stripClientFields, statementPeriod, refetchProjected, serverTx]
     );
 
     const handleSaveEdit = useCallback(
@@ -717,7 +692,7 @@ export function useTransactionTable(filters, statementPeriod) {
         savingIds,
         saveErrors,
         setLocalTx,
-        statementPeriod: cachedStatementPeriod || statementPeriod || undefined,
+        statementPeriod,
         projectedTotal,
         projectedTx,
         refetchProjected,
