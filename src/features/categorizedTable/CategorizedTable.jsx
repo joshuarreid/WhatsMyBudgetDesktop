@@ -68,7 +68,7 @@ export default function CategorizedTable(props) {
         filters: mergedFilters,
     });
 
-    // Get projected balance using custom hook
+    // Get projected transactions using custom hook
     const { projectedTx = [] } = useProjectedTransactions({
         statementPeriod,
         account: props.account ?? filters?.account,
@@ -91,6 +91,26 @@ export default function CategorizedTable(props) {
             : 0;
     }, [projectedTx, mergedFilters.criticality]);
 
+    /**
+     * Calculates projected totals by category for this table's criticality.
+     * Used for rendering the yellow progress bar segment per category.
+     *
+     * @constant
+     * @type {Record<string, number>}
+     */
+    const projectedTotalsByCategory = useMemo(() => {
+        const crit = String(mergedFilters.criticality || '').toLowerCase();
+        if (!Array.isArray(projectedTx)) return {};
+        return projectedTx
+            .filter(tx => String(tx.criticality || '').toLowerCase() === crit)
+            .reduce((acc, tx) => {
+                const cat = tx.category || 'Uncategorized';
+                const amount = Number(tx.amount) || 0;
+                acc[cat] = (acc[cat] || 0) + amount;
+                return acc;
+            }, {});
+    }, [projectedTx, mergedFilters.criticality]);
+
     logger.info('render data', {
         loading,
         error: Boolean(error),
@@ -100,6 +120,7 @@ export default function CategorizedTable(props) {
         projectedCount: projectedTx?.length ?? 0,
         projectedTotal,
         statementPeriod,
+        projectedTotalsByCategory,
     });
 
     // Modal state (open selected category)
@@ -150,6 +171,7 @@ export default function CategorizedTable(props) {
                 fmt={fmt}
                 loading={loading}
                 onRowClick={handleRowClick}
+                projectedTotalsByCategory={projectedTotalsByCategory}
             />
             <CategoryTableFooter
                 totalSum={totalSum}

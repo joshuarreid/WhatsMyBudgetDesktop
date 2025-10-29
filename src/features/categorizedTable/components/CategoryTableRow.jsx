@@ -1,14 +1,60 @@
+/**
+ * CategoryTableRow
+ * - Renders a single row in the category spending table.
+ * - Displays category name, total, and a progress bar with projected overlay.
+ *
+ * @module CategoryTableRow
+ * @param {Object} props
+ * @param {string} props.category - Category name.
+ * @param {number} props.total - Actual transaction sum for the category.
+ * @param {number} props.projectedTotal - Projected transaction sum for the category.
+ * @param {number} props.totalSum - Grand total sum for all categories (actual).
+ * @param {Object} props.fmt - Currency formatter.
+ * @param {Function} [props.onClick] - Row click handler.
+ * @returns {JSX.Element}
+ */
+
 import React from "react";
 import CategoryProgressBar from "./CategoryProgressBar";
 
+/**
+ * Logger for CategoryTableRow
+ * @constant
+ */
 const logger = {
     info: (...args) => console.log('[CategoryTableRow]', ...args),
     error: (...args) => console.error('[CategoryTableRow]', ...args),
 };
 
-export default function CategoryTableRow({ category, total, totalSum, fmt, onClick }) {
-    const pct = totalSum > 0 ? Math.round((total / totalSum) * 100) : 0;
+/**
+ * CategoryTableRow
+ * - Renders category with actual and projected progress.
+ * - Handles keyboard and mouse activation for details modal.
+ *
+ * @param {Object} props
+ * @returns {JSX.Element}
+ */
+export default function CategoryTableRow({
+                                             category,
+                                             total,
+                                             projectedTotal = 0,
+                                             totalSum,
+                                             fmt,
+                                             onClick
+                                         }) {
+    /**
+     * Calculates the percent of GRAND total for combined actual + projected.
+     * Only the combined percent is rendered as label.
+     * Blue bar for actual, yellow for projected addition.
+     */
+    const actualPercent = totalSum > 0 ? (total / totalSum) * 100 : 0;
+    const combinedPercent = totalSum > 0 ? ((total + projectedTotal) / totalSum) * 100 : actualPercent;
+    const percentLabel = Math.round(combinedPercent);
 
+    /**
+     * Handles row activation (mouse/click).
+     * @function
+     */
     function handleActivate() {
         if (typeof onClick === 'function') {
             logger.info('activating row', { category });
@@ -16,6 +62,11 @@ export default function CategoryTableRow({ category, total, totalSum, fmt, onCli
         }
     }
 
+    /**
+     * Handles keyboard activation (Enter/Space).
+     * @function
+     * @param {React.KeyboardEvent} e
+     */
     function handleKeyDown(e) {
         if (!onClick) return;
         if (e.key === 'Enter' || e.key === ' ') {
@@ -36,7 +87,11 @@ export default function CategoryTableRow({ category, total, totalSum, fmt, onCli
             <div className="ct-col ct-cat">{category}</div>
             <div className="ct-col ct-col-amount" style={{ flexDirection: "column", alignItems: "flex-end" }}>
                 <div className="ct-amount">{fmt.format(total)}</div>
-                <CategoryProgressBar pct={pct} />
+                <CategoryProgressBar
+                    actualPercent={actualPercent}
+                    combinedPercent={combinedPercent}
+                    percentLabel={percentLabel}
+                />
             </div>
         </div>
     );
