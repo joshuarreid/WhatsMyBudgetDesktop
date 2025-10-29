@@ -1,19 +1,24 @@
-/* Scoped styles for BalanceWidget (CSS Module)
+/* Scoped styles for BalanceWidget
  *
- * Migrated from global .tt-balance-* rules into a component-scoped module so
- * the BalanceWidget visual surface is owned by the component.
- *
- * Uses feature-level CSS variables (defined in TransactionTable.css) for colors
- * and spacing so the visual tokens remain centralized.
+ * - Left group contains Total / Joint / Personal
+ * - Projected balance is pushed to the far right via margin-left:auto
+ * - Uses a yellow/amber color for projected amount to make it distinct
  */
 
 .container {
     display: flex;
-    gap: 18px;
     align-items: center;
+    gap: 18px;
     padding: 12px 14px;
     background: linear-gradient(180deg, rgba(10,10,12,0.7), rgba(18,18,20,0.6));
     border-radius: 8px;
+}
+
+/* group for the three left balances so projected can be pushed right */
+.group {
+    display: flex;
+    gap: 18px;
+    align-items: center;
 }
 
 .item {
@@ -28,6 +33,24 @@
 }
 
 .label {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+}
+
+/* ===== Projected balance styles =====
+ * Projected item sits at the far right of the container.
+ */
+
+
+.projectedAmount {
+    color: #F6D86B; /* was #FBBF24 */
+    font-weight: 800;
+    font-size: 1.05rem;
+    opacity: 0.96; /* slightly toned down so it's distinct but not harsh */
+    text-shadow: 0 1px 0 rgba(0,0,0,0.18); /* subtle depth on dark background */
+}
+
+.projectedLabel {
     font-size: 0.78rem;
     color: var(--color-muted);
 }

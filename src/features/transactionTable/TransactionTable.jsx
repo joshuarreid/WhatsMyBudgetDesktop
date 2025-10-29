@@ -27,6 +27,7 @@ export default function TransactionTable(props) {
         total,
         jointBalance,
         personalBalance,
+        projectedTotal, // added: projected total from hook
         isAllSelected,
         toggleSelect,
         toggleSelectAll,
@@ -63,6 +64,7 @@ export default function TransactionTable(props) {
                     total={total}
                     joint={jointBalance}
                     personal={personalBalance}
+                    projected={projectedTotal}
                 />
                 <TransactionTableToolbar
                     onAdd={handleAddTransaction}
@@ -87,6 +89,7 @@ export default function TransactionTable(props) {
                 total={total}
                 joint={jointBalance}
                 personal={personalBalance}
+                projected={projectedTotal}
             />
             <TransactionTableToolbar
                 onAdd={handleAddTransaction}
