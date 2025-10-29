@@ -1,20 +1,21 @@
-
+import React from 'react';
+import './StatementPeriodDropdown.css';
+import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
 
 const logger = {
     info: (...args) => console.log('[StatementPeriodDropdown]', ...args),
     error: (...args) => console.error('[StatementPeriodDropdown]', ...args),
 };
 
-import React from 'react';
-import PropTypes from 'prop-types';
-import './StatementPeriodDropdown.css';
-import useStatementPeriodDropdown from "./useStatementPeriodDropdown";
-
 /**
- * StatementPeriodDropdown (presentation)
- * Uses useStatementPeriodDropdown hook for behavior.
+ * StatementPeriodDropdown.
+ * Renders UI for selecting statement period.
+ * Uses StatementPeriodContext for state/actions.
+ *
+ * @function StatementPeriodDropdown
+ * @returns {JSX.Element}
  */
-export default function StatementPeriodDropdown({ onChange = null }) {
+export default function StatementPeriodDropdown() {
     const {
         options,
         selectedValue,
@@ -26,7 +27,7 @@ export default function StatementPeriodDropdown({ onChange = null }) {
         handleSelect,
         onButtonKeyDown,
         onOptionKeyDown,
-    } = useStatementPeriodDropdown({ prev: 1, forward: 5, onChange });
+    } = useStatementPeriodContext();
 
     logger.info('render', { selectedValue, isOpen, isSaving });
 
@@ -77,7 +78,3 @@ export default function StatementPeriodDropdown({ onChange = null }) {
         </div>
     );
 }
-
-StatementPeriodDropdown.propTypes = {
-    onChange: PropTypes.func,
-};

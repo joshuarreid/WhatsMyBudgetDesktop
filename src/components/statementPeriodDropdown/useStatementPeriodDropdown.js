@@ -1,45 +1,25 @@
-
-
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import localCacheService from "../../services/LocalCacheService";
+import { generateOptions, getCurrentOption } from "../../services/StatementPeriodService";
 
 const logger = {
     info: (...args) => console.log('[useStatementPeriodDropdown]', ...args),
     error: (...args) => console.error('[useStatementPeriodDropdown]', ...args),
 };
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import localCacheService from "../../services/LocalCacheService";
-import {generateOptions, getCurrentOption} from "../../services/StatementPeriodService";
-
 /**
- * useStatementPeriodDropdown
+ * useStatementPeriodDropdown.
+ * Manages statement period dropdown logic, including options generation,
+ * server cache integration, optimistic updates, keyboard navigation,
+ * and outside click handling.
  *
- * Encapsulates the statement-period dropdown logic:
- * - Generates the fallback 7-item list (i = -prev .. +forward)
- * - On mount, reads server-stored cache value via LocalCacheService.get('currentStatementPeriod')
- * - Exposes optimistic select + persist via LocalCacheService.set('currentStatementPeriod', value)
- * - Handles saving state, race safety (request id), keyboard helpers, and outside-click ref
- *
- * Params:
- * - prev (number)         - months before anchor (default 1)
- * - forward (number)      - months after anchor (default 5)
- * - onChange (function)   - optional callback invoked after successful server read on mount and after successful persist
- * - anchor (Date)         - base date (default now) - useful for tests
- *
- * Returns:
- * {
- *   options,
- *   selectedValue,
- *   selectedLabel,
- *   isOpen,
- *   isSaving,
- *   containerRef,
- *   toggleOpen,
- *   handleSelect,
- *   onButtonKeyDown,
- *   onOptionKeyDown,
- *   setSelectedValue,
- *   setIsOpen
- * }
+ * @function useStatementPeriodDropdown
+ * @param {object} [params]
+ * @param {number} [params.prev=1] - Months before anchor.
+ * @param {number} [params.forward=5] - Months after anchor.
+ * @param {function} [params.onChange=null] - Callback after period change.
+ * @param {Date} [params.anchor=new Date()] - Anchor date for generating periods.
+ * @returns {object} Dropdown state/actions for UI consumption.
  */
 export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onChange = null, anchor = new Date() } = {}) {
     const options = useMemo(() => generateOptions({ anchor, prev, forward }), [anchor, prev, forward]);
@@ -55,12 +35,19 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
 
     useEffect(() => {
         mountedRef.current = true;
-        return () => { mountedRef.current = false; };
+        logger.info('Dropdown mounted');
+        return () => {
+            mountedRef.current = false;
+            logger.info('Dropdown unmounted');
+        };
     }, []);
 
-    // On mount: read server-stored value and apply it (server authoritative)
     useEffect(() => {
         let mounted = true;
+        /**
+         * Initializes dropdown by fetching server-stored value.
+         * Applies server value or falls back to default.
+         */
         async function init() {
             logger.info('init: reading currentStatementPeriod from server');
             try {
@@ -76,7 +63,6 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
                     }
                     return;
                 }
-                // fallback to generated default
                 logger.info('init: no server value found; using generated default', { default: defaultOpt && defaultOpt.value });
                 if (defaultOpt) setSelectedValue(defaultOpt.value);
             } catch (err) {
@@ -86,13 +72,31 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
         }
         void init();
         return () => { mounted = false; };
-    }, [defaultOpt]); // onChange intentionally not included to avoid double-calls on init
+    }, [defaultOpt]);
 
+    /**
+     * Toggles dropdown open/closed.
+     * @function toggleOpen
+     * @param {Event} [ev]
+     */
     const toggleOpen = useCallback((ev) => {
         ev?.preventDefault();
         setIsOpen((s) => !s);
-    }, []);
+        logger.info('toggleOpen called', { isOpen: !isOpen });
+    }, [isOpen]);
 
+    /**
+     * Persists selected period to server cache.
+     * Handles optimistic UI and revert on errors.
+     *
+     * @async
+     * @function persistSelection
+     * @param {string} key
+     * @param {string} newValue
+     * @param {string} revertValue
+     * @param {number} requestId
+     * @returns {Promise<object>} Result object: ok, result, err
+     */
     const persistSelection = useCallback(
         async (key, newValue, revertValue, requestId) => {
             if (!mountedRef.current) return { ok: false, err: new Error('unmounted') };
@@ -101,7 +105,6 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
             try {
                 const result = await localCacheService.set(key, newValue);
                 logger.info('persistSelection:success', { key, newValue, requestId, result });
-                // only clear saving if this is the latest request and component still mounted
                 if (lastRequestIdRef.current === requestId && mountedRef.current) setIsSaving(false);
                 if (typeof onChange === 'function') {
                     try { onChange(newValue); } catch (err) { logger.error('onChange threw after persist', err); }
@@ -109,7 +112,6 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
                 return { ok: true, result };
             } catch (err) {
                 logger.error('persistSelection:failed', { key, newValue, requestId, err });
-                // revert only if this is the latest request and mounted
                 if (lastRequestIdRef.current === requestId && mountedRef.current) {
                     setSelectedValue(revertValue);
                     setIsSaving(false);
@@ -125,6 +127,13 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
         [onChange]
     );
 
+    /**
+     * Handles user selection of a statement period.
+     * Optimistically updates UI and persists the selection.
+     *
+     * @function handleSelect
+     * @param {string} value
+     */
     const handleSelect = useCallback(
         (value) => {
             if (isSaving) {
@@ -132,18 +141,22 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
                 return;
             }
             const prev = selectedValue;
-            // optimistic update
             setSelectedValue(value);
             setIsOpen(false);
             logger.info('userSelect: optimistic update', { oldValue: prev, newValue: value });
 
             const requestId = ++lastRequestIdRef.current;
-            // persist in background (fire-and-handle) - returned promise intentionally not awaited here
             void persistSelection('currentStatementPeriod', value, prev, requestId);
         },
         [selectedValue, isSaving, persistSelection]
     );
 
+    /**
+     * Handles keyboard events for dropdown button.
+     *
+     * @function onButtonKeyDown
+     * @param {KeyboardEvent} e
+     */
     const onButtonKeyDown = useCallback((e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -153,6 +166,13 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
         }
     }, []);
 
+    /**
+     * Handles keyboard events for dropdown options.
+     *
+     * @function onOptionKeyDown
+     * @param {KeyboardEvent} e
+     * @param {string} value
+     */
     const onOptionKeyDown = useCallback((e, value) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -162,6 +182,11 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, onCh
         }
     }, [handleSelect]);
 
+    /**
+     * Returns label for selected value.
+     * @function selectedLabel
+     * @returns {string}
+     */
     const selectedLabel = useMemo(() => {
         const found = options.find((o) => o.value === selectedValue);
         return found ? found.label : selectedValue || 'SELECT PERIOD';
