@@ -1,3 +1,14 @@
+/**
+ * CategorizedTable
+ * - Renders a categorized transaction table with weekly modal support.
+ * - Displays current balance and projected balance (in yellow) side by side in the footer.
+ * - Filters on the provider's selected statement period.
+ *
+ * @module CategorizedTable
+ * @param {object} props - Component props.
+ * @returns {JSX.Element}
+ */
+
 import React, { useState, useMemo } from 'react';
 import useCategorizedTable from './useCategorizedTable';
 import './CategorizedTable.css';
@@ -7,6 +18,7 @@ import CategoryTableFooter from './components/CategoryTableFooter';
 import CategoryTableTitle from './components/CategoryTableTitle';
 import CategoryWeeklyModal from "../categoryWeeklyModal/CategoryWeeklyModal";
 import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
+import useProjectedTransactions from '../../hooks/useProjectedTransactions';
 
 /**
  * Logger for CategorizedTable
@@ -19,10 +31,10 @@ const logger = {
 
 /**
  * CategorizedTable
- * - Renders a categorized transaction table with weekly modal support.
- * - Filters on the provider's selected statement period.
+ * Presentational component for categorized transactions, including
+ * modal for weekly details and a footer showing current + projected balances.
  *
- * @param {object} props - Component props.
+ * @param {object} props
  * @returns {JSX.Element}
  */
 export default function CategorizedTable(props) {
@@ -50,11 +62,22 @@ export default function CategorizedTable(props) {
         totalSum,
         fmt,
         filters,
-        transactions, // useCategorizedTable exposes transactions
+        transactions,
     } = useCategorizedTable({
         ...props,
         filters: mergedFilters,
     });
+
+    // Get projected balance using custom hook
+    const { projectedTx = [] } = useProjectedTransactions({
+        statementPeriod,
+        account: props.account ?? filters?.account,
+    });
+    const projectedTotal = useMemo(() => {
+        return Array.isArray(projectedTx)
+            ? projectedTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+            : 0;
+    }, [projectedTx]);
 
     logger.info('render data', {
         loading,
@@ -62,6 +85,8 @@ export default function CategorizedTable(props) {
         rowsCount: rows.length,
         filters,
         transactionsCount: transactions?.length ?? 0,
+        projectedCount: projectedTx?.length ?? 0,
+        projectedTotal,
         statementPeriod,
     });
 
@@ -114,7 +139,11 @@ export default function CategorizedTable(props) {
                 loading={loading}
                 onRowClick={handleRowClick}
             />
-            <CategoryTableFooter totalSum={totalSum} fmt={fmt} />
+            <CategoryTableFooter
+                totalSum={totalSum}
+                projected={projectedTotal}
+                fmt={fmt}
+            />
 
             <CategoryWeeklyModal
                 isOpen={modalOpen}
@@ -124,7 +153,7 @@ export default function CategorizedTable(props) {
                 fmt={fmt}
                 options={{
                     ...props.weekOptions,
-                    statementPeriod, // <-- Pass statementPeriod to modal options
+                    statementPeriod,
                 }}
                 account={props.account ?? filters?.account}
             />

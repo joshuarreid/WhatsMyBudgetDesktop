@@ -1,10 +1,10 @@
 /**
  * useProjectedTransactions
  *
- * Hook to load projected transactions (either global or account-scoped).
+ * Custom hook to load projected transactions (either global or account-scoped).
  * Subscribes to TransactionEvents and automatically refetches when projection-related
  * events occur (create/update/delete). Ensures returned transactions are annotated
- * with __isProjected=true so UI can render a visual indicator consistently.
+ * with __isProjected=true for consistent UI rendering.
  *
  * @module useProjectedTransactions
  */
@@ -13,18 +13,23 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import projectedTransactionService from '../services/ProjectedTransactionService';
 import { subscribe } from '../services/TransactionEvents';
 
+/**
+ * Logger for useProjectedTransactions.
+ * Logs initialization, API calls, event handling, and errors.
+ * @constant
+ */
 const logger = {
     info: (...args) => console.log('[useProjectedTransactions]', ...args),
     error: (...args) => console.error('[useProjectedTransactions]', ...args),
 };
 
 /**
- * flattenAccountProjectedList
- * - Utility to convert AccountProjectedTransactionList into a flattened array
- *   (personalTransactions followed by jointTransactions) similar to serverTx merging.
+ * Flattens AccountProjectedTransactionList into a single array of transactions.
+ * Combines personal and joint transactions for UI consumption.
  *
- * @param {Object} accountList
- * @returns {Array}
+ * @function flattenAccountProjectedList
+ * @param {Object} accountList - The account-scoped projected transaction list.
+ * @returns {Array} Flattened array of transactions.
  */
 function flattenAccountProjectedList(accountList) {
     try {
@@ -38,11 +43,11 @@ function flattenAccountProjectedList(accountList) {
 }
 
 /**
- * annotateProjection
- * - Ensure each returned projection has a client-side marker used by the UI.
+ * Annotates an array of transactions with __isProjected: true for UI indicator.
  *
- * @param {Array} arr
- * @returns {Array}
+ * @function annotateProjection
+ * @param {Array} arr - Array of transactions.
+ * @returns {Array} Annotated transactions with __isProjected: true.
  */
 function annotateProjection(arr) {
     if (!Array.isArray(arr)) return [];
@@ -51,19 +56,47 @@ function annotateProjection(arr) {
 
 /**
  * useProjectedTransactions
+ * Loads projected transactions and manages subscription to projection events.
  *
- * @param {Object} params - { statementPeriod?: string, account?: string }
- * @returns {{ projectedTx: Array, loading: boolean, error: any, refetch: Function }}
+ * @function useProjectedTransactions
+ * @param {Object} params
+ * @param {string} [params.statementPeriod] - Optional statement period filter.
+ * @param {string} [params.account] - Optional account filter.
+ * @returns {Object} {
+ *   projectedTx: Array,
+ *   loading: boolean,
+ *   error: any,
+ *   refetch: Function
+ * }
  */
 export default function useProjectedTransactions({ statementPeriod, account } = {}) {
+    /** @type {[Array, Function]} */
     const [projectedTx, setProjectedTx] = useState([]);
+    /** @type {[boolean, Function]} */
     const [loading, setLoading] = useState(false);
+    /** @type {[any, Function]} */
     const [error, setError] = useState(null);
 
     // Track the latest statementPeriod requested
     const latestPeriodRef = useRef(statementPeriod);
 
+    // Keep params in ref for event matching
+    const paramsRef = useRef({ statementPeriod, account });
+    useEffect(() => {
+        paramsRef.current = { statementPeriod, account };
+    }, [statementPeriod, account]);
+
+    /**
+     * Fetches projected transactions from the API.
+     * Sets loading and error state, and updates projectedTx if period matches.
+     *
+     * @async
+     * @function fetchProjected
+     * @returns {Promise<void>}
+     * @throws {Error} On API failure.
+     */
     const fetchProjected = useCallback(async () => {
+        logger.info('fetchProjected called', { statementPeriod, account });
         setLoading(true);
         setError(null);
         latestPeriodRef.current = statementPeriod;
@@ -86,9 +119,10 @@ export default function useProjectedTransactions({ statementPeriod, account } = 
             // Only set if period matches latest
             if (statementPeriod === latestPeriodRef.current) {
                 setProjectedTx(sorted);
+                logger.info('fetchProjected: setProjectedTx', { count: sorted.length });
             } else {
                 // Ignore stale response
-                console.log('[useProjectedTransactions] Ignored stale data for period', statementPeriod);
+                logger.info('fetchProjected: Ignored stale data for period', statementPeriod);
             }
         } catch (err) {
             logger.error('fetchProjected error', err);
@@ -98,14 +132,21 @@ export default function useProjectedTransactions({ statementPeriod, account } = 
         }
     }, [account, statementPeriod]);
 
-
-    // initial fetch + refetch when params change
+    /**
+     * Initial fetch and refetch when params change.
+     * Side effect: Updates projectedTx.
+     */
     useEffect(() => {
+        logger.info('useEffect: initial/refetch', { statementPeriod, account });
         fetchProjected();
     }, [fetchProjected]);
 
-    // subscribe to TransactionEvents so other screens will refetch when projections change.
+    /**
+     * Subscribes to TransactionEvents and refetches on relevant projection events.
+     * Cleans up subscription on unmount.
+     */
     useEffect(() => {
+        logger.info('useEffect: subscribe to TransactionEvents');
         const unsubscribe = subscribe((payload = {}) => {
             try {
                 // Only react to projection-related events or ambiguous events that affect projections.
@@ -148,12 +189,22 @@ export default function useProjectedTransactions({ statementPeriod, account } = 
         return () => {
             try {
                 unsubscribe();
+                logger.info('useEffect: unsubscribed from TransactionEvents');
             } catch (err) {
                 logger.error('unsubscribe failed', err);
             }
         };
     }, [fetchProjected]);
 
+    /**
+     * API surface for projected transactions.
+     * @returns {Object} {
+     *   projectedTx: Array of projected transactions,
+     *   loading: boolean flag,
+     *   error: API or subscription error,
+     *   refetch: Function to manually refetch projected transactions
+     * }
+     */
     return {
         projectedTx,
         loading,
