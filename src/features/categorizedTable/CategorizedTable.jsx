@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import useCategorizedTable from './useCategorizedTable';
 import './CategorizedTable.css';
 import CategoryTableHeader from './components/CategoryTableHeader';
@@ -20,6 +20,7 @@ const logger = {
 /**
  * CategorizedTable
  * - Renders a categorized transaction table with weekly modal support.
+ * - Filters on the provider's selected statement period.
  *
  * @param {object} props - Component props.
  * @returns {JSX.Element}
@@ -30,6 +31,18 @@ export default function CategorizedTable(props) {
     // Consume the statement period context
     const { statementPeriod } = useStatementPeriodContext();
 
+    /**
+     * Merges filters with the selected statement period from context.
+     * Memoized to prevent infinite renders and redundant API calls.
+     *
+     * @constant
+     * @type {object}
+     */
+    const mergedFilters = useMemo(() => ({
+        ...(props.filters || {}),
+        statementPeriod,
+    }), [props.filters, statementPeriod]);
+
     const {
         loading,
         error,
@@ -38,7 +51,10 @@ export default function CategorizedTable(props) {
         fmt,
         filters,
         transactions, // useCategorizedTable exposes transactions
-    } = useCategorizedTable(props);
+    } = useCategorizedTable({
+        ...props,
+        filters: mergedFilters,
+    });
 
     logger.info('render data', {
         loading,
@@ -46,6 +62,7 @@ export default function CategorizedTable(props) {
         rowsCount: rows.length,
         filters,
         transactionsCount: transactions?.length ?? 0,
+        statementPeriod,
     });
 
     // Modal state (open selected category)
