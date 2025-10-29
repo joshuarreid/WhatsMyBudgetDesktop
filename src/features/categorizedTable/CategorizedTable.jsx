@@ -6,14 +6,29 @@ import CategoryTableBody from './components/CategoryTableBody';
 import CategoryTableFooter from './components/CategoryTableFooter';
 import CategoryTableTitle from './components/CategoryTableTitle';
 import CategoryWeeklyModal from "../categoryWeeklyModal/CategoryWeeklyModal";
+import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
 
+/**
+ * Logger for CategorizedTable
+ * @constant
+ */
 const logger = {
     info: (...args) => console.log('[CategorizedTable]', ...args),
     error: (...args) => console.error('[CategorizedTable]', ...args),
 };
 
+/**
+ * CategorizedTable
+ * - Renders a categorized transaction table with weekly modal support.
+ *
+ * @param {object} props - Component props.
+ * @returns {JSX.Element}
+ */
 export default function CategorizedTable(props) {
     logger.info('render start', { title: props.title });
+
+    // Consume the statement period context
+    const { statementPeriod } = useStatementPeriodContext();
 
     const {
         loading,
@@ -37,15 +52,17 @@ export default function CategorizedTable(props) {
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
 
+    /**
+     * Handles row click to open the weekly modal.
+     * @param {string} category
+     */
     const handleRowClick = (category) => {
         logger.info('row clicked', { category });
 
         // Ensure we have an account before opening the nested TransactionTable modal.
-        // TransactionTable currently requires filters.account and will render an error otherwise.
         const account = props.account ?? filters?.account;
         if (!account) {
             logger.error('cannot open weekly modal - account is required', { category });
-            // Option: surface a user-facing toast/notice here instead of opening the modal.
             return;
         }
 
@@ -53,6 +70,9 @@ export default function CategorizedTable(props) {
         setModalOpen(true);
     };
 
+    /**
+     * Handles closing the modal.
+     */
     const handleCloseModal = () => {
         logger.info('modal close requested', { category: selectedCategory });
         setModalOpen(false);
@@ -85,8 +105,10 @@ export default function CategorizedTable(props) {
                 category={selectedCategory}
                 transactions={transactions}
                 fmt={fmt}
-                options={props.weekOptions}
-                // Pass account (prefer explicit prop, fallback to filters.account)
+                options={{
+                    ...props.weekOptions,
+                    statementPeriod, // <-- Pass statementPeriod to modal options
+                }}
                 account={props.account ?? filters?.account}
             />
         </div>
