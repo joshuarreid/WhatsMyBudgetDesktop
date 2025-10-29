@@ -1,7 +1,7 @@
 /**
  * CategoryTableRow
  * - Renders a single row in the category spending table.
- * - Displays category name, total, and a progress bar with projected overlay.
+ * - Displays category name, amount, and a progress bar with projected overlay.
  *
  * @module CategoryTableRow
  * @param {Object} props
@@ -16,6 +16,7 @@
 
 import React from "react";
 import CategoryProgressBar from "./CategoryProgressBar";
+import styles from "./CategoryTableRow.module.css";
 
 /**
  * Logger for CategoryTableRow
@@ -75,6 +76,9 @@ export default function CategoryTableRow({
         }
     }
 
+    // If this is a projected-only row, do not render the green amount.
+    const showProjectedOnly = total === 0 && projectedTotal > 0;
+
     return (
         <div
             className="ct-row"
@@ -86,7 +90,14 @@ export default function CategoryTableRow({
         >
             <div className="ct-col ct-cat">{category}</div>
             <div className="ct-col ct-col-amount" style={{ flexDirection: "column", alignItems: "flex-end" }}>
-                <div className="ct-amount">{fmt.format(total)}</div>
+                <div className={styles.amountRow}>
+                    {!showProjectedOnly && (
+                        <span className={styles.amountActual}>{fmt.format(total)}</span>
+                    )}
+                    {projectedTotal > 0 && (
+                        <span className={styles.amountProjected}>{fmt.format(projectedTotal)}</span>
+                    )}
+                </div>
                 <CategoryProgressBar
                     actualPercent={actualPercent}
                     combinedPercent={combinedPercent}

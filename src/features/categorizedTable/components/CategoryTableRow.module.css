@@ -1,0 +1,21 @@
+.amountRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.amountActual {
+    color: #9be3a7;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.amountProjected {
+    color: #F6D86B;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.18);
+}
