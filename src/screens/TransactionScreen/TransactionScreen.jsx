@@ -1,18 +1,27 @@
 import React from "react";
 import TransactionTable from "../../features/transactionTable/TransactionTable";
 import SettingsScreen from "../SettingsScreen/SettingsScreen";
-// Use centralized config accessor and its safe getter instead of importing the raw JSON
-import config, { get } from "../../config/config.ts";
+import { get } from "../../config/config.ts";
+import {StatementPeriodProvider} from "../../context/StatementPeriodProvider";
 
+/**
+ * TransactionScreen
+ * - Top-level screen for the joint account, wrapped in StatementPeriodProvider for context-driven statement period state.
+ * - Ensures TransactionTable can access statement period via context (no prop drilling).
+ *
+ * @returns {JSX.Element}
+ */
 const TransactionScreen = () => {
     // Read the joint account filter via the config.get helper with a sensible fallback.
     const JOINTFILTER = get("joint.filter", "joint");
     return (
-        <div className="App">
-            <header className="App-header">
-                <TransactionTable account={JOINTFILTER} />
-            </header>
-        </div>
+        <StatementPeriodProvider>
+            <div className="App">
+                <header className="App-header">
+                    <TransactionTable account={JOINTFILTER} />
+                </header>
+            </div>
+        </StatementPeriodProvider>
     );
 };
 
