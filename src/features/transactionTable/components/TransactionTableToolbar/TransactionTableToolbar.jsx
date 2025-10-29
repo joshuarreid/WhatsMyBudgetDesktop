@@ -1,104 +1,84 @@
 import React from "react";
 import PropTypes from "prop-types";
-
 import styles from "./TransactionTableToolbar.module.css";
 import StatementPeriodDropdown from "../../../../components/statementPeriodDropdown/StatementPeriodDropdown";
 
 /**
+ * Logger for TransactionTableToolbar
+ */
+const logger = {
+    info: (...args) => console.log("[TransactionTableToolbar]", ...args),
+    error: (...args) => console.error("[TransactionTableToolbar]", ...args),
+};
+
+/**
  * TransactionTableToolbar
- *
- * - Presentational toolbar for transaction actions.
- * - Uses a CSS module to scope toolbar visuals.
+ * Presentational toolbar for transaction actions.
+ * Uses Bulletproof React conventions: UI only, logic in hooks.
  *
  * Props:
- *  - onAdd: callback when "Add Transaction" is clicked
- *  - onAddProjection: callback when "Add Projection" is clicked (creates a new ProjectedTransaction)
- *  - onImport: callback to open file picker
- *  - onDelete: callback to delete selected items
- *  - selectedCount: number of selected items in the table
- *  - fileInputRef: ref for hidden file input
- *  - onFileChange: handler when file input changes
- *  - loading: boolean to disable actions while loading
- *  - total: formatted total string to display on the right
+ *  - toolbar: toolbar logic object from useTransactionToolbar
  */
-export default function TransactionTableToolbar({
-                                                    onAdd,
-                                                    onAddProjection,
-                                                    onImport,
-                                                    onDelete,
-                                                    selectedCount,
-                                                    fileInputRef,
-                                                    onFileChange,
-                                                    loading = false,
-                                                    total,
-                                                }) {
-    const logger = {
-        info: (...args) => console.log("[TransactionTableToolbar]", ...args),
-        error: (...args) => console.error("[TransactionTableToolbar]", ...args),
-    };
-    logger.info("render", { selectedCount, loading });
+export default function TransactionTableToolbar({ toolbar }) {
+    logger.info("render", { selectedCount: toolbar.selectedCount, loading: toolbar.loading });
 
     return (
         <div className={styles.toolbar} role="toolbar" aria-label="Transaction actions">
             <div className={styles.left}>
                 <button
                     className={styles.linkBtn}
-                    onClick={onAdd}
-                    disabled={loading}
+                    onClick={toolbar.handleAdd}
+                    disabled={toolbar.loading}
                 >
                     <span className={styles.icon}>＋</span> Add Transaction
                 </button>
-
-                {/* New: Add Projection button to the right of Add Transaction */}
                 <button
                     className={styles.linkBtn}
-                    onClick={onAddProjection}
-                    disabled={loading}
+                    onClick={toolbar.handleAddProjection}
+                    disabled={toolbar.loading}
                 >
                     <span className={styles.icon}>＋</span> Add Projection
                 </button>
-
                 <button
                     className={styles.linkBtn}
-                    onClick={onImport}
-                    disabled={loading}
+                    onClick={toolbar.handleImport}
+                    disabled={toolbar.loading}
                 >
                     <span className={styles.icon}>📁</span> File Import
                 </button>
                 <input
-                    ref={fileInputRef}
+                    ref={toolbar.fileInputRef}
                     type="file"
                     accept=".csv"
                     style={{ display: "none" }}
-                    onChange={onFileChange}
+                    onChange={toolbar.handleFileChange}
                 />
                 <button
                     className={styles.linkBtn}
-                    onClick={onDelete}
-                    disabled={selectedCount === 0 || loading}
+                    onClick={toolbar.handleDelete}
+                    disabled={toolbar.selectedCount === 0 || toolbar.loading}
                 >
                     <span className={styles.icon}>🗑️</span> Delete Selected
                 </button>
-
-                {/* Statement period dropdown (UI-only Step 1) */}
                 <StatementPeriodDropdown />
             </div>
-
             <div className={styles.right}>
-                <div className={styles.totals}>Total: {total}</div>
+                <div className={styles.totals}>Total: {toolbar.total}</div>
             </div>
         </div>
     );
 }
 
 TransactionTableToolbar.propTypes = {
-    onAdd: PropTypes.func.isRequired,
-    onAddProjection: PropTypes.func.isRequired,
-    onImport: PropTypes.func.isRequired,
-    onDelete: PropTypes.func.isRequired,
-    selectedCount: PropTypes.number.isRequired,
-    fileInputRef: PropTypes.object.isRequired,
-    onFileChange: PropTypes.func.isRequired,
-    loading: PropTypes.bool,
-    total: PropTypes.string.isRequired,
+    toolbar: PropTypes.shape({
+        handleAdd: PropTypes.func.isRequired,
+        handleAddProjection: PropTypes.func.isRequired,
+        handleImport: PropTypes.func.isRequired,
+        handleDelete: PropTypes.func.isRequired,
+        selectedCount: PropTypes.number.isRequired,
+        fileInputRef: PropTypes.object.isRequired,
+        handleFileChange: PropTypes.func.isRequired,
+        loading: PropTypes.bool,
+        total: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    }).isRequired,
 };

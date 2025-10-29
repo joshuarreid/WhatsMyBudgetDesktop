@@ -6,16 +6,33 @@ import TransactionTableToolbar from './components/TransactionTableToolbar/Transa
 import TransactionTableHeader from './components/TransactionTableHeader/TransactionTableHeader';
 import TransactionTableRow from './components/TransactionTableRow/TransactionTableRow';
 
-// Currency formatter, colocated for presentation
+/**
+ * Currency formatter for USD display.
+ * @constant
+ */
 const fmt = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
 });
 
+/**
+ * TransactionTable
+ * - Main table UI for displaying, editing, and managing transactions.
+ * - Uses useTransactionTable for business/data logic.
+ *
+ * @param {Object} props
+ * @param {Object} props.filters - Account and other filter criteria
+ * @param {string} props.statementPeriod - Statement period for transaction grouping
+ * @returns {JSX.Element}
+ */
 export default function TransactionTable(props) {
     const filters = props && Object.keys(props).length > 0 ? (props.filters ?? props) : undefined;
     const statementPeriod = props?.statementPeriod;
 
+    /**
+     * useTransactionTable hook
+     * - Provides state, handlers, and toolbar logic for table UI.
+     */
     const {
         localTx,
         loading,
@@ -27,37 +44,45 @@ export default function TransactionTable(props) {
         total,
         jointBalance,
         personalBalance,
-        projectedTotal, // added: projected total from hook
+        projectedTotal,
         isAllSelected,
         toggleSelect,
         toggleSelectAll,
-        handleAddTransaction,
-        handleAddProjection, // wired in from hook
-        handleDeleteSelected,
-        handleFileChange,
-        openFilePicker,
         handleCellDoubleClick,
         handleEditKey,
         handleSaveEdit,
         handleSaveRow,
-        handleCancelRow, // new
+        handleCancelRow,
         toInputDate,
         toggleCleared,
         setEditing,
         savingIds,
         saveErrors,
         startEditingRow,
+        toolbar, // <-- toolbar logic object
     } = useTransactionTable(filters, statementPeriod);
 
-    // Don't return early on loading — render the table shell so the UI stays stable.
-    if (error) return <div className="tt-empty">Error: {error.message || String(error)}</div>;
+    // --- UI rendering logic ---
+    // Error handling
+    if (error) {
+        return (
+            <div className="tt-empty">
+                Error: {error.message || String(error)}
+            </div>
+        );
+    }
 
     // Ensure account is present in filters
     if (!filters || !filters.account) {
-        return <div className="tt-empty">Error: Account is required to display transactions.</div>;
+        return (
+            <div className="tt-empty">
+                Error: Account is required to display transactions.
+            </div>
+        );
     }
 
-    if (!localTx || localTx.length === 0)
+    // Empty state rendering
+    if (!localTx || localTx.length === 0) {
         return (
             <div className="tt-card">
                 <BalanceWidget
@@ -67,22 +92,19 @@ export default function TransactionTable(props) {
                     projected={projectedTotal}
                 />
                 <TransactionTableToolbar
-                    onAdd={handleAddTransaction}
-                    onAddProjection={handleAddProjection}
-                    onImport={openFilePicker}
-                    onDelete={handleDeleteSelected}
-                    selectedCount={selectedIds.size}
-                    fileInputRef={fileInputRef}
-                    onFileChange={handleFileChange}
-                    loading={loading}
-                    total={fmt.format(total)}
+                    toolbar={{
+                        ...toolbar,
+                        total: fmt.format(total),
+                    }}
                 />
-                {/* Keep the header so the table shell is visible during loading */}
+                {/* Table header remains visible during loading */}
                 <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
                 <div className="tt-body">{loading ? null : <div className="tt-empty"></div>}</div>
             </div>
         );
+    }
 
+    // Main table rendering
     return (
         <div className="tt-card">
             <BalanceWidget
@@ -92,15 +114,10 @@ export default function TransactionTable(props) {
                 projected={projectedTotal}
             />
             <TransactionTableToolbar
-                onAdd={handleAddTransaction}
-                onAddProjection={handleAddProjection}
-                onImport={openFilePicker}
-                onDelete={handleDeleteSelected}
-                selectedCount={selectedIds.size}
-                fileInputRef={fileInputRef}
-                onFileChange={handleFileChange}
-                loading={loading}
-                total={fmt.format(total)}
+                toolbar={{
+                    ...toolbar,
+                    total: fmt.format(total),
+                }}
             />
             <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
             <div className="tt-body">
@@ -116,7 +133,7 @@ export default function TransactionTable(props) {
                         onEditKey={handleEditKey}
                         onSaveEdit={handleSaveEdit}
                         onSaveRow={handleSaveRow}
-                        onCancelRow={handleCancelRow} // pass handler
+                        onCancelRow={handleCancelRow}
                         toInputDate={toInputDate}
                         onToggleCleared={toggleCleared}
                         setEditing={setEditing}
