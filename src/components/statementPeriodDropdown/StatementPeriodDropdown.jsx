@@ -2,34 +2,38 @@ import React from 'react';
 import './StatementPeriodDropdown.css';
 import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
 
-const logger = {
-    info: (...args) => console.log('[StatementPeriodDropdown]', ...args),
-    error: (...args) => console.error('[StatementPeriodDropdown]', ...args),
-};
-
 /**
  * StatementPeriodDropdown.
- * Renders UI for selecting statement period.
- * Uses StatementPeriodContext for state/actions.
+ * Controlled dropdown using StatementPeriodContext for state/actions.
+ * Follows Bulletproof React conventions.
  *
- * @function StatementPeriodDropdown
  * @returns {JSX.Element}
  */
 export default function StatementPeriodDropdown() {
     const {
         options,
-        selectedValue,
+        statementPeriod,
         selectedLabel,
         isOpen,
         isSaving,
         containerRef,
         toggleOpen,
-        handleSelect,
+        updateStatementPeriod,
+        setIsOpen,
         onButtonKeyDown,
         onOptionKeyDown,
     } = useStatementPeriodContext();
 
-    logger.info('render', { selectedValue, isOpen, isSaving });
+    /**
+     * Handles user selection of a statement period.
+     * Ensures dropdown closes after select.
+     * @function handleSelectPeriod
+     * @param {string} value
+     */
+    const handleSelectPeriod = async (value) => {
+        await updateStatementPeriod(value);
+        setIsOpen(false); // Ensure dropdown closes after selecting
+    };
 
     return (
         <div className="statement-period-dropdown" ref={containerRef} aria-busy={isSaving}>
@@ -52,7 +56,7 @@ export default function StatementPeriodDropdown() {
                 <div className="statement-period-popover" role="listbox" aria-label="Statement periods" tabIndex={-1}>
                     <ul className="statement-period-list" role="presentation">
                         {options.map((opt) => {
-                            const isSelected = opt.value === selectedValue;
+                            const isSelected = opt.value === statementPeriod;
                             return (
                                 <li key={opt.value} className="statement-period-item">
                                     <button
@@ -60,14 +64,14 @@ export default function StatementPeriodDropdown() {
                                         role="option"
                                         aria-selected={isSelected}
                                         className={`tt-link-btn statement-period-option ${isSelected ? 'selected' : ''}`}
-                                        onClick={() => handleSelect(opt.value)}
+                                        onClick={() => handleSelectPeriod(opt.value)}
                                         onKeyDown={(e) => onOptionKeyDown(e, opt.value)}
                                         disabled={isSaving}
                                     >
                                         <span className="statement-period-label">{opt.label}</span>
                                         <span className="statement-period-check" aria-hidden="true">
-                      {isSelected ? '✔' : ''}
-                    </span>
+                                            {isSelected ? '✔' : ''}
+                                        </span>
                                     </button>
                                 </li>
                             );
