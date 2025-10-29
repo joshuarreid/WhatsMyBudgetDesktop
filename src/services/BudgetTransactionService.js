@@ -160,6 +160,40 @@ const budgetTransactionService = {
             throw err;
         }
     },
+
+
+    /**
+     * GET /api/transactions/account/budget
+     * Fetches only budget transactions for a given account and filters.
+     * @async
+     * @function getBudgetTransactionsForAccount
+     * @param {Object} filters - { account, statementPeriod, category, criticality, paymentMethod }
+     * @returns {Object} BudgetTransactionList { transactions, count, total }
+     * @throws {Error} If the request fails.
+     */
+    async getBudgetTransactionsForAccount({ account, statementPeriod, category, criticality, paymentMethod }) {
+        logger.info('getBudgetTransactionsForAccount entry', { account, statementPeriod, category, criticality, paymentMethod });
+        if (!account) throw new Error('Account is required');
+        try {
+            const response = await apiClient.get(`${RESOURCE}/account/budget`, {
+                params: {
+                    account,
+                    statementPeriod,
+                    category,
+                    criticality,
+                    paymentMethod,
+                },
+            });
+            logger.info('getBudgetTransactionsForAccount success', {
+                count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
+                total: response.data && response.data.total ? response.data.total : 0,
+            });
+            return response.data;
+        } catch (err) {
+            logger.error('getBudgetTransactionsForAccount error', err);
+            throw err;
+        }
+    }
 };
 
 export default budgetTransactionService;

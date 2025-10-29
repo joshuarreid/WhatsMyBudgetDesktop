@@ -2,7 +2,7 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useStatementPeriodContext } from '../../../context/StatementPeriodProvider';
 import useProjectedTransactions from '../../../hooks/useProjectedTransactions';
 import localCacheService from '../../../services/LocalCacheService';
-import { useTransactionsForAccount } from '../../../hooks/useTransactions';
+import { useBudgetAndProjectedTransactionsForAccount } from '../../../hooks/useTransactions';
 import { publish as publishTransactionEvents } from '../../../services/TransactionEvents';
 import {
     get as getConfig,
@@ -127,7 +127,7 @@ export function useTransactionTable(filters) {
      * Fetches transactions for account and statement period.
      * @type {Object}
      */
-    const txResult = useTransactionsForAccount(accountFilters);
+    const txResult = useBudgetAndProjectedTransactionsForAccount(accountFilters);
 
     // --- Transactions integration ---
     const serverTx = useMemo(

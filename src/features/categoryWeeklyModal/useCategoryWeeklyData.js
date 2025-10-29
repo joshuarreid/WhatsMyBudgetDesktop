@@ -2,31 +2,29 @@ import { useMemo } from 'react';
 import useCategoryTransactions from './useCategoryTransactions';
 import useWeeklyTotals from './useWeeklyTotals';
 
+/**
+ * Logger for useCategoryWeeklyData hook.
+ */
 const logger = {
     info: (...args) => console.log('[useCategoryWeeklyData]', ...args),
     error: (...args) => console.error('[useCategoryWeeklyData]', ...args),
 };
 
 /**
- * useCategoryWeeklyData
+ * Composes weekly breakdowns of transactions for a given category.
  *
- * Convenience hook that composes:
- *  - useCategoryTransactions (normalization + category filter)
- *  - useWeeklyTotals (buckets + totals)
+ * - Uses useCategoryTransactions for normalization and filtering.
+ * - Uses useWeeklyTotals for bucketing and totals.
  *
- * Accepts the raw transactions array (e.g., personal + joint combined) and a category string.
- *
- * Returns:
- *  {
- *    weeks: Array<{start: Date, end: Date, total: number, count: number}>,
- *    total: number,
- *    start: Date|null,
- *    end: Date|null,
- *    transactionsInCategory: Array // normalized tx used for the calculation
- *  }
+ * @function useCategoryWeeklyData
+ * @param {Array} allTransactions - Raw transactions array
+ * @param {string|null} category - Filter by category
+ * @param {Object} options - Additional options for weekly calculation
+ * @returns {Object} { weeks, total, start, end, transactionsInCategory }
  */
 export default function useCategoryWeeklyData(allTransactions = [], category = null, options = {}) {
     try {
+        logger.info('initializing with transactions', { count: Array.isArray(allTransactions) ? allTransactions.length : 0, category, options });
         const transactionsInCategory = useCategoryTransactions(allTransactions, category);
 
         const weeklyResult = useWeeklyTotals(allTransactions, {
@@ -35,7 +33,6 @@ export default function useCategoryWeeklyData(allTransactions = [], category = n
             statementCloseDay: options.statementCloseDay ?? 5,
         });
 
-        // Memoize the composed result shape
         return useMemo(() => {
             const result = {
                 weeks: weeklyResult.weeks,
@@ -44,10 +41,11 @@ export default function useCategoryWeeklyData(allTransactions = [], category = n
                 end: weeklyResult.end,
                 transactionsInCategory,
             };
-            logger.info('useCategoryWeeklyData result', {
+            logger.info('computed weekly data', {
                 category,
                 weeks: result.weeks.length,
                 txCount: transactionsInCategory.length,
+                total: result.total,
             });
             return result;
         }, [weeklyResult, transactionsInCategory, category]);

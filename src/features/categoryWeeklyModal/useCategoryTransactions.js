@@ -1,26 +1,29 @@
 import { useMemo } from 'react';
 
+/**
+ * Logger for useCategoryTransactions hook.
+ */
 const logger = {
     info: (...args) => console.log('[useCategoryTransactions]', ...args),
     error: (...args) => console.error('[useCategoryTransactions]', ...args),
 };
 
 /**
- * useCategoryTransactions
- *
- * Normalizes raw transactions and optionally filters by category.
+ * Normalizes and optionally filters transactions by category.
  *
  * - Ensures transactionDate is a Date
  * - Ensures amount is a Number
  * - Ensures category is a string (falls back to 'Uncategorized')
  *
- * @param {Array} transactions Raw transactions array (may contain personal/joint)
- * @param {string|null} category If provided, only returns transactions that match the category
- * @returns {Array} normalized & optionally filtered transactions sorted asc by date
+ * @function useCategoryTransactions
+ * @param {Array} transactions - Raw transactions array (may contain personal/joint)
+ * @param {string|null} category - If provided, only returns transactions that match the category
+ * @returns {Array} Normalized & optionally filtered transactions sorted asc by date
  */
 export default function useCategoryTransactions(transactions = [], category = null) {
     return useMemo(() => {
         try {
+            logger.info('initializing with input', { count: Array.isArray(transactions) ? transactions.length : 0, category });
             if (!Array.isArray(transactions)) {
                 logger.info('received non-array transactions, returning empty array');
                 return [];

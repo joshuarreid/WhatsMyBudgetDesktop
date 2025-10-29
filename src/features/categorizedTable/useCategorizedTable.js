@@ -11,7 +11,7 @@
  */
 
 import { useMemo } from 'react';
-import { useTransactionsForAccount } from '../../hooks/useTransactions';
+import { useBudgetAndProjectedTransactionsForAccount } from '../../hooks/useTransactions';
 
 const logger = {
     info: (...args) => console.log('[useCategorizedTable]', ...args),
@@ -38,7 +38,7 @@ export default function useCategorizedTable(propsOrFilters = {}) {
         logger.info('normalized filters', filters);
 
         // Use the new hook for account-specific transactions
-        const txResult = useTransactionsForAccount(filters || {});
+        const txResult = useBudgetAndProjectedTransactionsForAccount(filters || {});
         // Combine personal and joint transactions for display, sorted by date desc
         const transactions = useMemo(
             () => [

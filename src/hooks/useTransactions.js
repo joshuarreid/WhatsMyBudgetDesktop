@@ -51,11 +51,11 @@ export default function useTransactions(filters) {
 }
 
 /**
- * useTransactionsForAccount - fetches transactions for a specific account (and optional filters).
+ * useBudgetAndProjectedTransactionsForAccount - fetches transactions for a specific account (and optional filters).
  * Returns { personalTransactions, jointTransactions, personalTotal, jointTotal, total, loading, error, refetch }.
  * @param {Object} filters - Must include account.
  */
-export function useTransactionsForAccount(filters) {
+export function useBudgetAndProjectedTransactionsForAccount(filters) {
     const [data, setData] = useState({
         personalTransactions: { transactions: [], count: 0, total: 0 },
         jointTransactions: { transactions: [], count: 0, total: 0 },
