@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback} from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import budgetTransactionService from '../services/BudgetTransactionService';
 import { subscribe as subscribeTransactionEvents } from '../services/TransactionEvents';
 
@@ -66,19 +66,29 @@ export function useTransactionsForAccount(filters) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // Ref to track latest requested statementPeriod
+    const latestPeriodRef = useRef(filters?.statementPeriod);
+
     const fetchData = useCallback(async (currentFilters) => {
         setLoading(true);
         setError(null);
+        latestPeriodRef.current = currentFilters?.statementPeriod;
         try {
             console.log("[useTransactionsForAccount] fetchData called with filters", currentFilters);
             const result = await budgetTransactionService.getTransactionsForAccount(currentFilters);
-            setData({
-                personalTransactions: result.personalTransactions || { transactions: [], count: 0, total: 0 },
-                jointTransactions: result.jointTransactions || { transactions: [], count: 0, total: 0 },
-                personalTotal: result.personalTotal || 0,
-                jointTotal: result.jointTotal || 0,
-                total: result.total || 0
-            });
+            // Only set data if the period matches the latest
+            if (currentFilters?.statementPeriod === latestPeriodRef.current) {
+                setData({
+                    personalTransactions: result.personalTransactions || { transactions: [], count: 0, total: 0 },
+                    jointTransactions: result.jointTransactions || { transactions: [], count: 0, total: 0 },
+                    personalTotal: result.personalTotal || 0,
+                    jointTotal: result.jointTotal || 0,
+                    total: result.total || 0
+                });
+            } else {
+                // Ignore stale response
+                console.log("[useTransactionsForAccount] Ignored stale data for period", currentFilters?.statementPeriod);
+            }
         } catch (err) {
             console.error("[useTransactionsForAccount] Error fetching transactions", err);
             setError('Error: ' + (err && err.message ? err.message : String(err)));

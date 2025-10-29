@@ -60,42 +60,35 @@ export default function useProjectedTransactions({ statementPeriod, account } = 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // keep a stable ref to params for event handler checks
-    const paramsRef = useRef({ statementPeriod, account });
-    paramsRef.current = { statementPeriod, account };
+    // Track the latest statementPeriod requested
+    const latestPeriodRef = useRef(statementPeriod);
 
-    /**
-     * fetchProjected
-     * - Calls the appropriate projectedTransactionService endpoint.
-     *
-     * @async
-     * @returns {Promise<void>}
-     */
     const fetchProjected = useCallback(async () => {
         setLoading(true);
         setError(null);
+        latestPeriodRef.current = statementPeriod;
         try {
+            let sorted;
             if (account) {
-                // account-scoped endpoint returns an AccountProjectedTransactionList (personal/joint)
                 const acctList = await projectedTransactionService.getTransactionsForAccount({
                     account,
                     statementPeriod,
                 });
                 const flattened = flattenAccountProjectedList(acctList);
-                // annotate and sort by date desc to match table ordering
-                const sorted = annotateProjection(Array.isArray(flattened) ? flattened : [])
+                sorted = annotateProjection(Array.isArray(flattened) ? flattened : [])
                     .sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
-                setProjectedTx(sorted);
-                logger.info('fetchProjected (account) success', { account, count: sorted.length });
             } else {
-                // generic projections list
                 const res = await projectedTransactionService.getTransactions({ statementPeriod });
                 const list = res?.transactions || [];
-                // annotate and sort
-                const sorted = annotateProjection(Array.isArray(list) ? list : [])
+                sorted = annotateProjection(Array.isArray(list) ? list : [])
                     .sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+            }
+            // Only set if period matches latest
+            if (statementPeriod === latestPeriodRef.current) {
                 setProjectedTx(sorted);
-                logger.info('fetchProjected (global) success', { statementPeriod, count: sorted.length });
+            } else {
+                // Ignore stale response
+                console.log('[useProjectedTransactions] Ignored stale data for period', statementPeriod);
             }
         } catch (err) {
             logger.error('fetchProjected error', err);
@@ -104,6 +97,7 @@ export default function useProjectedTransactions({ statementPeriod, account } = 
             setLoading(false);
         }
     }, [account, statementPeriod]);
+
 
     // initial fetch + refetch when params change
     useEffect(() => {

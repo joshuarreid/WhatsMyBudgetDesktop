@@ -22,6 +22,7 @@ import useTransactionToolbar from './useTransactionToolbar';
 
 /**
  * Logger for useTransactionTable.
+ * @constant
  */
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -102,7 +103,10 @@ function annotateProjection(arr) {
  * @returns {Object} Transaction table API surface
  */
 export function useTransactionTable(filters) {
-    const { statementPeriod } = useStatementPeriodContext();
+
+    const { statementPeriod, isLoaded: isStatementPeriodLoaded } = useStatementPeriodContext();
+    const currentPeriodRef = useRef(statementPeriod);
+    const lastRequestedPeriodRef = useRef();
 
     // --- Table state ---
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -141,37 +145,114 @@ export function useTransactionTable(filters) {
         refetch: refetchProjected
     } = useProjectedTransactions({ statementPeriod, account: filters?.account || undefined });
 
+    /**
+     * localTx - Holds the transaction rows for the table.
+     * Cleared immediately when statementPeriod changes to prevent stale row flash.
+     */
     const [localTx, setLocalTx] = useState(() => [...serverTx]);
+
     useEffect(() => {
-        setLocalTx((prev) => {
-            const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
+        // When fetches complete, check if their period matches current context
+        if (
+            isStatementPeriodLoaded &&
+            statementPeriod &&
+            lastRequestedPeriodRef.current === statementPeriod
+        ) {
+            // Only update state if the data is for the correct period
+            const serverTx = [
+                ...(txResult.personalTransactions?.transactions || []),
+                ...(txResult.jointTransactions?.transactions || [])
+            ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+
             const projSorted = Array.isArray(projectedTx) && projectedTx.length > 0
                 ? [...projectedTx].map((p) => ({ ...p, __isProjected: true })).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
                 : [];
-            return [...localOnly, ...projSorted, ...serverTx];
-        });
-    }, [serverTx, projectedTx]);
 
-    // --- Totals ---
-    const totalFromServer = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
+            setLocalTx((prev) => {
+                const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
+                return [...localOnly, ...projSorted, ...serverTx];
+            });
+            logger.info('[useTransactionTable] Populated localTx for current period', { statementPeriod });
+        }
+        // Else, do nothing: prevents stale fetches from updating state!
+    }, [isStatementPeriodLoaded, statementPeriod, txResult.personalTransactions, txResult.jointTransactions, projectedTx]);
+
+    /**
+     * Clear transactions immediately when statementPeriod changes.
+     * This prevents stale rows from flashing when switching statement periods.
+     */
+    useEffect(() => {
+        lastRequestedPeriodRef.current = statementPeriod;
+        setLocalTx([]); // clear immediately
+        logger.info('[useTransactionTable] Cleared localTx for period change', { statementPeriod });
+
+        // fetch transactions for new period (optionally, trigger refetch here if not in fetch hooks)
+    }, [statementPeriod]);
+
+
+
+    /**
+     * Computes projected total only if statement period is loaded and defined.
+     * @type {number}
+     */
     const projectedTotal = useMemo(() => {
+        if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         if (!Array.isArray(projectedTx)) return 0;
         return projectedTx.reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    }, [projectedTx]);
-    const total = (totalFromServer || 0) + (projectedTotal || 0);
-    const personalBalance = typeof txResult.personalTotal === 'number'
-        ? txResult.personalTotal
-        : Number(txResult.personalTotal) || 0;
-    const jointBalance = typeof txResult.jointTotal === 'number'
-        ? txResult.jointTotal
-        : Number(txResult.jointTotal) || 0;
-    const countFromServer = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
-    const count = countFromServer + (Array.isArray(projectedTx) ? projectedTx.length : 0);
+    }, [projectedTx, isStatementPeriodLoaded, statementPeriod]);
+
+
+    /**
+     * Computes total only if statement period is loaded and defined.
+     * @type {number}
+     */
+    const total = useMemo(() => {
+        if (!isStatementPeriodLoaded || !statementPeriod) return 0;
+        const serverTotal = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
+        const projTotal = Array.isArray(projectedTx) ? projectedTx.reduce((s, t) => s + (Number(t.amount) || 0), 0) : 0;
+        return serverTotal + projTotal;
+    }, [txResult, projectedTx, isStatementPeriodLoaded, statementPeriod]);
+
+    /**
+     * Computes personal balance only if statement period is loaded and defined.
+     * @type {number}
+     */
+    const personalBalance = useMemo(() => {
+        if (!isStatementPeriodLoaded || !statementPeriod) return 0;
+        return typeof txResult.personalTotal === 'number' ? txResult.personalTotal : Number(txResult.personalTotal) || 0;
+    }, [txResult.personalTotal, isStatementPeriodLoaded, statementPeriod]);
+
+    /**
+     * Computes joint balance only if statement period is loaded and defined.
+     * @type {number}
+     */
+    const jointBalance = useMemo(() => {
+        if (!isStatementPeriodLoaded || !statementPeriod) return 0;
+        return typeof txResult.jointTotal === 'number' ? txResult.jointTotal : Number(txResult.jointTotal) || 0;
+    }, [txResult.jointTotal, isStatementPeriodLoaded, statementPeriod]);
+
+
+
+
+    /**
+     * Computes transaction count only if statement period is loaded and defined.
+     * @type {number}
+     */
+    const count = useMemo(() => {
+        if (!isStatementPeriodLoaded || !statementPeriod) return 0;
+        const countFromServer = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
+        return countFromServer + (Array.isArray(projectedTx) ? projectedTx.length : 0);
+    }, [txResult.personalTransactions, txResult.jointTransactions, projectedTx, isStatementPeriodLoaded, statementPeriod]);
 
     const loading = txResult.loading || projectedLoading || false;
     const error = txResult.error || projectedError || null;
 
     // --- Selection ---
+    /**
+     * Toggles selection for a transaction by id.
+     * @function toggleSelect
+     * @param {string|number} id
+     */
     const toggleSelect = useCallback((id) => {
         setSelectedIds((prev) => {
             const copy = new Set(prev);
@@ -180,6 +261,10 @@ export function useTransactionTable(filters) {
             return copy;
         });
     }, []);
+    /**
+     * Marks all transactions selected, or clears selection.
+     * @function toggleSelectAll
+     */
     const isAllSelected = localTx.length > 0 && selectedIds.size === localTx.length;
     const toggleSelectAll = useCallback(() => {
         setSelectedIds((prev) => {
@@ -187,6 +272,11 @@ export function useTransactionTable(filters) {
             return new Set(localTx.map((t) => t.id));
         });
     }, [localTx, isAllSelected]);
+    /**
+     * Makes a temporary id for new transactions.
+     * @function makeTempId
+     * @returns {string}
+     */
     const makeTempId = useCallback(() => `${TEMP_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
     // --- Transaction Creation ---
@@ -376,16 +466,38 @@ export function useTransactionTable(filters) {
         },
         [txResult, statementPeriod, refetchProjected]
     );
+    /**
+     * Opens file picker for CSV import.
+     * @function openFilePicker
+     */
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
+    /**
+     * Starts editing a field in a transaction row.
+     * @function startEditingField
+     * @param {string|number} id
+     * @param {string} field
+     * @param {string} initial
+     */
     const startEditingField = useCallback((id, field, initial = '') => {
         setEditing({ id, mode: 'field', field });
         editValueRef.current = initial;
         logger.info('startEditingField', { id, field, initial });
     }, []);
+    /**
+     * Starts editing a row.
+     * @function startEditingRow
+     * @param {string|number} id
+     */
     const startEditingRow = useCallback((id) => {
         setEditing({ id, mode: 'row' });
         logger.info('startEditingRow', { id });
     }, []);
+    /**
+     * Converts ISO date string to input date format.
+     * @function toInputDate
+     * @param {string} iso
+     * @returns {string}
+     */
     function toInputDate(iso) {
         try {
             const d = new Date(iso);
@@ -397,6 +509,12 @@ export function useTransactionTable(filters) {
             return '';
         }
     }
+    /**
+     * Handles cell double click for editing.
+     * @function handleCellDoubleClick
+     * @param {Object} tx
+     * @param {string} field
+     */
     const handleCellDoubleClick = useCallback((tx, field) => {
         const initial =
             field === 'transactionDate'
@@ -408,6 +526,13 @@ export function useTransactionTable(filters) {
                     : '';
         startEditingField(tx.id, field, initial);
     }, [startEditingField]);
+    /**
+     * Handles key event in edit mode.
+     * @function handleEditKey
+     * @param {Event} e
+     * @param {string|number} id
+     * @param {string} field
+     */
     const handleEditKey = useCallback(
         (e, id, field) => {
             if (e.key === 'Enter') {
@@ -418,6 +543,12 @@ export function useTransactionTable(filters) {
         },
         []
     );
+    /**
+     * Validates transaction for creation.
+     * @function validateForCreate
+     * @param {Object} tx
+     * @returns {Array<string>}
+     */
     const validateForCreate = useCallback((tx) => {
         const errors = [];
         if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
@@ -442,6 +573,12 @@ export function useTransactionTable(filters) {
         }
         return errors;
     }, []);
+    /**
+     * Strips client-only fields before sending to API.
+     * @function stripClientFields
+     * @param {Object} tx
+     * @returns {Object}
+     */
     const stripClientFields = useCallback((tx) => {
         const copy = { ...tx };
         delete copy.id;
@@ -632,6 +769,14 @@ export function useTransactionTable(filters) {
         [makeTempId, txResult, validateForCreate, filters, stripClientFields, statementPeriod, refetchProjected, serverTx]
     );
 
+    /**
+     * Handles field save in edit mode.
+     * @function handleSaveEdit
+     * @param {string|number} id
+     * @param {string} field
+     * @param {any} value
+     * @async
+     */
     const handleSaveEdit = useCallback(
         async (id, field, value) => {
             const patch = {};

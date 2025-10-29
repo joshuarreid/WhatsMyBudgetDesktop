@@ -1,3 +1,14 @@
+/**
+ * TransactionTable
+ * - Main table UI for displaying, editing, and managing transactions.
+ * - Uses useTransactionTable for business/data logic.
+ * - Keeps table shell visible and responsive during context or data loading for smooth UX.
+ *
+ * @param {Object} props
+ * @param {Object} props.filters - Account and other filter criteria
+ * @returns {JSX.Element}
+ */
+
 import React from 'react';
 import { useTransactionTable } from './hooks/useTransactionTable';
 import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
@@ -25,29 +36,13 @@ const logger = {
     error: (...args) => console.error('[TransactionTable]', ...args),
 };
 
-/**
- * TransactionTable
- * - Main table UI for displaying, editing, and managing transactions.
- * - Uses useTransactionTable for business/data logic.
- * - Keeps table shell visible and responsive during context or data loading for smooth UX.
- *
- * @param {Object} props
- * @param {Object} props.filters - Account and other filter criteria
- * @param {string} props.statementPeriod - Statement period for transaction grouping (no longer required, context driven)
- * @returns {JSX.Element}
- */
 export default function TransactionTable(props) {
     logger.info('TransactionTable initialized', { props });
 
-    // Use context for statement period loading state and value
     const { isLoaded: isStatementPeriodLoaded, statementPeriod } = useStatementPeriodContext();
 
     const filters = props && Object.keys(props).length > 0 ? (props.filters ?? props) : undefined;
 
-    /**
-     * useTransactionTable hook
-     * - Provides state, handlers, and toolbar logic for table UI.
-     */
     const {
         localTx,
         loading,
@@ -74,10 +69,9 @@ export default function TransactionTable(props) {
         savingIds,
         saveErrors,
         startEditingRow,
-        toolbar, // <-- toolbar logic object
+        toolbar,
+        openFilePicker,
     } = useTransactionTable(filters);
-
-    // --- UI rendering logic ---
 
     /**
      * Error handling for transaction fetch.
@@ -106,6 +100,7 @@ export default function TransactionTable(props) {
     /**
      * While the statement period is not loaded or is undefined, render table shell.
      * This ensures a consistent UX and prevents blank page flashes.
+     * Always renders empty rows and zero balances during context loading or transition.
      */
     if (!isStatementPeriodLoaded || statementPeriod === undefined) {
         logger.info('TransactionTable waiting for statement period context');
@@ -135,6 +130,7 @@ export default function TransactionTable(props) {
     /**
      * Empty state rendering: shell always stays mounted.
      * Table body shows loading spinner or empty message as needed.
+     * Renders nothing while loading or if there are no transactions.
      */
     if (!localTx || localTx.length === 0) {
         logger.info('TransactionTable empty state', { loading });
@@ -152,13 +148,9 @@ export default function TransactionTable(props) {
                         total: fmt.format(total),
                     }}
                 />
-                {/* Table header remains visible during loading */}
                 <TransactionTableHeader isAllSelected={isAllSelected} toggleSelectAll={toggleSelectAll} />
                 <div className="tt-body">
-                    {loading
-                        ? <div className="tt-empty"></div>
-                        : <div className="tt-empty"></div>
-                    }
+                    <div className="tt-empty"></div>
                 </div>
             </div>
         );
