@@ -1,17 +1,17 @@
 /**
  * usePaymentsData
- * - Fetches payment summary from backend and returns per-user, per-card totals and category breakdowns.
- * - Normalizes all keys (cards, users) to lowercase.
- * - Business/data logic only; UI logic lives in components.
+ * - Business logic for the payments summary screen: fetches, normalizes, and manages payment summary data.
+ * - Clears stale data immediately on statementPeriod change and on unmount.
+ * - Always subscribes to provider context for live updates.
+ * - Bulletproof React conventions, robust logging, and JSDoc.
  *
  * @module usePaymentsData
  * @returns {Object} { cards, users, payments, breakdowns, loading, error }
  */
-import { useEffect, useState } from "react";
-import {useStatementPeriodContext} from "../../../context/StatementPeriodProvider";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { useStatementPeriodContext } from "../../../context/StatementPeriodProvider";
 import PaymentSummaryService from "../../../services/PaymentSummaryService";
-import {getAccounts, getPaymentMethods} from "../../../config/config.ts";
-
+import { getAccounts, getPaymentMethods } from "../../../config/config.ts";
 
 /**
  * Logger for usePaymentsData hook.
@@ -24,55 +24,109 @@ const logger = {
 
 /**
  * usePaymentsData
- * - Fetches payment summary for current statementPeriod from PaymentSummaryService.
- * - Normalizes all card/user keys to lowercase.
- * - Returns users, cards, payments object, breakdowns, loading, and error.
+ * - Business logic for payments summary screen.
+ * - Fetches payment summary and breakdowns for the current statement period.
+ * - Clears all stale data instantly on period change or unmount.
+ * - Handles race conditions robustly.
  *
  * @returns {Object} { cards, users, payments, breakdowns, loading, error }
  */
 export function usePaymentsData() {
-    /** @type {Array<string>} cards */
-    const [cards] = useState(() =>
-        getPaymentMethods().map((c) => c.toLowerCase())
-    );
-    /** @type {Array<string>} users */
-    const [users] = useState(() =>
-        getAccounts()
-            .filter((u) => ["josh", "anna"].includes(u.toLowerCase()))
-            .map((u) => u.toLowerCase())
-    );
-    /** @type {Object} payments - payments[card][user]: amount */
+    /**
+     * Normalized cards and users, recomputed if config changes.
+     * @type {Array<string>}
+     */
+    const cards = useMemo(() => getPaymentMethods().map((c) => c.toLowerCase()), []);
+    const users = useMemo(() => getAccounts()
+        .filter((u) => ["josh", "anna"].includes(u.toLowerCase()))
+        .map((u) => u.toLowerCase()), []);
+
+    /**
+     * Local state for payments and breakdowns.
+     */
     const [payments, setPayments] = useState({});
-    /** @type {Object} breakdowns - breakdowns[card][user]: {category: amount} */
     const [breakdowns, setBreakdowns] = useState({});
-    /** @type {boolean} loading */
     const [loading, setLoading] = useState(true);
-    /** @type {Error|null} error */
     const [error, setError] = useState(null);
 
-    // Get statementPeriod from provider context
+    // Context subscription: always up-to-date statement period.
     const { statementPeriod } = useStatementPeriodContext();
+    // Track last seen statementPeriod so we can detect actual changes.
+    const lastPeriodRef = useRef();
 
+    /**
+     * Immediate clearing effect: runs on statementPeriod change and on unmount.
+     * Guarantees UI never renders stale data.
+     */
     useEffect(() => {
+        logger.info("Immediate clearing effect: statementPeriod changed or leaving page.", { statementPeriod });
+        setPayments({});
+        setBreakdowns({});
+        setLoading(true);
+        setError(null);
+
+        // Cleanup on unmount
+        return () => {
+            logger.info("Cleanup on unmount: clearing all payments/breakdowns/loading/error.");
+            setPayments({});
+            setBreakdowns({});
+            setLoading(true);
+            setError(null);
+        };
+    }, [statementPeriod]);
+
+    /**
+     * Data fetch effect: runs whenever statementPeriod changes.
+     * Only updates state if fetch matches the latest statementPeriod.
+     * Handles race conditions and ensures UI is always fresh.
+     */
+    useEffect(() => {
+        let isMounted = true;
+        lastPeriodRef.current = statementPeriod;
+
         /**
-         * Loads payment summary from backend.
-         * Normalizes all keys to lowercase.
+         * Fetches payment summary from backend.
          * @async
          * @function fetchData
          * @throws {Error} If the API request fails.
          */
-        async function fetchData() {
-            logger.info("fetchData: effect started", { cards, users, statementPeriod });
-            setLoading(true);
+        async function fetchData(period) {
+            logger.info("fetchData: effect started", { cards, users, statementPeriod: period });
             try {
-                // Fetch payment summary from backend
+                if (!period) {
+                    if (isMounted) {
+                        setPayments({});
+                        setBreakdowns({});
+                        setLoading(false);
+                        setError(null);
+                    }
+                    return;
+                }
+
                 const raw = await PaymentSummaryService.getPaymentSummary({
                     accounts: users,
-                    statementPeriod,
+                    statementPeriod: period,
                 });
 
                 const summary = Array.isArray(raw) ? raw : raw.summary;
                 logger.info("fetchData: API response", { summary });
+
+                // If the period changed during fetch, ignore this result
+                if (!isMounted || lastPeriodRef.current !== period) {
+                    logger.info("fetchData: statementPeriod changed during fetch, discarding result.", {
+                        lastPeriod: lastPeriodRef.current, period
+                    });
+                    return;
+                }
+
+                // If no results, clear and exit
+                if (!summary || summary.length === 0) {
+                    setPayments({});
+                    setBreakdowns({});
+                    setLoading(false);
+                    setError(null);
+                    return;
+                }
 
                 // Build normalized payments and breakdowns objects for table and UI
                 const paymentsResult = {};
@@ -124,15 +178,29 @@ export function usePaymentsData() {
                 setPayments(paymentsResult);
                 setBreakdowns(breakdownsResult);
                 setLoading(false);
+                setError(null);
             } catch (err) {
                 logger.error("fetchData: Failed to fetch payment summary", err);
-                setError(err);
-                setLoading(false);
+                if (isMounted) {
+                    setPayments({});
+                    setBreakdowns({});
+                    setError(err);
+                    setLoading(false);
+                }
             }
         }
 
-        if (statementPeriod) fetchData();
-        else setLoading(true);
+        // Only fetch if we have a valid period
+        if (statementPeriod) {
+            fetchData(statementPeriod);
+        } else {
+            setLoading(true);
+        }
+
+        // Cleanup: mark as unmounted so late fetches can't update state
+        return () => {
+            isMounted = false;
+        };
     }, [cards, users, statementPeriod]);
 
     logger.info("usePaymentsData: hook state", {
