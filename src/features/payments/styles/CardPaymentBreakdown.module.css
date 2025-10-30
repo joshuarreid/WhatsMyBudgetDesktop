@@ -1,0 +1,23 @@
+.cardSection {
+    margin-bottom: 32px;
+    background: linear-gradient(180deg, rgba(20,22,24,0.95), rgba(28,28,30,0.93));
+    border-radius: 12px;
+    box-shadow: 0 1px 16px rgba(0,0,0,0.11);
+    padding: 32px;
+    border: 1px solid rgba(255,255,255,0.03);
+}
+
+.cardTitle {
+    font-size: 1.22rem;
+    font-weight: 700;
+    color: var(--accent, #7fb7db);
+    margin-bottom: 18px;
+    letter-spacing: 0.01em;
+}
+
+.userTables {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}

@@ -11,6 +11,7 @@ import {StatementPeriodProvider} from "../../context/StatementPeriodProvider";
  * @returns {JSX.Element}
  */
 const User1Screen = () => {
+    console.log('User1Screen direct log');
     const USER1FILTER = get("user1.filter", "user1");
     return (
         <StatementPeriodProvider>

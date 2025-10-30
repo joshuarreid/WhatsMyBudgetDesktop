@@ -1,0 +1,67 @@
+.userCategoryTable {
+    min-width: 340px;
+    max-width: 440px;
+    margin-bottom: 18px;
+    background: #18181b;
+    border-radius: 8px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.09);
+    padding: 16px 18px;
+    border: 1px solid rgba(255,255,255,0.03);
+}
+
+.userTitle {
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: var(--accent, #7fb7db);
+    margin-bottom: 8px;
+}
+
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 4px;
+    background: transparent;
+    font-family: var(--font-sans, Inter, system-ui, sans-serif);
+}
+
+th, td {
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 0.98rem;
+}
+
+th {
+    background: rgba(127,183,219,0.05);
+    font-weight: 700;
+    color: var(--muted, #b1bcc6);
+}
+
+td {
+    color: #e6eef8;
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+}
+
+.totalRow td {
+    background: #23232a;
+    font-weight: 700;
+    color: var(--accent-strong, #c6eecb);
+    border-top: 2px solid var(--accent, #7fb7db);
+}
+
+@media (max-width: 900px) {
+    .userTables {
+        flex-direction: column;
+        gap: 18px;
+    }
+    .cardSection {
+        padding: 16px;
+    }
+    .userCategoryTable {
+        min-width: 220px;
+        max-width: 100%;
+        padding: 12px 8px;
+    }
+}

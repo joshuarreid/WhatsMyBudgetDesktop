@@ -10,6 +10,7 @@ import User1Screen from "./screens/User1Screen/User1Screen";
 import User2Screen from "./screens/User2Screen/User2Screen";
 import TransactionScreen from "./screens/TransactionScreen/TransactionScreen";
 import { StatementPeriodProvider } from './context/StatementPeriodProvider';
+import PaymentScreen from "./features/payments/components/PaymentScreen";
 
 /**
  * App
@@ -35,6 +36,7 @@ function App() {
                         <Route path="/user1" element={<User1Screen />} />
                         <Route path="/user2" element={<User2Screen />} />
                         <Route path="/settings" element={<SettingsScreen />} />
+                        <Route path="/payments" element={<PaymentScreen />} />
                     </Routes>
                 </div>
             </StatementPeriodProvider>

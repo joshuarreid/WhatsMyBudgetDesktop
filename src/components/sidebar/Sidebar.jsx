@@ -29,6 +29,9 @@ function Sidebar() {
                     <li className="sidebar-list-item" role="none">
                         <SidebarLink to="/" label="All Transactions" onClick={handleNavClick} />
                     </li>
+                    <li className="sidebar-list-item" role="none">
+                        <SidebarLink to="/payments" label="Payments" onClick={handleNavClick} />
+                    </li>
                 </ul>
             </div>
 
