@@ -1,18 +1,23 @@
+/**
+ * CardPaymentBreakdown
+ * - Shows category breakdowns for each user on a card.
+ * - Data is filled directly from normalized usePaymentsData.
+ *
+ * @module CardPaymentBreakdown
+ * @param {Object} props
+ * @param {string} props.card - Card name (lowercase)
+ * @param {Array<string>} props.users - Array of user names (lowercase)
+ * @param {Object} props.breakdowns - breakdowns[user]: [{ category, amount, type }]
+ * @returns {JSX.Element}
+ */
 import React from "react";
 import UserCategoryTable from "./UserCategoryTable";
 import styles from "../styles/CardPaymentBreakdown.module.css";
 
 /**
  * CardPaymentBreakdown
- * - Shows category breakdowns for each user on a card.
- * - Always uses lowercase card/user keys for lookup.
- *
- * @module CardPaymentBreakdown
- * @param {Object} props
- * @param {string} props.card
- * @param {Array<string>} props.users
- * @param {Object} props.breakdowns - breakdowns[user]: [{ category, amount, type }]
- * @returns {JSX.Element}
+ * - Renders a list of UserCategoryTable components for each user/card.
+ * - Defensive rendering for missing/empty data.
  */
 const logger = {
     info: (...args) => console.log('[CardPaymentBreakdown]', ...args),
@@ -20,20 +25,17 @@ const logger = {
 };
 
 export default function CardPaymentBreakdown({ card, users, breakdowns }) {
-    const normalizedCard = card.toLowerCase();
-    const normalizedUsers = users.map(u => u.toLowerCase());
-
-    logger.info("Rendering CardPaymentBreakdown", { card: normalizedCard, users: normalizedUsers, breakdowns });
+    logger.info("Rendering CardPaymentBreakdown", { card, users, breakdowns });
 
     return (
         <div className={styles.cardSection}>
-            <h2 className={styles.cardTitle}>{normalizedCard.charAt(0).toUpperCase() + normalizedCard.slice(1)} – Category Breakdown</h2>
+            <h2 className={styles.cardTitle}>{card.charAt(0).toUpperCase() + card.slice(1)} – Category Breakdown</h2>
             <div className={styles.userTables}>
-                {normalizedUsers.map(user => (
+                {users.map(user => (
                     <UserCategoryTable
                         key={user}
                         user={user}
-                        card={normalizedCard}
+                        card={card}
                         categories={breakdowns?.[user] || []}
                     />
                 ))}

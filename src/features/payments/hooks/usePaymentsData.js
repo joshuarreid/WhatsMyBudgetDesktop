@@ -1,17 +1,16 @@
 /**
  * usePaymentsData
  * - Fetches payment summary from backend and returns per-user, per-card totals and category breakdowns.
- * - Uses statementPeriod from StatementPeriodProvider context.
- * - Business logic only; all UI in components.
+ * - Normalizes all keys (cards, users) to lowercase.
+ * - Business/data logic only; UI logic lives in components.
  *
  * @module usePaymentsData
  * @returns {Object} { cards, users, payments, breakdowns, loading, error }
  */
 import { useEffect, useState } from "react";
-
-import { getAccounts, getPaymentMethods } from "../../../config/config.ts";
 import {useStatementPeriodContext} from "../../../context/StatementPeriodProvider";
 import PaymentSummaryService from "../../../services/PaymentSummaryService";
+import {getAccounts, getPaymentMethods} from "../../../config/config.ts";
 
 
 /**
@@ -26,15 +25,22 @@ const logger = {
 /**
  * usePaymentsData
  * - Fetches payment summary for current statementPeriod from PaymentSummaryService.
+ * - Normalizes all card/user keys to lowercase.
  * - Returns users, cards, payments object, breakdowns, loading, and error.
  *
  * @returns {Object} { cards, users, payments, breakdowns, loading, error }
  */
 export function usePaymentsData() {
     /** @type {Array<string>} cards */
-    const [cards] = useState(() => getPaymentMethods());
+    const [cards] = useState(() =>
+        getPaymentMethods().map((c) => c.toLowerCase())
+    );
     /** @type {Array<string>} users */
-    const [users] = useState(() => getAccounts().filter(u => ["josh", "anna"].includes(u.toLowerCase())));
+    const [users] = useState(() =>
+        getAccounts()
+            .filter((u) => ["josh", "anna"].includes(u.toLowerCase()))
+            .map((u) => u.toLowerCase())
+    );
     /** @type {Object} payments - payments[card][user]: amount */
     const [payments, setPayments] = useState({});
     /** @type {Object} breakdowns - breakdowns[card][user]: {category: amount} */
@@ -50,6 +56,7 @@ export function usePaymentsData() {
     useEffect(() => {
         /**
          * Loads payment summary from backend.
+         * Normalizes all keys to lowercase.
          * @async
          * @function fetchData
          * @throws {Error} If the API request fails.
@@ -59,40 +66,55 @@ export function usePaymentsData() {
             setLoading(true);
             try {
                 // Fetch payment summary from backend
-                const summary = await PaymentSummaryService.getPaymentSummary({
+                const raw = await PaymentSummaryService.getPaymentSummary({
                     accounts: users,
-                    statementPeriod
+                    statementPeriod,
                 });
+
+                const summary = Array.isArray(raw) ? raw : raw.summary;
                 logger.info("fetchData: API response", { summary });
 
-                // Build payments and breakdowns objects for table and UI
+                // Build normalized payments and breakdowns objects for table and UI
                 const paymentsResult = {};
                 const breakdownsResult = {};
 
-                summary.forEach(userSummary => {
-                    const account = userSummary.account;
-                    // Defensive: support different case for cards
-                    Object.entries(userSummary.creditCardTotals || {}).forEach(([card, total]) => {
-                        if (!paymentsResult[card]) paymentsResult[card] = {};
-                        paymentsResult[card][account] = total;
-                    });
-                    Object.entries(userSummary.creditCardCategoryBreakdowns || {}).forEach(([card, cats]) => {
-                        if (!breakdownsResult[card]) breakdownsResult[card] = {};
-                        breakdownsResult[card][account] = Object.entries(cats).map(([category, amount]) => ({
-                            category,
-                            amount,
-                            type: "Actual"
-                        }));
-                    });
+                summary.forEach((userSummary) => {
+                    const account = String(userSummary.account).toLowerCase();
+
+                    // Card totals
+                    Object.entries(userSummary.creditCardTotals || {}).forEach(
+                        ([card, total]) => {
+                            const normalizedCard = String(card).toLowerCase();
+                            if (!paymentsResult[normalizedCard]) paymentsResult[normalizedCard] = {};
+                            paymentsResult[normalizedCard][account] = Number(total) || 0;
+                        }
+                    );
+
+                    // Category breakdowns
+                    Object.entries(userSummary.creditCardCategoryBreakdowns || {}).forEach(
+                        ([card, cats]) => {
+                            const normalizedCard = String(card).toLowerCase();
+                            if (!breakdownsResult[normalizedCard]) breakdownsResult[normalizedCard] = {};
+                            breakdownsResult[normalizedCard][account] = Object.entries(cats).map(
+                                ([category, amount]) => ({
+                                    category: String(category),
+                                    amount: Number(amount) || 0,
+                                    type: "Actual",
+                                })
+                            );
+                        }
+                    );
                 });
 
                 // Defensive: ensure all card/user keys exist, zero if missing
-                cards.forEach(card => {
+                cards.forEach((card) => {
                     paymentsResult[card] = paymentsResult[card] || {};
                     breakdownsResult[card] = breakdownsResult[card] || {};
-                    users.forEach(user => {
-                        if (typeof paymentsResult[card][user] !== 'number') paymentsResult[card][user] = 0;
-                        if (!Array.isArray(breakdownsResult[card][user])) breakdownsResult[card][user] = [];
+                    users.forEach((user) => {
+                        if (typeof paymentsResult[card][user] !== "number")
+                            paymentsResult[card][user] = 0;
+                        if (!Array.isArray(breakdownsResult[card][user]))
+                            breakdownsResult[card][user] = [];
                     });
                 });
 
@@ -120,7 +142,7 @@ export function usePaymentsData() {
         breakdowns,
         loading,
         error,
-        statementPeriod
+        statementPeriod,
     });
 
     return { cards, users, payments, breakdowns, loading, error };

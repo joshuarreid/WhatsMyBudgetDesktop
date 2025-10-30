@@ -1,16 +1,22 @@
+/**
+ * UserCategoryTable
+ * - Shows breakdown of categories for a user and card.
+ * - Data is filled directly from normalized usePaymentsData.
+ *
+ * @module UserCategoryTable
+ * @param {Object} props
+ * @param {string} props.user - Username (lowercase)
+ * @param {string} props.card - Card name (lowercase)
+ * @param {Array} props.categories - [{ category, amount, type }]
+ * @returns {JSX.Element}
+ */
 import React from "react";
 import styles from "../styles/UserCategoryTable.module.css";
 
 /**
  * UserCategoryTable
- * - Shows breakdown of categories for a user and card. Uses normalized keys.
- *
- * @module UserCategoryTable
- * @param {Object} props
- * @param {string} props.user
- * @param {string} props.card
- * @param {Array} props.categories - [{ category, amount, type }]
- * @returns {JSX.Element}
+ * - Renders a category breakdown for a user's card.
+ * - Defensive rendering for missing/empty data.
  */
 const logger = {
     info: (...args) => console.log('[UserCategoryTable]', ...args),
