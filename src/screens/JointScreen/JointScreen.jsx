@@ -3,7 +3,7 @@ import CategorizedTable from "../../features/categorizedTable/CategorizedTable";
 import SpendingSummary from "../../features/spendingSummary/SpendingSummary";
 import TransactionTable from "../../features/transactionTable/TransactionTable";
 // Use the centralized config accessor (and its helpers)
-import { get } from "../../config/config.ts";
+import { get } from "../../config/config.js";
 import {StatementPeriodProvider} from "../../context/StatementPeriodProvider";
 
 

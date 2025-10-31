@@ -22,7 +22,7 @@ import {
     getAccounts,
     getPaymentMethods,
     getDefaultPaymentMethodForAccount,
-} from '../../../config/config.ts';
+} from '../../../config/config.js';
 import {
     DEFAULT_CRITICALITY_OPTIONS,
     DEFAULT_CRITICALITY,

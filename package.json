@@ -8,7 +8,6 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "postbuild": "mkdir -p build/config && cp public/wmbservice-config.json build/config/wmbservice-config.json",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
     "dist": "npm run build && electron-builder",

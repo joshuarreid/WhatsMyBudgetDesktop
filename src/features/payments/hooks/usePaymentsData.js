@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useStatementPeriodContext } from "../../../context/StatementPeriodProvider";
 import PaymentSummaryService from "../../../services/PaymentSummaryService";
-import { getAccounts, getPaymentMethods } from "../../../config/config.ts";
+import { getAccounts, getPaymentMethods } from "../../../config/config.js";
 
 /**
  * Logger for usePaymentsData hook.

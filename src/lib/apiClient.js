@@ -4,7 +4,7 @@ const logger = {
 };
 
 import axios from 'axios';
-import config, { loadConfig } from "../config/config.ts";
+import config, { loadConfig } from "../config/config.js";
 
 function generateTransactionId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {

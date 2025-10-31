@@ -9,7 +9,7 @@ import {
     getCriticalityForCategory,
     getCategories,
     getDefaultPaymentMethodForAccount
-} from '../../../config/config.ts';
+} from '../../../config/config.js';
 import {
     DEFAULT_CRITICALITY_OPTIONS,
     STATEMENT_PERIOD_CACHE_KEY,

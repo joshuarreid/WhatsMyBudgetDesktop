@@ -1,19 +1,31 @@
 /**
- * Preload script exposing a small secure API to the renderer.
- * - Uses contextBridge + ipcRenderer.invoke for request/response.
- * - Exposes a subscription helper for 'transfer-progress' events.
+ * Preload script exposing a secure API to the renderer.
+ * Bulletproof React conventions: Standardized logging, JSDoc.
+ * @module preload
  */
 const { contextBridge, ipcRenderer } = require('electron');
+console.log('[preload] script loaded');
+const logger = {
+    info: (...args) => console.log('[preload]', ...args),
+    error: (...args) => console.error('[preload]', ...args),
+};
 
 contextBridge.exposeInMainWorld('electronAPI', {
-
     /**
-     * Read config file from main process
+     * Reads config file from main process.
+     * @async
+     * @returns {Promise<Object>}
      */
     readConfig: async () => {
-        console.log('[preload] readConfig invoked');
-        const res = await ipcRenderer.invoke('read-config');
-        console.log('[preload] readConfig result=', res);
-        return res;
+        logger.info('readConfig invoked');
+        try {
+            const res = await ipcRenderer.invoke('read-config');
+            logger.info('readConfig result=', res);
+            return res;
+        } catch (error) {
+            logger.error('readConfig failed:', error);
+            throw error;
+        }
     },
+    // Add additional API methods as needed, with JSDoc and logging.
 });

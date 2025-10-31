@@ -1,19 +1,30 @@
-// Minimal centralized config accessor with lightweight logging.
-// - Loads ../../wmbservice-config.json via require (works without resolveJsonModule).
-// - Exposes get(), setOverrides() and helpers including mapping default payment method to users/accounts.
-//
-// Robust logging per project convention:
+/**
+ * Minimal centralized config accessor with lightweight logging.
+ * - Loads wmbservice-config.json via Electron IPC (window.electronAPI.readConfig).
+ * - Exposes get(), setOverrides(), and helpers such as mapping default payment method to users/accounts.
+ *
+ * @module config
+ */
+
 const logger = {
-    info: (...args: any[]) => console.log('[Config]', ...args),
-    error: (...args: any[]) => console.error('[Config]', ...args),
+    info: (...args) => console.log('[Config]', ...args),
+    error: (...args) => console.error('[Config]', ...args),
 };
 
-type AnyObj = Record<string, unknown>;
+/**
+ * @typedef {Record<string, unknown>} AnyObj
+ */
 
-let fileConfig: AnyObj = {};
+/** @type {AnyObj} */
+let fileConfig = {};
 
-// Loads config from public folder using fetch
-export async function loadConfig(): Promise<void> {
+/**
+ * Loads config from Electron main process via IPC.
+ * @async
+ * @function loadConfig
+ * @returns {Promise<void>}
+ */
+export async function loadConfig() {
     try {
         // @ts-ignore
         console.log('window.electronAPI:', window.electronAPI);
@@ -33,15 +44,18 @@ export async function loadConfig(): Promise<void> {
 }
 
 /**
- * mergedConfig is exported as the live configuration object.
- * setOverrides mutates it in-place so imports keep seeing updates.
+ * Live configuration object. setOverrides mutates it in-place.
+ * @type {AnyObj}
  */
-const mergedConfig: AnyObj = { ...fileConfig };
+const mergedConfig = { ...fileConfig };
 
 /**
  * Apply shallow runtime overrides (useful in tests/bootstrap)
+ * @function setOverrides
+ * @param {AnyObj} [overrides={}]
+ * @returns {void}
  */
-export function setOverrides(overrides: AnyObj = {}): void {
+export function setOverrides(overrides = {}) {
     if (!overrides || typeof overrides !== 'object') {
         logger.error('setOverrides expects a plain object', { receivedType: typeof overrides });
         return;
@@ -53,11 +67,16 @@ export function setOverrides(overrides: AnyObj = {}): void {
 /**
  * Safe dot-path getter.
  * Example: get('user1.name', 'Default Name')
+ * @function get
+ * @template T
+ * @param {string} path
+ * @param {T} [fallback]
+ * @returns {T|undefined}
  */
-export function get<T = unknown>(path: string, fallback?: T): T | undefined {
+export function get(path, fallback) {
     if (!path) return fallback;
     const parts = String(path).split('.');
-    let cur: any = mergedConfig;
+    let cur = mergedConfig;
     for (const p of parts) {
         if (cur == null) return fallback;
         cur = cur[p];
@@ -71,15 +90,19 @@ export function get<T = unknown>(path: string, fallback?: T): T | undefined {
     } catch {
         // ignore logging errors
     }
-    return cur as T;
+    return cur;
 }
 
-/* Basic list helpers */
-export function getCategories(): string[] {
+/**
+ * Returns categories from config.
+ * @function getCategories
+ * @returns {string[]}
+ */
+export function getCategories() {
     try {
-        const val = (mergedConfig as any).categories;
+        const val = mergedConfig.categories;
         if (Array.isArray(val)) {
-            const filtered = val.filter((v: any) => typeof v === 'string').map(String);
+            const filtered = val.filter(v => typeof v === 'string').map(String);
             logger.info('getCategories', { count: filtered.length, sample: filtered.slice(0, 5) });
             return filtered;
         }
@@ -91,11 +114,16 @@ export function getCategories(): string[] {
     }
 }
 
-export function getPaymentMethods(): string[] {
+/**
+ * Returns payment methods from config.
+ * @function getPaymentMethods
+ * @returns {string[]}
+ */
+export function getPaymentMethods() {
     try {
-        const val = (mergedConfig as any).paymentMethods;
+        const val = mergedConfig.paymentMethods;
         if (Array.isArray(val)) {
-            const filtered = val.filter((v: any) => typeof v === 'string').map(String);
+            const filtered = val.filter(v => typeof v === 'string').map(String);
             logger.info('getPaymentMethods', { count: filtered.length, sample: filtered.slice(0, 5) });
             return filtered;
         }
@@ -107,11 +135,16 @@ export function getPaymentMethods(): string[] {
     }
 }
 
-export function getAccounts(): string[] {
+/**
+ * Returns account names from config.
+ * @function getAccounts
+ * @returns {string[]}
+ */
+export function getAccounts() {
     try {
-        const val = (mergedConfig as any).accounts;
+        const val = mergedConfig.accounts;
         if (Array.isArray(val)) {
-            const filtered = val.filter((v: any) => typeof v === 'string').map(String);
+            const filtered = val.filter(v => typeof v === 'string').map(String);
             logger.info('getAccounts', { count: filtered.length, sample: filtered.slice(0, 5) });
             return filtered;
         }
@@ -123,12 +156,16 @@ export function getAccounts(): string[] {
     }
 }
 
-/* Criticality helpers */
-export function getCriticalityMap(): Record<string, string> {
+/**
+ * Returns the criticality map from config.
+ * @function getCriticalityMap
+ * @returns {Record<string, string>}
+ */
+export function getCriticalityMap() {
     try {
-        const val = (mergedConfig as any).defaultCriticalityMap;
+        const val = mergedConfig.defaultCriticalityMap;
         if (val && typeof val === 'object' && !Array.isArray(val)) {
-            const out: Record<string, string> = {};
+            const out = {};
             for (const [k, v] of Object.entries(val)) {
                 if (typeof v === 'string') out[k] = v;
             }
@@ -143,11 +180,17 @@ export function getCriticalityMap(): Record<string, string> {
     }
 }
 
-export function getCriticalityForCategory(category?: string): string {
+/**
+ * Returns criticality for a given category, or fallback.
+ * @function getCriticalityForCategory
+ * @param {string} [category]
+ * @returns {string}
+ */
+export function getCriticalityForCategory(category) {
     try {
         const map = getCriticalityMap();
         if (!category) {
-            const fallback = (mergedConfig as any).criticalityOptions?.[0] ?? 'Essential';
+            const fallback = mergedConfig.criticalityOptions?.[0] ?? 'Essential';
             logger.info('getCriticalityForCategory: no category provided, using fallback', { fallback });
             return fallback;
         }
@@ -165,26 +208,25 @@ export function getCriticalityForCategory(category?: string): string {
             }
         }
 
-        const fallback = (mergedConfig as any).criticalityOptions?.[0] ?? 'Essential';
+        const fallback = mergedConfig.criticalityOptions?.[0] ?? 'Essential';
         logger.info('getCriticalityForCategory: not found, using fallback', { category, fallback });
         return fallback;
     } catch (err) {
         logger.error('getCriticalityForCategory failed', err);
-        return (mergedConfig as any).criticalityOptions?.[0] ?? 'Essential';
+        return mergedConfig.criticalityOptions?.[0] ?? 'Essential';
     }
 }
 
-/* Default payment method helpers */
-
 /**
- * Return the defaultPaymentMethodMap defined in config (if any).
- * Example key format in JSON: { "defaultPaymentMethodMap": { "josh": "Freedom", "anna": "Amex" } }
+ * Returns the default payment method map from config.
+ * @function getDefaultPaymentMethodMap
+ * @returns {Record<string, string>}
  */
-export function getDefaultPaymentMethodMap(): Record<string, string> {
+export function getDefaultPaymentMethodMap() {
     try {
-        const val = (mergedConfig as any).defaultPaymentMethodMap;
+        const val = mergedConfig.defaultPaymentMethodMap;
         if (val && typeof val === 'object' && !Array.isArray(val)) {
-            const out: Record<string, string> = {};
+            const out = {};
             for (const [k, v] of Object.entries(val)) {
                 if (typeof v === 'string') out[k] = v;
             }
@@ -203,17 +245,20 @@ export function getDefaultPaymentMethodMap(): Record<string, string> {
  * Resolve a given account identifier (e.g., "josh", "anna", "joint") to a user key in config
  * (user1, user2, joint) by matching against each user object's `filter` or `name`.
  * Returns the matching user key string or undefined.
+ * @function resolveAccountToUserKey
+ * @param {string} [account]
+ * @returns {string|undefined}
  */
-function resolveAccountToUserKey(account?: string): string | undefined {
+function resolveAccountToUserKey(account) {
     if (!account) return undefined;
     try {
         const acctLower = String(account).toLowerCase();
         const userKeys = ['user1', 'user2', 'joint'];
         for (const key of userKeys) {
-            const userObj = (mergedConfig as any)[key];
+            const userObj = mergedConfig[key];
             if (!userObj || typeof userObj !== 'object') continue;
-            const filter = String((userObj as any).filter ?? '').toLowerCase();
-            const name = String((userObj as any).name ?? '').toLowerCase();
+            const filter = String(userObj.filter ?? '').toLowerCase();
+            const name = String(userObj.name ?? '').toLowerCase();
             if (filter === acctLower || name === acctLower) {
                 logger.info('resolveAccountToUserKey: matched account to userKey', { account, userKey: key });
                 return key;
@@ -235,8 +280,11 @@ function resolveAccountToUserKey(account?: string): string | undefined {
  * 2. Fallback to defaultPaymentMethodMap[account] if present.
  * 3. Fallback to first configured payment method (paymentMethods[0]) if available.
  * 4. Otherwise return undefined.
+ * @function getDefaultPaymentMethodForAccount
+ * @param {string} [account]
+ * @returns {string|undefined}
  */
-export function getDefaultPaymentMethodForAccount(account?: string): string | undefined {
+export function getDefaultPaymentMethodForAccount(account) {
     try {
         if (!account) {
             const fallback = getPaymentMethods()[0];
@@ -247,8 +295,8 @@ export function getDefaultPaymentMethodForAccount(account?: string): string | un
         // 1) resolve to user key and check user.paymentMethod
         const userKey = resolveAccountToUserKey(account);
         if (userKey) {
-            const userObj = (mergedConfig as any)[userKey];
-            const pm = userObj && typeof userObj === 'object' ? (userObj as any).paymentMethod : undefined;
+            const userObj = mergedConfig[userKey];
+            const pm = userObj && typeof userObj === 'object' ? userObj.paymentMethod : undefined;
             if (pm && typeof pm === 'string') {
                 logger.info('getDefaultPaymentMethodForAccount: found paymentMethod on user object', { account, userKey, paymentMethod: pm });
                 return pm;
@@ -287,4 +335,4 @@ export function getDefaultPaymentMethodForAccount(account?: string): string | un
  */
 export default mergedConfig;
 
-logger.info('config.ts: baseUrl at startup', { baseUrl: mergedConfig.baseUrl });
+logger.info('config.js: baseUrl at startup', { baseUrl: mergedConfig.baseUrl });

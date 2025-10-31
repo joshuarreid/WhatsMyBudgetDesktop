@@ -1,7 +1,7 @@
 import React from "react";
 import TransactionTable from "../../features/transactionTable/TransactionTable";
 import SettingsScreen from "../SettingsScreen/SettingsScreen";
-import { get } from "../../config/config.ts";
+import { get } from "../../config/config.js";
 import {StatementPeriodProvider} from "../../context/StatementPeriodProvider";
 
 /**

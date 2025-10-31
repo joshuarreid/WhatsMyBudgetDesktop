@@ -1,7 +1,7 @@
 import React from "react";
 import SpendingSummary from "../../features/spendingSummary/SpendingSummary";
 import TransactionTable from "../../features/transactionTable/TransactionTable";
-import { get } from "../../config/config.ts";
+import { get } from "../../config/config.js";
 import {StatementPeriodProvider} from "../../context/StatementPeriodProvider";
 
 /**

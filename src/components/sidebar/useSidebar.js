@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { get } from "../../config/config.ts";
+import { get } from "../../config/config.js";
 
 /**
  * useSidebar - encapsulates sidebar state + interactions

@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
-import { loadConfig } from './config/config.ts';
+import { loadConfig } from './config/config.js';
 
 function ConfigLoader() {
   const [ready, setReady] = useState(false);
