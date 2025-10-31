@@ -1,7 +1,8 @@
 /**
  * PaymentScreen
- * - Top-level screen for payments, wrapped in StatementPeriodProvider for context-driven statement period state.
- * - Renders payment summary and card breakdowns using normalized data from usePaymentsData.
+ * - Top-level payments screen, wrapped in StatementPeriodProvider.
+ * - Presents a static shell with summary and breakdown sections.
+ * - Matches UX and layout conventions from TransactionTable and other screens.
  *
  * @module PaymentScreen
  * @returns {JSX.Element}
@@ -24,7 +25,8 @@ const logger = {
 
 /**
  * PaymentScreenContent
- * - Handles the actual render logic for payments, using context provided by StatementPeriodProvider.
+ * - Handles render logic for payments, using context from StatementPeriodProvider.
+ * - Renders static shell (summary + breakdown) at all times.
  *
  * @returns {JSX.Element}
  */
@@ -33,20 +35,42 @@ const PaymentScreenContent = () => {
 
     logger.info("Rendering PaymentScreenContent", { cards, users, payments, breakdowns, loading, error });
 
-    if (loading) return <div className={styles.loading}>Loading payments…</div>;
-    if (error) return <div className={styles.error}>Error: {error.message || String(error)}</div>;
-
     return (
         <div className={styles.screen}>
-            <PaymentSummaryTable cards={cards} users={users} payments={payments} />
-            {cards.map(card => (
-                <CardPaymentBreakdown
-                    key={card}
-                    card={card}
-                    users={users}
-                    breakdowns={breakdowns[card]}
-                />
-            ))}
+            {/* Payments summary card */}
+            <div className={styles.summarySection}>
+                <div className={styles.appCard}>
+                    <h2 style={{marginBottom: '10px', color: "var(--accent, #7fb7db)"}}>Payments Summary</h2>
+                    <PaymentSummaryTable cards={cards} users={users} payments={payments} />
+                    {loading && (
+                        <div className={styles.loading}>Loading payments…</div>
+                    )}
+                    {error && (
+                        <div className={styles.error}>Error: {error.message || String(error)}</div>
+                    )}
+                </div>
+            </div>
+            {/* Breakdown cards */}
+            <div className={styles.breakdownSection}>
+                {cards.length === 0 ? (
+                    <div className={styles.appCard} style={{textAlign: "center", padding: "32px 0"}}>
+                        No cards found.
+                    </div>
+                ) : (
+                    cards.map(card => (
+                        <div className={styles.appCard} key={card} style={{marginBottom: "32px"}}>
+                            <CardPaymentBreakdown
+                                card={card}
+                                users={users}
+                                breakdowns={breakdowns[card]}
+                            />
+                            {loading && (
+                                <div className={styles.loading}>Loading breakdowns…</div>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
     );
 };

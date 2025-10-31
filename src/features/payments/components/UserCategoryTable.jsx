@@ -7,22 +7,28 @@
  * @param {Object} props
  * @param {string} props.user - Username (lowercase)
  * @param {string} props.card - Card name (lowercase)
- * @param {Array} props.categories - [{ category, amount, type }]
+ * @param {Array} props.categories - [{ category, amount }]
  * @returns {JSX.Element}
  */
 import React from "react";
 import styles from "../styles/UserCategoryTable.module.css";
 
 /**
- * UserCategoryTable
- * - Renders a category breakdown for a user's card.
- * - Defensive rendering for missing/empty data.
+ * Logger for UserCategoryTable
+ * @constant
  */
 const logger = {
     info: (...args) => console.log('[UserCategoryTable]', ...args),
     error: (...args) => console.error('[UserCategoryTable]', ...args),
 };
 
+/**
+ * UserCategoryTable
+ * - Renders a category breakdown for a user's card.
+ * - Defensive rendering for missing/empty data.
+ *
+ * @returns {JSX.Element}
+ */
 export default function UserCategoryTable({ user, card, categories }) {
     const safeCategories = Array.isArray(categories) ? categories : [];
     const total = safeCategories.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
@@ -32,33 +38,30 @@ export default function UserCategoryTable({ user, card, categories }) {
     return (
         <div className={styles.userCategoryTable}>
             <h3 className={styles.userTitle}>
-                {user.charAt(0).toUpperCase() + user.slice(1)} — {card.charAt(0).toUpperCase() + card.slice(1)}
+                {user.charAt(0).toUpperCase() + user.slice(1)}
             </h3>
             <table>
                 <thead>
                 <tr>
                     <th>Category</th>
                     <th>Total Amount</th>
-                    <th>Type</th>
                 </tr>
                 </thead>
                 <tbody>
                 {safeCategories.length === 0 && (
                     <tr>
-                        <td colSpan={3}>No categories found.</td>
+                        <td colSpan={2}>No categories found.</td>
                     </tr>
                 )}
-                {safeCategories.map(({ category, amount, type }) => (
+                {safeCategories.map(({ category, amount }) => (
                     <tr key={category}>
                         <td>{category.charAt(0).toUpperCase() + category.slice(1)}</td>
                         <td>${Number(amount).toFixed(2)}</td>
-                        <td>{type || "Actual"}</td>
                     </tr>
                 ))}
                 <tr className={styles.totalRow}>
                     <td><strong>TOTAL</strong></td>
                     <td><strong>${total.toFixed(2)}</strong></td>
-                    <td></td>
                 </tr>
                 </tbody>
             </table>
