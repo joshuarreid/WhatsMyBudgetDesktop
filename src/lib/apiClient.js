@@ -4,8 +4,7 @@ const logger = {
 };
 
 import axios from 'axios';
-import config from '../wmbservice-config.json';
-const BASE_URL = config.baseUrl || '';
+import config, { loadConfig } from "../config/config.ts";
 
 function generateTransactionId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -18,53 +17,66 @@ function generateTransactionId() {
     }
 }
 
-const apiClient = axios.create({
-    baseURL: BASE_URL,
-    headers: config.defaultHeaders || {},
-    timeout: 10000,
-});
+let apiClientInstance = null;
 
-// Request interceptor: add Tx ID and log
-apiClient.interceptors.request.use(
-    (request) => {
-        const tx = generateTransactionId();
-        request.headers = request.headers || {};
-        request.headers['X-Transaction-ID'] = tx;
-        logger.info('request', {
-            url: request.baseURL ? (request.baseURL + (request.url || '')) : request.url,
-            method: request.method,
-            params: request.params,
-            dataPreview: request.data ? (typeof request.data === 'object' ? { ...request.data } : request.data) : undefined,
-            transactionId: tx,
+export async function getApiClient() {
+    if (!apiClientInstance) {
+        await loadConfig();
+        const BASE_URL = config.baseUrl || '';
+        if (!BASE_URL) {
+            logger.error('API Client initialized with empty baseURL! Check config.baseUrl.');
+        }
+        apiClientInstance = axios.create({
+            baseURL: BASE_URL,
+            headers: config.defaultHeaders || {},
+            timeout: 10000,
         });
-        return request;
-    },
-    (err) => {
-        logger.error('request error', err);
-        return Promise.reject(err);
-    }
-);
-
-// Response interceptor: log success and normalize errors
-apiClient.interceptors.response.use(
-    (resp) => {
-        logger.info('response', {
-            url: resp.config?.url,
-            status: resp.status,
-            dataPreview: resp.data && (typeof resp.data === 'object' ? { ...resp.data } : resp.data),
+        logger.info('API Client initialized', {
+            baseURL: BASE_URL,
+            headers: config.defaultHeaders || {}
         });
-        return resp;
-    },
-    (err) => {
-        // Try to extract useful info for logging
-        const status = err?.response?.status;
-        const url = err?.config?.url;
-        const message = err?.response?.data?.message || err.message;
-        logger.error('response error', { url, status, message, raw: err });
-        // Optionally: attach normalized error payload
-        return Promise.reject(err);
+        // Request interceptor: add Tx ID and log
+        apiClientInstance.interceptors.request.use(
+            (request) => {
+                const tx = generateTransactionId();
+                request.headers = request.headers || {};
+                request.headers['X-Transaction-ID'] = tx;
+                logger.info('request', {
+                    url: request.baseURL ? (request.baseURL + (request.url || '')) : request.url,
+                    method: request.method,
+                    params: request.params,
+                    dataPreview: request.data ? (typeof request.data === 'object' ? { ...request.data } : request.data) : undefined,
+                    transactionId: tx,
+                });
+                return request;
+            },
+            (err) => {
+                logger.error('request error', err);
+                return Promise.reject(err);
+            }
+        );
+        // Response interceptor: log success and normalize errors
+        apiClientInstance.interceptors.response.use(
+            (resp) => {
+                logger.info('response', {
+                    url: resp.config?.url,
+                    status: resp.status,
+                    dataPreview: resp.data && (typeof resp.data === 'object' ? { ...resp.data } : resp.data),
+                });
+                return resp;
+            },
+            (err) => {
+                // Try to extract useful info for logging
+                const status = err?.response?.status;
+                const url = err?.config?.url;
+                const message = err?.response?.data?.message || err.message;
+                logger.error('response error', { url, status, message, raw: err });
+                // Optionally: attach normalized error payload
+                return Promise.reject(err);
+            }
+        );
     }
-);
+    return apiClientInstance;
+}
 
-export { apiClient };
-export default apiClient;
+export default getApiClient;

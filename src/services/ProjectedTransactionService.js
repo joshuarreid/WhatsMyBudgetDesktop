@@ -14,7 +14,7 @@ const logger = {
     error: (...args) => console.error('[ProjectedTransactionService]', ...args),
 };
 
-import { apiClient } from '../lib/apiClient';
+import { getApiClient } from '../lib/apiClient';
 
 const RESOURCE = '/api/projections';
 
@@ -36,6 +36,7 @@ const projectedTransactionService = {
         logger.info('getTransactions entry', { filters });
         try {
             const config = transactionId ? { params: filters, headers: { 'X-Transaction-ID': transactionId } } : { params: filters };
+            const apiClient = await getApiClient();
             const response = await apiClient.get(RESOURCE, config);
             logger.info('getTransactions success', {
                 count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
@@ -65,6 +66,7 @@ const projectedTransactionService = {
         if (!id) throw new Error('Transaction ID required');
         try {
             const config = transactionId ? { headers: { 'X-Transaction-ID': transactionId } } : undefined;
+            const apiClient = await getApiClient();
             const response = await apiClient.get(`${RESOURCE}/${encodeURIComponent(id)}`, config);
             logger.info('getTransaction success', { transaction: response.data });
             return response.data;
@@ -95,6 +97,7 @@ const projectedTransactionService = {
             const config = transactionId
                 ? { params: { account, statementPeriod, category, criticality, paymentMethod }, headers: { 'X-Transaction-ID': transactionId } }
                 : { params: { account, statementPeriod, category, criticality, paymentMethod } };
+            const apiClient = await getApiClient();
             const response = await apiClient.get(`${RESOURCE}/account`, config);
             logger.info('getTransactionsForAccount success', {
                 personalCount: response.data?.personalTransactions?.count ?? 0,
@@ -125,6 +128,7 @@ const projectedTransactionService = {
         logger.info('createTransaction entry', { transactionPreview: transaction ? { name: transaction.name, amount: transaction.amount, statementPeriod: transaction.statementPeriod } : null });
         try {
             const config = transactionId ? { headers: { 'X-Transaction-ID': transactionId } } : undefined;
+            const apiClient = await getApiClient();
             const response = await apiClient.post(RESOURCE, transaction, config);
             logger.info('createTransaction success', { created: response.data });
             return response.data;
@@ -152,6 +156,7 @@ const projectedTransactionService = {
         if (!id) throw new Error('Transaction ID required');
         try {
             const config = transactionId ? { headers: { 'X-Transaction-ID': transactionId } } : undefined;
+            const apiClient = await getApiClient();
             const response = await apiClient.put(`${RESOURCE}/${encodeURIComponent(id)}`, transaction, config);
             logger.info('updateTransaction success', { updated: response.data });
             return response.data;
@@ -178,6 +183,7 @@ const projectedTransactionService = {
         if (!id) throw new Error('Transaction ID required');
         try {
             const config = transactionId ? { headers: { 'X-Transaction-ID': transactionId } } : undefined;
+            const apiClient = await getApiClient();
             const response = await apiClient.delete(`${RESOURCE}/${encodeURIComponent(id)}`, config);
             logger.info('deleteTransaction success', { status: response.status });
             return response.data;
@@ -202,6 +208,7 @@ const projectedTransactionService = {
         logger.info('deleteAllTransactions entry');
         try {
             const config = transactionId ? { headers: { 'X-Transaction-ID': transactionId } } : undefined;
+            const apiClient = await getApiClient();
             const response = await apiClient.delete(RESOURCE, config);
             logger.info('deleteAllTransactions success', { deletedCount: response.data?.deletedCount });
             return response.data;

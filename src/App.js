@@ -1,8 +1,7 @@
 import React from 'react';
-
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 
 import './App.css';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import JointScreen from "./screens/JointScreen/JointScreen";
 import Sidebar from "./components/sidebar/Sidebar";
 import SettingsScreen from "./screens/SettingsScreen/SettingsScreen";
@@ -26,7 +25,7 @@ const logger = {
 function App() {
     logger.info('App initialized');
     return (
-        <BrowserRouter>
+        <Router>
             <Sidebar />
             <StatementPeriodProvider>
                 <div className={"main-content"}>
@@ -40,7 +39,7 @@ function App() {
                     </Routes>
                 </div>
             </StatementPeriodProvider>
-        </BrowserRouter>
+        </Router>
     );
 }
 

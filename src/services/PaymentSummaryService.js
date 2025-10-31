@@ -12,7 +12,7 @@ const logger = {
     error: (...args) => console.error('[PaymentSummaryService]', ...args),
 };
 
-import { apiClient } from '../lib/apiClient'; // Centralized axios instance
+import { getApiClient } from '../lib/apiClient'; // Centralized axios instance
 
 const RESOURCE = '/api/payment-summary';
 
@@ -51,7 +51,7 @@ const PaymentSummaryService = {
             if (transactionId) {
                 headers['X-Transaction-ID'] = transactionId;
             }
-
+            const apiClient = await getApiClient();
             const response = await apiClient.get(RESOURCE, {
                 params,
                 headers,

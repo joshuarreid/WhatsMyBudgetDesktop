@@ -22,4 +22,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 /src/wmbservice-config.json
-/src/config/wmbservice-config.json
+/public/wmbservice-config.json

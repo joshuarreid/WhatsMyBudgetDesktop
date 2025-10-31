@@ -11,15 +11,25 @@ const logger = {
 type AnyObj = Record<string, unknown>;
 
 let fileConfig: AnyObj = {};
-try {
-    // Use require so this works even if resolveJsonModule isn't enabled.
-    // Adjust the relative path if your JSON is located elsewhere.
-    // @ts-ignore
-    fileConfig = require('./wmbservice-config.json') || {};
-    logger.info('loaded static config', { keys: Object.keys(fileConfig) });
-} catch (err) {
-    logger.info('no static wmbservice-config.json found; continuing with empty config', err);
-    fileConfig = {};
+
+// Loads config from public folder using fetch
+export async function loadConfig(): Promise<void> {
+    try {
+        // @ts-ignore
+        console.log('window.electronAPI:', window.electronAPI);
+        if (!window.electronAPI || typeof window.electronAPI.readConfig !== 'function') {
+            logger.error('window.electronAPI.readConfig is not available. Are you running in Electron with the correct preload script?');
+            fileConfig = {};
+            return;
+        }
+        const config = await window.electronAPI.readConfig();
+        fileConfig = config || {};
+        Object.assign(mergedConfig, fileConfig);
+        logger.info('loaded static config via Electron IPC', { keys: Object.keys(fileConfig), baseUrl: mergedConfig.baseUrl });
+    } catch (err) {
+        logger.error('Failed to load config via Electron IPC', err);
+        fileConfig = {};
+    }
 }
 
 /**
@@ -55,6 +65,9 @@ export function get<T = unknown>(path: string, fallback?: T): T | undefined {
     if (cur === undefined) return fallback;
     try {
         logger.info('config.get', { path, valuePreview: typeof cur === 'object' ? { ...cur } : cur });
+        if (path === 'baseUrl') {
+            logger.info('config.get: baseUrl', { value: cur });
+        }
     } catch {
         // ignore logging errors
     }
@@ -273,3 +286,5 @@ export function getDefaultPaymentMethodForAccount(account?: string): string | un
  *   const defaultPM = getDefaultPaymentMethodForAccount('josh'); // -> "Freedom"
  */
 export default mergedConfig;
+
+logger.info('config.ts: baseUrl at startup', { baseUrl: mergedConfig.baseUrl });

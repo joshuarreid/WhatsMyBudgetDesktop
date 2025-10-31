@@ -11,7 +11,7 @@ const logger = {
     error: (...args) => console.error('[LocalCacheService]', ...args),
 };
 
-import { apiClient } from '../lib/apiClient';
+import { getApiClient } from '../lib/apiClient';
 
 const RESOURCE = '/api/cache';
 
@@ -27,6 +27,7 @@ async function get(cacheKey) {
     logger.info('get entry', { cacheKey });
     if (!cacheKey) throw new Error('cacheKey required');
     try {
+        const apiClient = await getApiClient();
         const response = await apiClient.get(`${RESOURCE}/${encodeURIComponent(cacheKey)}`);
         logger.info('get success', { cacheKey, status: response.status, dataPreview: response.data });
         return response.data;
@@ -49,6 +50,7 @@ async function set(cacheKey, cacheValue) {
     logger.info('set entry', { cacheKey, cacheValue });
     if (!cacheKey) throw new Error('cacheKey required');
     try {
+        const apiClient = await getApiClient();
         const response = await apiClient.post(RESOURCE, null, {
             params: { cacheKey, cacheValue: String(cacheValue) },
         });
@@ -72,6 +74,7 @@ async function deleteCache(cacheKey) {
     logger.info('delete entry', { cacheKey });
     if (!cacheKey) throw new Error('cacheKey required');
     try {
+        const apiClient = await getApiClient();
         const response = await apiClient.delete(`${RESOURCE}/${encodeURIComponent(cacheKey)}`);
         logger.info('delete success', { cacheKey, status: response.status });
         return response.data;
@@ -91,6 +94,7 @@ async function deleteCache(cacheKey) {
 async function deleteAll() {
     logger.info('deleteAll entry');
     try {
+        const apiClient = await getApiClient();
         const response = await apiClient.delete(RESOURCE);
         logger.info('deleteAll success', { status: response.status, dataPreview: response.data });
         return response.data;

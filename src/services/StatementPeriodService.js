@@ -3,7 +3,7 @@ const logger = {
     error: (...args) => console.error('[StatementPeriodService]', ...args),
 };
 
-import { apiClient } from '../lib/apiClient';
+import { getApiClient } from '../lib/apiClient';
 
 /**
  * StatementPeriodService
@@ -55,6 +55,7 @@ export function getCurrentOption(options = []) {
 export async function getAllFromServer() {
     logger.info('getAllFromServer entry');
     try {
+        const apiClient = await getApiClient();
         const response = await apiClient.get('/api/statement-periods');
         logger.info('getAllFromServer success', { count: Array.isArray(response.data) ? response.data.length : 0 });
         return response.data;

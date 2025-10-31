@@ -13,6 +13,8 @@
  */
 const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const fs = require('fs');
+const fsp = require('fs').promises;
 
 console.log('[electron-main] Starting main process', { argv: process.argv.slice(1) });
 
@@ -77,6 +79,7 @@ function createMainWindow() {
         console.log('[electron-main] Loading production index file:', indexPath);
         mainWindow.loadFile(indexPath).then(() => {
             console.log('[electron-main] Production index.html loaded');
+            mainWindow.webContents.openDevTools({ mode: 'detach' }); // Force DevTools open in production
         }).catch(err => {
             console.error('[electron-main] Error loading production index.html', err);
         });
@@ -134,9 +137,28 @@ ipcMain.handle('transfer-albums', async (event, data) => {
     }
 });
 
+const configPath = path.join(__dirname, 'wmbservice-config.json');
+
+ipcMain.handle('read-config', async () => {
+    try {
+        const configData = await fsp.readFile(configPath, 'utf-8');
+        return JSON.parse(configData);
+    } catch (error) {
+        console.error('Error reading config file:', error.message);
+        return {};
+    }
+});
+
 /**
  * App lifecycle
  */
+process.on('uncaughtException', (err) => {
+    console.error('[electron-main] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[electron-main] Unhandled Rejection:', reason);
+});
+
 app.on('ready', () => {
     console.log('[electron-main] app ready');
     try {
@@ -144,13 +166,13 @@ app.on('ready', () => {
     } catch (err) {
         console.error('[electron-main] Error creating main window', err);
     }
+});
 
-    app.on('activate', () => {
-        console.log('[electron-main] app activate');
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createMainWindow();
-        }
-    });
+app.on('activate', () => {
+    console.log('[electron-main] app activate');
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow();
+    }
 });
 
 app.on('window-all-closed', () => {

@@ -9,7 +9,7 @@ const logger = {
     error: (...args) => console.error('[BudgetTransactionService]', ...args),
 };
 
-import { apiClient } from '../lib/apiClient'; // centralized axios instance
+import { getApiClient } from '../lib/apiClient'; // centralized axios instance
 
 const RESOURCE = '/api/transactions';
 
@@ -22,6 +22,7 @@ const budgetTransactionService = {
     async getTransactions(filters = {}) {
         logger.info('getTransactions entry', { filters });
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.get(RESOURCE, { params: filters });
             logger.info('getTransactions success', {
                 count: response.data && typeof response.data.count === 'number' ? response.data.count : 0,
@@ -41,6 +42,7 @@ const budgetTransactionService = {
         logger.info('getTransaction entry', { id });
         if (!id) throw new Error('Transaction ID required');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.get(`${RESOURCE}/${encodeURIComponent(id)}`);
             logger.info('getTransaction success', { transaction: response.data });
             return response.data;
@@ -56,6 +58,7 @@ const budgetTransactionService = {
     async createTransaction(transaction) {
         logger.info('createTransaction entry', { transaction });
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.post(RESOURCE, transaction);
             logger.info('createTransaction success', { created: response.data });
             return response.data;
@@ -72,6 +75,7 @@ const budgetTransactionService = {
         logger.info('updateTransaction entry', { id, transaction });
         if (!id) throw new Error('Transaction ID required');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.put(`${RESOURCE}/${encodeURIComponent(id)}`, transaction);
             logger.info('updateTransaction success', { updated: response.data });
             return response.data;
@@ -88,6 +92,7 @@ const budgetTransactionService = {
         logger.info('deleteTransaction entry', { id });
         if (!id) throw new Error('Transaction ID required');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.delete(`${RESOURCE}/${encodeURIComponent(id)}`);
             logger.info('deleteTransaction success', { status: response.status });
             return response.data;
@@ -103,6 +108,7 @@ const budgetTransactionService = {
     async deleteAllTransactions() {
         logger.info('deleteAllTransactions entry');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.delete(RESOURCE);
             logger.info('deleteAllTransactions success', { deletedCount: response.data?.deletedCount });
             return response.data;
@@ -123,6 +129,7 @@ const budgetTransactionService = {
         formData.append('file', file);
         formData.append('statementPeriod', statementPeriod);
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.post(`${RESOURCE}/upload`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
@@ -141,6 +148,7 @@ const budgetTransactionService = {
         logger.info('getTransactionsForAccount entry', { account, statementPeriod, category, criticality, paymentMethod });
         if (!account) throw new Error('Account is required');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.get(`${RESOURCE}/account`, {
                 params: {
                     account,
@@ -175,6 +183,7 @@ const budgetTransactionService = {
         logger.info('getBudgetTransactionsForAccount entry', { account, statementPeriod, category, criticality, paymentMethod });
         if (!account) throw new Error('Account is required');
         try {
+            const apiClient = await getApiClient();
             const response = await apiClient.get(`${RESOURCE}/account/budget`, {
                 params: {
                     account,
