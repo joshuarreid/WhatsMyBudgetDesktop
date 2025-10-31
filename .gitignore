@@ -23,3 +23,4 @@ yarn-debug.log*
 yarn-error.log*
 /src/wmbservice-config.json
 /public/wmbservice-config.json
+/.env

@@ -11,58 +11,67 @@ const logger = {
     error: (...args) => console.error('[Config]', ...args),
 };
 
-/**
- * @typedef {Record<string, unknown>} AnyObj
- */
+// Helper to get env variable (Electron: process.env, React: import.meta.env or process.env)
+function getEnv(key, fallback) {
+    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
+        return process.env[key];
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key] !== undefined) {
+        return import.meta.env[key];
+    }
+    if (typeof window !== 'undefined' && window.process && window.process.env && window.process.env[key] !== undefined) {
+        return window.process.env[key];
+    }
+    return fallback;
+}
 
-/** @type {AnyObj} */
-let fileConfig = {};
-
-/**
- * Loads config from Electron main process via IPC.
- * @async
- * @function loadConfig
- * @returns {Promise<void>}
- */
-export async function loadConfig() {
+// Parse helpers
+function parseJSONEnv(key, fallback) {
     try {
-        // @ts-ignore
-        console.log('window.electronAPI:', window.electronAPI);
-        if (!window.electronAPI || typeof window.electronAPI.readConfig !== 'function') {
-            logger.error('window.electronAPI.readConfig is not available. Are you running in Electron with the correct preload script?');
-            fileConfig = {};
-            return;
-        }
-        const config = await window.electronAPI.readConfig();
-        fileConfig = config || {};
-        Object.assign(mergedConfig, fileConfig);
-        logger.info('loaded static config via Electron IPC', { keys: Object.keys(fileConfig), baseUrl: mergedConfig.baseUrl });
-    } catch (err) {
-        logger.error('Failed to load config via Electron IPC', err);
-        fileConfig = {};
+        const val = getEnv(key);
+        if (!val) return fallback;
+        return JSON.parse(val);
+    } catch {
+        return fallback;
     }
 }
-
-/**
- * Live configuration object. setOverrides mutates it in-place.
- * @type {AnyObj}
- */
-const mergedConfig = { ...fileConfig };
-
-/**
- * Apply shallow runtime overrides (useful in tests/bootstrap)
- * @function setOverrides
- * @param {AnyObj} [overrides={}]
- * @returns {void}
- */
-export function setOverrides(overrides = {}) {
-    if (!overrides || typeof overrides !== 'object') {
-        logger.error('setOverrides expects a plain object', { receivedType: typeof overrides });
-        return;
-    }
-    Object.assign(mergedConfig, overrides);
-    logger.info('applied runtime config overrides', { keys: Object.keys(overrides) });
+function parseArrayEnv(key, fallback) {
+    const val = getEnv(key);
+    if (!val) return fallback;
+    return val.split(',').map(s => s.trim()).filter(Boolean);
 }
+
+// Config object from env
+const mergedConfig = {
+    baseUrl: getEnv('REACT_APP_BASE_URL', getEnv('BASE_URL', '')),
+    defaultHeaders: parseJSONEnv('REACT_APP_DEFAULT_HEADERS', parseJSONEnv('DEFAULT_HEADERS', {"Content-Type":"application/json"})),
+    user1: {
+        name: getEnv('REACT_APP_USER1_NAME', getEnv('USER1_NAME', '')),
+        filter: getEnv('REACT_APP_USER1_FILTER', getEnv('USER1_FILTER', '')),
+        paymentMethod: getEnv('REACT_APP_USER1_PAYMENT_METHOD', getEnv('USER1_PAYMENT_METHOD', '')),
+    },
+    user2: {
+        name: getEnv('REACT_APP_USER2_NAME', getEnv('USER2_NAME', '')),
+        filter: getEnv('REACT_APP_USER2_FILTER', getEnv('USER2_FILTER', '')),
+        paymentMethod: getEnv('REACT_APP_USER2_PAYMENT_METHOD', getEnv('USER2_PAYMENT_METHOD', '')),
+    },
+    joint: {
+        name: getEnv('REACT_APP_JOINT_NAME', getEnv('JOINT_NAME', '')),
+        filter: getEnv('REACT_APP_JOINT_FILTER', getEnv('JOINT_FILTER', '')),
+        paymentMethod: getEnv('REACT_APP_JOINT_PAYMENT_METHOD', getEnv('JOINT_PAYMENT_METHOD', '')),
+    },
+    criticalityOptions: parseArrayEnv('REACT_APP_CRITICALITY_OPTIONS', parseArrayEnv('CRITICALITY_OPTIONS', [])),
+    statementPeriodPrevMonths: Number(getEnv('REACT_APP_STATEMENT_PERIOD_PREV_MONTHS', getEnv('STATEMENT_PERIOD_PREV_MONTHS', 1))),
+    statementPeriodForwardMonths: Number(getEnv('REACT_APP_STATEMENT_PERIOD_FORWARD_MONTHS', getEnv('STATEMENT_PERIOD_FORWARD_MONTHS', 5))),
+    statementPeriodCacheKey: getEnv('REACT_APP_STATEMENT_PERIOD_CACHE_KEY', getEnv('STATEMENT_PERIOD_CACHE_KEY', 'currentStatementPeriod')),
+    categories: parseArrayEnv('REACT_APP_CATEGORIES', parseArrayEnv('CATEGORIES', [])),
+    paymentMethods: parseArrayEnv('REACT_APP_PAYMENT_METHODS', parseArrayEnv('PAYMENT_METHODS', [])),
+    accounts: parseArrayEnv('REACT_APP_ACCOUNTS', parseArrayEnv('ACCOUNTS', [])),
+    defaultCriticalityMap: parseJSONEnv('REACT_APP_DEFAULT_CRITICALITY_MAP', parseJSONEnv('DEFAULT_CRITICALITY_MAP', {})),
+    defaultPaymentMethodMap: parseJSONEnv('REACT_APP_DEFAULT_PAYMENT_METHOD_MAP', parseJSONEnv('DEFAULT_PAYMENT_METHOD_MAP', {})),
+};
+
+
 
 /**
  * Safe dot-path getter.
@@ -167,7 +176,7 @@ export function getCriticalityMap() {
         if (val && typeof val === 'object' && !Array.isArray(val)) {
             const out = {};
             for (const [k, v] of Object.entries(val)) {
-                if (typeof v === 'string') out[k] = v;
+                if (typeof v === 'string' ) out[k] = v;
             }
             logger.info('getCriticalityMap', { count: Object.keys(out).length, sample: Object.entries(out).slice(0, 5) });
             return out;
@@ -228,7 +237,7 @@ export function getDefaultPaymentMethodMap() {
         if (val && typeof val === 'object' && !Array.isArray(val)) {
             const out = {};
             for (const [k, v] of Object.entries(val)) {
-                if (typeof v === 'string') out[k] = v;
+                if (typeof v === 'string' ) out[k] = v;
             }
             logger.info('getDefaultPaymentMethodMap', { count: Object.keys(out).length, sample: Object.entries(out).slice(0, 5) });
             return out;
@@ -335,4 +344,5 @@ export function getDefaultPaymentMethodForAccount(account) {
  */
 export default mergedConfig;
 
+logger.info('REACT_APP env dump', Object.keys(process.env).filter(k => k.startsWith('REACT_APP_')).reduce((acc, k) => { acc[k] = process.env[k]; return acc; }, {}));
 logger.info('config.js: baseUrl at startup', { baseUrl: mergedConfig.baseUrl });

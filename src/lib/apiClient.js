@@ -4,7 +4,7 @@ const logger = {
 };
 
 import axios from 'axios';
-import config, { loadConfig } from "../config/config.js";
+import config from "../config/config.js";
 
 function generateTransactionId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -21,7 +21,6 @@ let apiClientInstance = null;
 
 export async function getApiClient() {
     if (!apiClientInstance) {
-        await loadConfig();
         const BASE_URL = config.baseUrl || '';
         if (!BASE_URL) {
             logger.error('API Client initialized with empty baseURL! Check config.baseUrl.');

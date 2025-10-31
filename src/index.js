@@ -3,12 +3,11 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
-import { loadConfig } from './config/config.js';
 
 function ConfigLoader() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    loadConfig().then(() => setReady(true));
+    setReady(true);
   }, []);
   if (!ready) return <div style={{padding: 32}}>Loading configuration...</div>;
   return <App />;

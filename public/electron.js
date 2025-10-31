@@ -6,8 +6,7 @@
  */
 const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const fs = require('fs');
-const fsp = require('fs').promises;
+require('dotenv').config();
 
 const logger = {
     info: (...args) => console.log('[electron-main]', ...args),
@@ -19,41 +18,6 @@ const logger = {
  * @returns {boolean}
  */
 const isDev = process.env.NODE_ENV === 'development' || process.defaultApp || /node_modules[\\/]electron[\\/]/.test(process.execPath);
-
-/**
- * Resolves config file location for dev/prod.
- * @returns {string} Absolute path to config file.
- */
-function getConfigPath() {
-    if (isDev) {
-        // In dev, resolve relative to source file
-        return path.join(__dirname, 'wmbservice-config.json');
-    } else {
-        // In prod, resolve to packaged app location
-        return path.join(app.getAppPath(), 'public', 'wmbservice-config.json');
-    }
-}
-
-const configPath = getConfigPath();
-logger.info('Resolved configPath:', configPath, 'exists:', fs.existsSync(configPath));
-
-/**
- * Reads config file from disk.
- * @async
- * @returns {Promise<Object>}
- */
-const readConfig = async () => {
-    try {
-        const configData = await fsp.readFile(configPath, 'utf-8');
-        return JSON.parse(configData);
-    } catch (error) {
-        logger.error('Error reading config file:', error.message);
-        return {};
-    }
-};
-ipcMain.handle('read-config', async () => {
-    return await readConfig();
-});
 
 /**
  * Create the main BrowserWindow and load the correct entry point.
@@ -160,3 +124,15 @@ app.on('window-all-closed', () => {
         logger.info('macOS - keeping app active');
     }
 });
+
+// Removed config file logic. Use environment variables instead.
+
+/**
+ * Example: Access environment variables
+ * const myValue = process.env.MY_CONFIG_VAR;
+ */
+
+// If you need config values, use process.env directly:
+// Example:
+// const apiUrl = process.env.API_URL;
+// logger.info('API_URL from env:', apiUrl);
