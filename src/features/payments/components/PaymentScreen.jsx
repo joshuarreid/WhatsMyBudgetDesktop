@@ -2,17 +2,19 @@
  * PaymentScreen
  * - Top-level payments screen, wrapped in StatementPeriodProvider.
  * - Presents a static shell with summary and breakdown sections.
- * - Matches UX and layout conventions from TransactionTable and other screens.
+ * - Uses the new usePaymentSummary(tanStack) hook (TanStack Query) for data fetching/caching.
  *
- * @module PaymentScreen
- * @returns {JSX.Element}
+ * NOTE: This file was patched to use the new hook during migration.
  */
+
 import React from "react";
 import PaymentSummaryTable from "./PaymentSummaryTable";
 import CardPaymentBreakdown from "./CardPaymentBreakdown";
 import styles from "../styles/PaymentScreen.module.css";
 import { StatementPeriodProvider } from "../../../context/StatementPeriodProvider";
-import { usePaymentsData } from "../hooks/usePaymentsData";
+import usePaymentSummary from "../../../hooks/usePaymentSummary(tanStack)";
+// NOTE: swapped to new TanStack hook (temporary filename suffix)
+
 
 /**
  * Logger for PaymentScreen component.
@@ -31,7 +33,7 @@ const logger = {
  * @returns {JSX.Element}
  */
 const PaymentScreenContent = () => {
-    const { cards, users, payments, breakdowns, loading, error } = usePaymentsData();
+    const { cards, users, payments, breakdowns, loading, error } = usePaymentSummary();
 
     logger.info("Rendering PaymentScreenContent", { cards, users, payments, breakdowns, loading, error });
 
