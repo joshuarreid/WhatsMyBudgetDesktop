@@ -1,20 +1,16 @@
 /**
  * PaymentScreen
- * - Top-level payments screen, wrapped in StatementPeriodProvider.
- * - Presents a static shell with summary and breakdown sections.
+ * - Top-level payments screen.
+ * - Uses the shared StatementPeriodProvider from App (do not create a nested provider).
  * - Uses the new usePaymentSummary(tanStack) hook (TanStack Query) for data fetching/caching.
- *
- * NOTE: This file was patched to use the new hook during migration.
  */
 
 import React from "react";
 import PaymentSummaryTable from "./PaymentSummaryTable";
 import CardPaymentBreakdown from "./CardPaymentBreakdown";
 import styles from "../styles/PaymentScreen.module.css";
-import { StatementPeriodProvider } from "../../../context/StatementPeriodProvider(tanStack)";
+// PaymentScreen no longer creates its own provider; it consumes the one from App.
 import usePaymentSummary from "../../../hooks/usePaymentSummary(tanStack)";
-// NOTE: swapped to new TanStack hook (temporary filename suffix)
-
 
 /**
  * Logger for PaymentScreen component.
@@ -27,7 +23,7 @@ const logger = {
 
 /**
  * PaymentScreenContent
- * - Handles render logic for payments, using context from StatementPeriodProvider.
+ * - Handles render logic for payments, using context from the top-level StatementPeriodProvider.
  * - Renders static shell (summary + breakdown) at all times.
  *
  * @returns {JSX.Element}
@@ -79,14 +75,10 @@ const PaymentScreenContent = () => {
 
 /**
  * PaymentScreen
- * - Top-level export, wraps content in StatementPeriodProvider for context consistency.
+ * - Top-level export. No provider wrapper here — uses the one from App.js.
  *
  * @returns {JSX.Element}
  */
-const PaymentScreen = () => (
-    <StatementPeriodProvider>
-        <PaymentScreenContent />
-    </StatementPeriodProvider>
-);
+const PaymentScreen = () => <PaymentScreenContent />;
 
 export default PaymentScreen;
