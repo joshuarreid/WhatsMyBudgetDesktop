@@ -1,3 +1,9 @@
+/**
+ * App
+ * Main application component. Provides routing and context providers.
+ *
+ * @returns {JSX.Element}
+ */
 import React from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 
@@ -8,14 +14,12 @@ import SettingsScreen from "./screens/SettingsScreen/SettingsScreen";
 import User1Screen from "./screens/User1Screen/User1Screen";
 import User2Screen from "./screens/User2Screen/User2Screen";
 import TransactionScreen from "./screens/TransactionScreen/TransactionScreen";
-import { StatementPeriodProvider } from './context/StatementPeriodProvider';
+import { StatementPeriodProvider } from './context/StatementPeriodProvider(tanStack)';
 import PaymentScreen from "./features/payments/components/PaymentScreen";
 
 /**
- * App
- * Main application component. Provides routing and context providers.
- *
- * @returns {JSX.Element}
+ * Logger for App
+ * @constant
  */
 const logger = {
     info: (...args) => console.log('[App]', ...args),

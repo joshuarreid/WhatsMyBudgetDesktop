@@ -11,7 +11,7 @@ import React from "react";
 import PaymentSummaryTable from "./PaymentSummaryTable";
 import CardPaymentBreakdown from "./CardPaymentBreakdown";
 import styles from "../styles/PaymentScreen.module.css";
-import { StatementPeriodProvider } from "../../../context/StatementPeriodProvider";
+import { StatementPeriodProvider } from "../../../context/StatementPeriodProvider(tanStack)";
 import usePaymentSummary from "../../../hooks/usePaymentSummary(tanStack)";
 // NOTE: swapped to new TanStack hook (temporary filename suffix)
 

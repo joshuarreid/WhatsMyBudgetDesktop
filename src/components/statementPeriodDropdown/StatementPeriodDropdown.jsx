@@ -1,6 +1,8 @@
+// (only the import line changed)
 import React from 'react';
 import './StatementPeriodDropdown.css';
-import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
+// UPDATED: import the tanStack provider context so it matches the provider used in App
+import { useStatementPeriodContext } from '../../context/StatementPeriodProvider(tanStack)';
 
 /**
  * StatementPeriodDropdown.
