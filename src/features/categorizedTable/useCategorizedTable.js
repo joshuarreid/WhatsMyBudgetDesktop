@@ -3,7 +3,7 @@
  *
  * Extracts the logic previously inside CategorizedTable:
  * - normalizes filters
- * - calls useTransactions
+ * - calls useBudgetAndProjectedTransactionsForAccount (tanStack)
  * - computes totals by category
  * - prepares rows and formatter
  *
@@ -11,7 +11,8 @@
  */
 
 import { useMemo } from 'react';
-import { useBudgetAndProjectedTransactionsForAccount } from '../../hooks/useTransactions';
+// UPDATED: use the TanStack-backed transactions hook
+import { useBudgetAndProjectedTransactionsForAccount } from '../../hooks/useTransactions(tanStack)';
 
 const logger = {
     info: (...args) => console.log('[useCategorizedTable]', ...args),
@@ -20,24 +21,14 @@ const logger = {
 
 /**
  * @param {Object} propsOrFilters - either a filters object or the full props object (back-compat with previous usage)
- * @returns {{
- *   filters: Object,
- *   txResult: any,
- *   transactions: Array,
- *   totalSum: number,
- *   loading: boolean,
- *   error: any,
- *   totalsByCategory: Record<string, number>,
- *   rows: Array<[string, number]>,
- *   fmt: Intl.NumberFormat
- * }}
+ * @returns {Object} hook result used by CategorizedTable
  */
 export default function useCategorizedTable(propsOrFilters = {}) {
     try {
         const filters = propsOrFilters?.filters ?? propsOrFilters;
         logger.info('normalized filters', filters);
 
-        // Use the new hook for account-specific transactions
+        // Use the new TanStack hook for account-specific transactions
         const txResult = useBudgetAndProjectedTransactionsForAccount(filters || {});
         // Combine personal and joint transactions for display, sorted by date desc
         const transactions = useMemo(

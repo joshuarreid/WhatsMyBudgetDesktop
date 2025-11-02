@@ -1,18 +1,26 @@
 /**
  * src/context/StatementPeriodProvider(tanStack).js
  *
- * StatementPeriodProvider migrated to use TanStack Query to load cached statementPeriod once.
- * - Uses useQuery to load local cache value ONCE, with staleTime: Infinity to mimic "read once" behavior.
- * - Maintains updateStatementPeriod to persist to localCacheService when user changes the value.
+ * StatementPeriodProvider migrated to use localStorage for persistence (client-only).
+ * - Reads 'currentStatementPeriod' from localStorage ONCE on mount.
+ * - Persists updates to localStorage when updateStatementPeriod is called.
+ * - Exposes the same context API as the legacy provider so consumers require no changes:
+ *   { options, defaultOpt, isOpen, isSaving, containerRef, toggleOpen, onButtonKeyDown,
+ *     onOptionKeyDown, setSelectedValue, setIsOpen, statementPeriod, updateStatementPeriod,
+ *     selectedLabel, isLoaded }
  *
  * NOTE: Temporary filename contains "(tanStack)" during migration.
  */
 
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import useStatementPeriodDropdown from '../components/statementPeriodDropdown/useStatementPeriodDropdown';
-import localCacheService from '../services/LocalCacheService';
-import { useQuery } from '@tanstack/react-query';
 
+const STORAGE_KEY = 'currentStatementPeriod';
+
+/**
+ * Logger for StatementPeriodProvider
+ * @constant
+ */
 const logger = {
     info: (...args) => console.log('[StatementPeriodProvider]', ...args),
     error: (...args) => console.error('[StatementPeriodProvider]', ...args),
@@ -25,18 +33,25 @@ const logger = {
 const StatementPeriodContext = createContext(undefined);
 
 /**
- * readCachedStatementPeriod
- * - Query function to read the cached currentStatementPeriod value via localCacheService.
+ * readLocalStatementPeriod
+ * - Reads the canonical statementPeriod value from localStorage.
  *
- * @returns {Promise<any>}
+ * @returns {string|null} The cached statementPeriod or null if not present.
  */
-async function readCachedStatementPeriod() {
-    // localCacheService.get may return { cacheValue } or string — keep compatibility.
-    return await localCacheService.get('currentStatementPeriod');
+function readLocalStatementPeriod() {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return null;
+        const v = window.localStorage.getItem(STORAGE_KEY);
+        logger.info('readLocalStatementPeriod read', { value: v });
+        return v;
+    } catch (err) {
+        logger.error('readLocalStatementPeriod failed', err);
+        return null;
+    }
 }
 
 /**
- * StatementPeriodProvider (tanStack)
+ * StatementPeriodProvider (tanStack, localStorage-backed)
  *
  * @param {object} props
  * @param {React.ReactNode} props.children
@@ -49,60 +64,56 @@ export const StatementPeriodProvider = ({ children }) => {
     const [statementPeriod, setStatementPeriod] = useState(undefined);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Use react-query to fetch cached statementPeriod ONCE. Set staleTime to Infinity so it won't refetch automatically.
-    const query = useQuery({
-        queryKey: ['currentStatementPeriod'],
-        queryFn: readCachedStatementPeriod,
-        staleTime: Infinity,
-        cacheTime: Infinity,
-        retry: 0,
-        onError: (err) => {
-            logger.error('StatementPeriodProvider: failed to read cache via query', err);
-        },
-    });
-
-    // Resolve the cache result into a canonical string value (same logic as previous implementation)
+    // Read cached statementPeriod from localStorage once on mount.
     useEffect(() => {
-        if (query.isLoading) {
-            // still loading; wait
-            return;
-        }
-
+        let mounted = true;
         try {
-            const res = query.data;
-            const cacheValue = res?.cacheValue || res?.value || (typeof res === 'string' ? res : null);
-            if (cacheValue) {
+            logger.info('Initializing statement period from localStorage');
+            const cacheValue = readLocalStatementPeriod();
+            if (mounted && cacheValue) {
                 setStatementPeriod(cacheValue);
-                logger.info('Loaded statementPeriod from cache (query)', { cacheValue });
-            } else {
-                // fallback to dropdown default option
+                logger.info('Loaded statementPeriod from localStorage', { cacheValue });
+            } else if (mounted) {
                 const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
                 setStatementPeriod(fallback);
-                logger.info('No cache, using dropdown defaultOpt', { value: fallback });
+                logger.info('No localStorage value, using dropdown defaultOpt', { value: fallback });
             }
         } catch (err) {
-            logger.error('Error while resolving cached statementPeriod', err);
-            const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
-            setStatementPeriod(fallback);
+            logger.error('Failed to load statementPeriod from localStorage', err);
+            if (mounted) {
+                const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
+                setStatementPeriod(fallback);
+            }
         } finally {
-            setIsLoaded(true);
+            if (mounted) setIsLoaded(true);
         }
-        // We intentionally only react to query.isLoading/query.data once; query has staleTime: Infinity.
-    }, [query.isLoading, query.data, dropdown.defaultOpt]);
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     /**
      * updateStatementPeriod
-     * - Persists the new statementPeriod to localCacheService and updates context.
+     * - Updates statement period in context and persists to localStorage.
+     * - Does not re-read localStorage after update.
      *
-     * @param {string} value
+     * @async
+     * @function updateStatementPeriod
+     * @param {string} value - New statement period value.
      */
     const updateStatementPeriod = useCallback(async (value) => {
-        setStatementPeriod(value);
         try {
-            await localCacheService.set('currentStatementPeriod', value);
-            logger.info('Persisted statementPeriod to cache', { value });
+            setStatementPeriod(value);
+            if (typeof window !== 'undefined' && window.localStorage) {
+                try {
+                    window.localStorage.setItem(STORAGE_KEY, String(value));
+                    logger.info('Persisted statementPeriod to localStorage', { value });
+                } catch (err) {
+                    logger.error('Failed to persist statementPeriod to localStorage', err);
+                }
+            }
         } catch (err) {
-            logger.error('Failed to persist statementPeriod to cache', err);
+            logger.error('updateStatementPeriod failed', err);
         }
     }, []);
 

@@ -4,9 +4,7 @@
  * - Displays current balance and projected balance (in yellow) side by side in the footer.
  * - Filters on the provider's selected statement period.
  *
- * @module CategorizedTable
- * @param {object} props - Component props.
- * @returns {JSX.Element}
+ * NOTE: Import for StatementPeriodProvider updated to the tanStack variant so consumers use the same context.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -17,7 +15,8 @@ import CategoryTableBody from './components/CategoryTableBody';
 import CategoryTableFooter from './components/CategoryTableFooter';
 import CategoryTableTitle from './components/CategoryTableTitle';
 import CategoryWeeklyModal from "../categoryWeeklyModal/CategoryWeeklyModal";
-import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
+// UPDATED: consume the tanStack provider context (same one registered in App)
+import { useStatementPeriodContext } from '../../context/StatementPeriodProvider(tanStack)';
 import useProjectedTransactions from '../../hooks/useProjectedTransactions';
 
 /**
@@ -29,18 +28,10 @@ const logger = {
     error: (...args) => console.error('[CategorizedTable]', ...args),
 };
 
-/**
- * CategorizedTable
- * Presentational component for categorized transactions, including
- * modal for weekly details and a footer showing current + projected balances.
- *
- * @param {object} props
- * @returns {JSX.Element}
- */
 export default function CategorizedTable(props) {
     logger.info('render start', { title: props.title });
 
-    // Consume the statement period context
+    // Consume the statement period context (tanStack)
     const { statementPeriod } = useStatementPeriodContext();
 
     /**
@@ -68,20 +59,12 @@ export default function CategorizedTable(props) {
         filters: mergedFilters,
     });
 
-    // Get projected transactions using custom hook
+    // Get projected transactions using custom hook (left as legacy for now)
     const { projectedTx = [] } = useProjectedTransactions({
         statementPeriod,
         account: props.account ?? filters?.account,
     });
 
-    /**
-     * Calculates projected total for this table's criticality.
-     * Filters projected transactions by criticality so each table only
-     * displays projected sum for its own category, case-insensitive.
-     *
-     * @constant
-     * @type {number}
-     */
     const projectedTotal = useMemo(() => {
         const crit = String(mergedFilters.criticality || '').toLowerCase();
         return Array.isArray(projectedTx)
@@ -91,13 +74,6 @@ export default function CategorizedTable(props) {
             : 0;
     }, [projectedTx, mergedFilters.criticality]);
 
-    /**
-     * Calculates projected totals by category for this table's criticality.
-     * Used for rendering the yellow progress bar segment per category.
-     *
-     * @constant
-     * @type {Record<string, number>}
-     */
     const projectedTotalsByCategory = useMemo(() => {
         const crit = String(mergedFilters.criticality || '').toLowerCase();
         if (!Array.isArray(projectedTx)) return {};
@@ -123,18 +99,12 @@ export default function CategorizedTable(props) {
         projectedTotalsByCategory,
     });
 
-    // Modal state (open selected category)
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
 
-    /**
-     * Handles row click to open the weekly modal.
-     * @param {string} category
-     */
     const handleRowClick = (category) => {
         logger.info('row clicked', { category });
 
-        // Ensure we have an account before opening the nested TransactionTable modal.
         const account = props.account ?? filters?.account;
         if (!account) {
             logger.error('cannot open weekly modal - account is required', { category });
@@ -145,9 +115,6 @@ export default function CategorizedTable(props) {
         setModalOpen(true);
     };
 
-    /**
-     * Handles closing the modal.
-     */
     const handleCloseModal = () => {
         logger.info('modal close requested', { category: selectedCategory });
         setModalOpen(false);
