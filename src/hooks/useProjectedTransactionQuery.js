@@ -93,7 +93,7 @@ function buildQueryKey(account, statementPeriod) {
  *   data: any
  * }}
  */
-export function useProjectedTransactions({ account, statementPeriod } = {}, options = {}) {
+export function useProjectedTransactionsQuery({ account, statementPeriod } = {}, options = {}) {
     const queryKey = buildQueryKey(account, statementPeriod);
 
     const query = useQuery({
@@ -165,4 +165,4 @@ export function useProjectedTransactions({ account, statementPeriod } = {}, opti
     };
 }
 
-export default useProjectedTransactions;
+export default useProjectedTransactionsQuery;
