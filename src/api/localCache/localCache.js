@@ -2,15 +2,13 @@
  * Thin fetcher module for LocalCache endpoints.
  *
  * - Responsible for creating its own LocalCacheApiClient instance.
- * - Consumers simply call the exported functions (no baseURL, apiPath or transaction-id references here).
- * - ApiClient is responsible for resolving process.env.BASE_URL and attaching X-Transaction-ID header.
+ * - Construct the client with an explicit baseURL and apiPath (for reliable behavior in dev).
  *
- * JSDoc uses "cacheKey" to avoid confusion with the X-Transaction-ID header.
+ * This module delegates to LocalCacheApiClient and exposes simple functions used by hooks.
  *
- * @module localCache
+ * @module src/api/localCache/localCache
  */
-
-import LocalCacheApiClient from './localCacheApiClient';
+import LocalCacheApiClient from "./localCacheApiClient";
 
 /**
  * Standardized logger for this module.
@@ -22,45 +20,51 @@ const logger = {
 };
 
 /**
- * Internal API client instance managed by this module.
- * Constructed without an explicit baseURL so ApiClient will resolve process.env.BASE_URL.
+ * Resolve base URL from environment (prefer REACT_APP_BASE_URL).
  *
- * @type {LocalCacheApiClient}
- * @private
+ * @returns {string|null}
  */
-const apiClient = new LocalCacheApiClient();
+function resolveBaseUrl() {
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            const v = process.env.REACT_APP_BASE_URL || process.env.BASE_URL || null;
+            return v ? String(v).trim().replace(/\/+$/, '') : null;
+        }
+    } catch (err) {
+        logger.error('resolveBaseUrl error', err);
+    }
+    return null;
+}
 
 /**
- * Fetch all local cache entries.
- *
- * @async
- * @returns {Promise<Array<Object>>} array of LocalCache entries
- * @throws {Object} normalized ApiClient error
+ * BaseURL and apiPath used to construct the resource client.
+ * - apiPath defaults to 'api' to match other ApiClient usage in the app.
  */
-export async function fetchAllLocalCache() {
-    logger.info('fetchAllLocalCache called');
-    try {
-        return await apiClient.getAllLocalCache();
-    } catch (err) {
-        logger.error('fetchAllLocalCache failed', err);
-        throw err;
-    }
-}
+const baseURL = resolveBaseUrl();
+const apiPath = 'api';
+
+logger.info('Constructing LocalCacheApiClient', { baseURL, apiPath });
+
+/**
+ * Internal API client instance managed by this module.
+ *
+ * Notes:
+ * - LocalCacheApiClient accepts an options object and forwards to ApiClient.
+ * - If baseURL is null the ApiClient will still try to resolve from env; ensure REACT_APP_BASE_URL is set.
+ */
+const apiClient = new LocalCacheApiClient({ baseURL, apiPath });
 
 /**
  * Fetch a cache entry by key.
  *
- * NOTE: the identifier is cacheKey (resource key). This is NOT the X-Transaction-ID header.
- *
  * @async
- * @param {string} cacheKey - cache key to fetch
+ * @param {string} cacheKey
  * @returns {Promise<Object|null>} cache entry or null (404 handled by server)
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function fetchLocalCacheByKey(cacheKey) {
     logger.info('fetchLocalCacheByKey called', { cacheKey });
     try {
-        return await apiClient.getLocalCacheByKey(cacheKey);
+        return await apiClient.getByKey(cacheKey);
     } catch (err) {
         logger.error('fetchLocalCacheByKey failed', err);
         throw err;
@@ -71,10 +75,9 @@ export async function fetchLocalCacheByKey(cacheKey) {
  * Save or update a cache entry.
  *
  * @async
- * @param {string} cacheKey - key for the cache entry
- * @param {string} cacheValue - value for the cache entry
+ * @param {string} cacheKey
+ * @param {string} cacheValue
  * @returns {Promise<Object>} saved LocalCache entry
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function saveOrUpdateLocalCache(cacheKey, cacheValue) {
     logger.info('saveOrUpdateLocalCache called', { cacheKey });
@@ -89,17 +92,14 @@ export async function saveOrUpdateLocalCache(cacheKey, cacheValue) {
 /**
  * Delete a cache entry by key.
  *
- * NOTE: the identifier is cacheKey (resource key). This is NOT the X-Transaction-ID header.
- *
  * @async
- * @param {string} cacheKey - key to delete
- * @returns {Promise<void|Object>} no-content on success
- * @throws {Error|Object} validation error or normalized ApiClient error
+ * @param {string} cacheKey
+ * @returns {Promise<void|Object>}
  */
 export async function deleteLocalCacheByKey(cacheKey) {
     logger.info('deleteLocalCacheByKey called', { cacheKey });
     try {
-        return await apiClient.deleteLocalCacheByKey(cacheKey);
+        return await apiClient.deleteByKey(cacheKey);
     } catch (err) {
         logger.error('deleteLocalCacheByKey failed', err);
         throw err;
@@ -110,7 +110,6 @@ export async function deleteLocalCacheByKey(cacheKey) {
  * Default export: convenience object exposing functions.
  */
 const localCache = {
-    fetchAllLocalCache,
     fetchLocalCacheByKey,
     saveOrUpdateLocalCache,
     deleteLocalCacheByKey,

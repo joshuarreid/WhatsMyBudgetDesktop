@@ -52,15 +52,33 @@ function generateTransactionId() {
 }
 
 /**
- * Resolve the base URL for API requests from process.env.BASE_URL only.
+ * Resolve the base URL for API requests from environment variables.
+ *
+ * NOTE:
+ * - In many React setups the runtime env var is REACT_APP_BASE_URL (Create React App).
+ * - In other setups there may be BASE_URL set as well.
+ * - This helper tolerates both and prefers REACT_APP_BASE_URL when present.
  *
  * @private
  * @returns {string|null} base URL string or null if not found
  */
 function resolveBaseUrlFromEnv() {
-    if (typeof process !== 'undefined' && process.env && process.env.BASE_URL) {
-        return String(process.env.BASE_URL).trim();
+    try {
+        // Prefer the React-friendly variable used by Create React App
+        if (typeof process !== 'undefined' && process.env) {
+            const reactApp = process.env.REACT_APP_BASE_URL;
+            if (reactApp && String(reactApp).trim() !== '') return String(reactApp).trim();
+
+            const base = process.env.BASE_URL;
+            if (base && String(base).trim() !== '') return String(base).trim();
+        }
+
+        // Fallback: in some environments (vite/ssr) env might be provided differently.
+        // Avoid referencing import.meta here to keep this module environment-agnostic.
+    } catch (err) {
+        logger.error('resolveBaseUrlFromEnv error', err);
     }
+
     return null;
 }
 
@@ -71,25 +89,25 @@ export default class ApiClient {
     /**
      * Creates an instance of ApiClient.
      *
-     * If baseURL is not provided the constructor will attempt to read it from process.env.BASE_URL.
-     * Resource clients and layers above should not reference environment variables; they should construct ApiClient
+     * If baseURL is not provided the constructor will attempt to read it from process.env.BASE_URL
+     * or process.env.REACT_APP_BASE_URL. Resource clients and layers above should not reference environment variables; they should construct ApiClient
      * without passing baseURL and let ApiClient resolve it.
      *
      * @param {Object} options
-     * @param {string} [options.baseURL] - Base URL for the API (optional; resolved from process.env.BASE_URL when omitted)
+     * @param {string} [options.baseURL] - Base URL for the API (optional; resolved from process.env when omitted)
      * @param {number} [options.timeout=10000] - Default request timeout in milliseconds
      * @param {string} [options.apiPath=''] - Base API path that will prefix resource paths (e.g. '/api')
-     * @throws {Error} if baseURL cannot be resolved from options or process.env.BASE_URL
+     * @throws {Error} if baseURL cannot be resolved from options or process.env
      */
     constructor({ baseURL, timeout = 10000, apiPath = '' } = {}) {
         logger.info('constructor called', { baseURLProvided: !!baseURL, timeout, apiPath });
 
-        // Only source allowed: process.env.BASE_URL when baseURL not provided
+        // Only source allowed: provided baseURL or environment variables resolved by helper
         const resolvedBaseUrl = baseURL || resolveBaseUrlFromEnv();
 
         if (!resolvedBaseUrl || typeof resolvedBaseUrl !== 'string') {
             throw new Error(
-                'ApiClient: baseURL must be provided or set in environment (process.env.BASE_URL)'
+                'ApiClient: baseURL must be provided or set in environment (process.env.REACT_APP_BASE_URL or process.env.BASE_URL)'
             );
         }
 

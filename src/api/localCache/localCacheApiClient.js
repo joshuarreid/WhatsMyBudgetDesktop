@@ -1,120 +1,131 @@
 /**
- * Thin API client for the /cache resource (LocalCache).
+ * LocalCacheApiClient
+ * - Resource client for LocalCache endpoints.
+ * - Thin wrapper around ApiClient providing convenience methods for /api/cache.
  *
- * - Extends the generic ApiClient and delegates endpoint construction to ApiClient.resourceEndpoint
- * - Methods are intentionally small and descriptive (thin wrappers)
- * - Uses ApiClient.validateRequired for parameter validation
- * - POST uses application/x-www-form-urlencoded (controller expects @RequestParam)
- * - X-Transaction-ID is generated and attached by ApiClient; callers must not pass it.
+ * This file adds extra diagnostic logging around requests so failures such as
+ * CORS / wrong path / missing server handlers can be more easily diagnosed.
  *
- * @module LocalCacheApiClient
+ * @module src/api/localCache/localCacheApiClient
  */
 
-import ApiClient from './ApiClient';
+import ApiClient from '../ApiClient';
 
-/**
- * Standardized logger for this module.
- * @constant
- * @type {{info: Function, error: Function}}
- */
 const logger = {
     info: (...args) => console.log('[LocalCacheApiClient]', ...args),
     error: (...args) => console.error('[LocalCacheApiClient]', ...args),
 };
 
 /**
- * LocalCacheApiClient - thin client for /cache endpoints.
+ * LocalCacheApiClient
+ * @extends ApiClient
  */
 export default class LocalCacheApiClient extends ApiClient {
     /**
-     * Create a LocalCacheApiClient instance.
+     * Create a LocalCacheApiClient.
      *
-     * @param {Object} options
-     * @param {string} options.baseURL - API base URL (required)
-     * @param {number} [options.timeout] - Request timeout in ms
-     * @param {string} [options.apiPath] - Base API path (e.g. 'api' or '/api')
-     * @param {string} [options.resourcePath='cache'] - Resource path for this client (no leading slash)
+     * @param {Object} [options]
+     * @param {string} [options.baseURL] - explicit base url (optional)
+     * @param {string} [options.apiPath] - path prefix for API (eg. 'api')
      */
-    constructor({ baseURL, timeout, apiPath, resourcePath = 'cache' } = {}) {
-        super({ baseURL, timeout, apiPath });
-        this.resourcePath = String(resourcePath || 'cache').replace(/^\/+|\/+$/g, '');
-        logger.info('constructed', { baseURL, apiPath, resourcePath: this.resourcePath });
+    constructor(options = {}) {
+        // Default apiPath to 'api' if caller doesn't provide one; this mirrors other clients in the app.
+        const { baseURL = undefined, apiPath = 'api', timeout = 10000 } = options;
+        super({ baseURL, apiPath, timeout });
+        logger.info('constructed', { baseURL: this.baseURL, apiPath: this.apiPath });
     }
 
     /**
-     * Get all cache entries.
+     * Build the resource endpoint for local cache operations.
      *
-     * @async
-     * @returns {Promise<Array<Object>>} list of LocalCache entries
-     * @throws {Object} normalized ApiClient error
+     * @param {string} relative - relative resource path under cache (e.g. '')
+     * @returns {string} endpoint string (without leading slash)
      */
-    async getAllLocalCache() {
-        logger.info('getAllLocalCache called');
-        return this.get(this.resourceEndpoint(this.resourcePath));
+    resource(relative = '') {
+        // resourceEndpoint is provided by ApiClient base class
+        return this.resourceEndpoint('cache', relative);
     }
 
     /**
-     * Get a single cache entry by key.
+     * Save or update a cache entry.
+     *
+     * NOTE:
+     * - Uses POST to the /api/cache resource with params { cacheKey, cacheValue }.
+     * - Adds extra logging including the effective URL to help diagnose network/CORS problems.
      *
      * @async
-     * @param {string} cacheKey - cache key to fetch
-     * @returns {Promise<Object|null>} LocalCache entry or null/404 handled by server
-     * @throws {Error} if cacheKey is invalid
-     * @throws {Object} normalized ApiClient error
-     */
-    async getLocalCacheByKey(cacheKey) {
-        logger.info('getLocalCacheByKey called', { cacheKey });
-        this.validateRequired(cacheKey, 'cacheKey', 'string');
-        // encode key for safe path usage
-        const safeKey = encodeURIComponent(String(cacheKey));
-        return this.get(this.resourceEndpoint(this.resourcePath, safeKey));
-    }
-
-    /**
-     * Create or update a cache entry.
-     *
-     * Note: the server expects @RequestParam for cacheKey and cacheValue. We send
-     * an x-www-form-urlencoded body so Spring binds the params correctly.
-     *
-     * X-Transaction-ID will be attached by ApiClient automatically.
-     *
-     * @async
-     * @param {string} cacheKey - key for the cache entry
-     * @param {string} cacheValue - value for the cache entry
-     * @returns {Promise<Object>} saved LocalCache entry
-     * @throws {Error} if inputs are invalid
-     * @throws {Object} normalized ApiClient error
+     * @param {string} cacheKey
+     * @param {string} cacheValue
+     * @returns {Promise<any>} server response (as returned by ApiClient.post -> response.data)
+     * @throws {Error} normalized ApiClient error on failure
      */
     async saveOrUpdate(cacheKey, cacheValue) {
-        logger.info('saveOrUpdate called', { cacheKey });
         this.validateRequired(cacheKey, 'cacheKey', 'string');
-        this.validateRequired(cacheValue, 'cacheValue', 'string');
+        logger.info('saveOrUpdate called', { cacheKey });
 
-        const bodyParams = new URLSearchParams();
-        bodyParams.append('cacheKey', String(cacheKey));
-        bodyParams.append('cacheValue', String(cacheValue));
+        // Build endpoint and log effective URL for diagnostics
+        const endpoint = this.resource(); // e.g. "cache"
+        // _buildUrl is an instance method on ApiClient; use it to compute the path portion.
+        // Full URL = configured baseURL + _buildUrl(endpoint)
+        let effectiveUrl = '<unknown>';
+        try {
+            const built = this._buildUrl(endpoint);
+            effectiveUrl = `${this.baseURL}${built}`;
+        } catch (err) {
+            // ignore - log fallback
+            effectiveUrl = `${this.baseURL}/${endpoint}`;
+        }
 
-        const headers = {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Accept: 'application/json',
-        };
+        logger.info('saveOrUpdate: will POST', { endpoint, effectiveUrl, params: { cacheKey, cacheValuePreview: String(cacheValue).slice(0, 256) } });
 
-        return this.post(this.resourceEndpoint(this.resourcePath), bodyParams, { headers });
+        try {
+            // We use POST with params for compatibility with the previous LocalCacheService implementation.
+            // If your backend expects a JSON body instead, change to pass data in the second arg.
+            const result = await this.post(endpoint, null, { params: { cacheKey, cacheValue: String(cacheValue) } });
+            logger.info('saveOrUpdate: success', { cacheKey, effectiveUrl });
+            return result;
+        } catch (err) {
+            // Log the full normalized error and rethrow so callers (hooks) can handle it.
+            logger.error('saveOrUpdate failed', { cacheKey, effectiveUrl, error: err });
+            throw err;
+        }
+    }
+
+    /**
+     * Fetch a cache entry by key.
+     *
+     * @async
+     * @param {string} cacheKey
+     * @returns {Promise<any>}
+     */
+    async getByKey(cacheKey) {
+        this.validateRequired(cacheKey, 'cacheKey', 'string');
+        const endpoint = this.resource(cacheKey);
+        try {
+            logger.info('getByKey', { cacheKey, endpoint });
+            return await this.get(endpoint);
+        } catch (err) {
+            logger.error('getByKey failed', { cacheKey, error: err });
+            throw err;
+        }
     }
 
     /**
      * Delete a cache entry by key.
      *
      * @async
-     * @param {string} cacheKey - cache key to delete
-     * @returns {Promise<void|Object>} no-content on success; server may return body in errors
-     * @throws {Error} if cacheKey is invalid
-     * @throws {Object} normalized ApiClient error
+     * @param {string} cacheKey
+     * @returns {Promise<any>}
      */
-    async deleteLocalCacheByKey(cacheKey) {
-        logger.info('deleteLocalCacheByKey called', { cacheKey });
+    async deleteByKey(cacheKey) {
         this.validateRequired(cacheKey, 'cacheKey', 'string');
-        const safeKey = encodeURIComponent(String(cacheKey));
-        return this.delete(this.resourceEndpoint(this.resourcePath, safeKey));
+        const endpoint = this.resource(cacheKey);
+        try {
+            logger.info('deleteByKey', { cacheKey, endpoint });
+            return await this.delete(endpoint);
+        } catch (err) {
+            logger.error('deleteByKey failed', { cacheKey, error: err });
+            throw err;
+        }
     }
 }
