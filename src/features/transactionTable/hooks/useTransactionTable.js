@@ -1,20 +1,27 @@
 /**
  * useTransactionTable
  *
- * Migration notes:
- * - Queries migrated to react-query hooks (useBudgetTransactionsQuery & useProjectedTransactionQuery).
- * - All query invalidation uses centralized query key helpers (budgetTransactionQueryKeys & projectedTransactionQueryKeys).
- * - Removes legacy service-only reads for list data; service modules (budgetApi/projectedApi) remain in use for mutations.
- * - Preserves previous public API/behavior (local temp rows, optimistic UI for temp rows,
- *   merging projected + budget rows, sorting, totals) while using the new query hooks.
+ * - Hook providing data & actions for the TransactionTable UI.
+ * - Uses react-query hooks for reads (useBudgetTransactionsQuery & useProjectedTransactionQuery).
+ * - Uses API modules for mutations (budgetTransaction & projectedTransaction).
+ * - Maintains local optimistic rows (TEMP_ID_PREFIX) and composes server + projected rows.
+ *
+ * Improvements in this version:
+ * - Removed diagnostic logging used during debugging.
+ * - Removed lastRequestedPeriodRef usage.
+ * - Modernized the clear/populate logic to use TanStack Query cache (queryClient.getQueryData)
+ *   so cached data populates immediately (avoiding UI flashes) while still letting the
+ *   query hooks populate when fresh network data arrives.
+ *
+ * Conventions:
+ * - Side-effects & data fetching live in this hook; UI rendering remains in components.
  *
  * @module hooks/useTransactionTable
  */
 
-import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStatementPeriodContext } from '../../../context/StatementPeriodProvider';
-// new query-based hooks (replaces legacy hooks)
 import useBudgetTransactionsQuery from '../../../hooks/useBudgetTransactionQuery';
 import useProjectedTransactionsQuery from '../../../hooks/useProjectedTransactionQuery';
 import {
@@ -25,17 +32,12 @@ import {
 } from '../../../config/config.js';
 import {
     DEFAULT_CRITICALITY_OPTIONS,
-    STATEMENT_PERIOD_CACHE_KEY,
     TEMP_ID_PREFIX,
     CONFIG_KEYS,
 } from '../utils/constants';
 import useTransactionToolbar from './useTransactionToolbar';
-
-// Mutation service APIs (create/update/delete/upload)
 import budgetApi from '../../../api/budgetTransaction/budgetTransaction';
 import projectedApi from '../../../api/projectedTransaction/projectedTransaction';
-
-// Query key helpers for proper invalidation
 import budgetQK from '../../../api/budgetTransaction/budgetTransactionQueryKeys';
 import projectedQK from '../../../api/projectedTransaction/projectedTransactionQueryKeys';
 
@@ -84,14 +86,15 @@ const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS
 
 /**
  * Flattens AccountProjectedTransactionList into an array usable by UI.
- * @param {Object} accountList
- * @returns {Array}
+ *
+ * @param {Object} accountList - AccountProjectedTransactionList or similar shape
+ * @returns {Array} flattened array of transactions
  */
 function flattenAccountProjectedList(accountList) {
     try {
-        const personal = accountList?.personalTransactions?.transactions || [];
-        const joint = accountList?.jointTransactions?.transactions || [];
-        return [...personal, ...joint];
+        const personal = accountList?.personalTransactions?.transactions ?? accountList?.personalTransactions ?? [];
+        const joint = accountList?.jointTransactions?.transactions ?? accountList?.jointTransactions ?? [];
+        return [...(Array.isArray(personal) ? personal : []), ...(Array.isArray(joint) ? joint : [])];
     } catch (err) {
         logger.error('flattenAccountProjectedList failed', err);
         return [];
@@ -99,13 +102,65 @@ function flattenAccountProjectedList(accountList) {
 }
 
 /**
- * Annotates array with __isProjected: true for UI
- * @param {Array} arr
+ * Extract a flat list of transactions from various server response shapes.
+ *
+ * Supported shapes:
+ * - { personalTransactions: {...}, jointTransactions: {...} }
+ * - { budgetTransactions: [...] } (legacy)
+ * - Array directly
+ * - { data: [...] } or { transactions: [...] } wrappers
+ *
+ * @param {any} raw - raw query cached value
+ * @returns {Array} flat array of transactions
+ */
+function extractTransactionsFromBudgetRaw(raw) {
+    try {
+        if (!raw) return [];
+        // Case: server already provides personal/joint split
+        if (raw.personalTransactions || raw.jointTransactions) {
+            const p = raw.personalTransactions?.transactions ?? raw.personalTransactions ?? [];
+            const j = raw.jointTransactions?.transactions ?? raw.jointTransactions ?? [];
+            const personal = Array.isArray(p) ? p : [];
+            const joint = Array.isArray(j) ? j : [];
+            return [...personal, ...joint];
+        }
+        // Case: server returns { budgetTransactions: [...] }
+        if (raw.budgetTransactions && Array.isArray(raw.budgetTransactions)) {
+            return [...raw.budgetTransactions];
+        }
+        // Case: array directly
+        if (Array.isArray(raw)) return raw;
+        // Case: other wrappers
+        const maybeArr = raw.data ?? raw.transactions ?? raw.results ?? null;
+        if (Array.isArray(maybeArr)) return maybeArr;
+        return [];
+    } catch (err) {
+        logger.error('extractTransactionsFromBudgetRaw failed', err, raw);
+        return [];
+    }
+}
+
+/**
+ * Annotates projections with __isProjected flag and returns flattened array
+ *
+ * @param {any} rawProjected - raw cached projected query data
  * @returns {Array}
  */
-function annotateProjection(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr.map((item) => ({ ...(item || {}), __isProjected: true }));
+function extractProjectedTransactions(rawProjected) {
+    try {
+        if (!rawProjected) return [];
+        // If account-scoped response has personal/joint split
+        if (rawProjected.personalTransactions || rawProjected.jointTransactions) {
+            return flattenAccountProjectedList(rawProjected).map((t) => ({ ...(t || {}), __isProjected: true }));
+        }
+        // If it's an array or wrapper
+        const arr = Array.isArray(rawProjected) ? rawProjected : rawProjected.projections ?? rawProjected;
+        if (Array.isArray(arr)) return arr.map((t) => ({ ...(t || {}), __isProjected: true }));
+        return [];
+    } catch (err) {
+        logger.error('extractProjectedTransactions failed', err, rawProjected);
+        return [];
+    }
 }
 
 /**
@@ -118,12 +173,10 @@ export function useTransactionTable(filters = {}) {
     const queryClient = useQueryClient();
 
     const { statementPeriod, isLoaded: isStatementPeriodLoaded } = useStatementPeriodContext();
-    const currentPeriodRef = useRef(statementPeriod);
-    const lastRequestedPeriodRef = useRef();
 
     // --- Table state ---
     const [selectedIds, setSelectedIds] = useState(new Set());
-    const [editing, setEditing] = useState(null); // { id, mode: 'field'|'row', field? }
+    const [editing, setEditing] = useState(null);
     const [savingIds, setSavingIds] = useState(() => new Set());
     const [saveErrors, setSaveErrors] = useState(() => ({}));
     const editValueRef = useRef('');
@@ -133,16 +186,8 @@ export function useTransactionTable(filters = {}) {
     const accountFilters = useMemo(() => ({ ...(filters || {}), statementPeriod }), [filters, statementPeriod]);
 
     // ---------- Queries ----------
-    /**
-     * Budget transactions (react-query)
-     * - returns normalized shape: personalTransactions, jointTransactions, totals, count, loading, refetch, data
-     */
     const budgetResult = useBudgetTransactionsQuery(accountFilters);
 
-    /**
-     * Projected transactions (react-query)
-     * - accepts account + statementPeriod for account-scoped lists
-     */
     const {
         projectedTx = [],
         loading: projectedLoading = false,
@@ -150,49 +195,118 @@ export function useTransactionTable(filters = {}) {
         refetch: refetchProjected,
     } = useProjectedTransactionsQuery({ account: filters?.account || undefined, statementPeriod });
 
-    // Flatten server transactions for UI (sorted desc) from budgetResult
-    const serverTx = useMemo(
-        () =>
-            [
-                ...(budgetResult.personalTransactions?.transactions || []),
-                ...(budgetResult.jointTransactions?.transactions || []),
-            ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
-        [budgetResult.personalTransactions, budgetResult.jointTransactions]
-    );
+    // Flatten server transactions for UI (sorted desc)
+    const serverTx = useMemo(() => {
+        try {
+            const personal = budgetResult.personalTransactions?.transactions || [];
+            const joint = budgetResult.jointTransactions?.transactions || [];
+            return [...personal, ...joint].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+        } catch (err) {
+            logger.error('serverTx computation failed', err);
+            return [];
+        }
+    }, [budgetResult.personalTransactions, budgetResult.jointTransactions]);
 
     // localTx holds combined rows (local temp rows + server + projected)
     const [localTx, setLocalTx] = useState(() => [...serverTx]);
 
+    /**
+     * Clear transactions immediately when statementPeriod changes to avoid stale flashes.
+     *
+     * Instead of relying on a ref gate, use the query cache to pre-populate if cached data
+     * exists for the new statementPeriod/account. This avoids flashes while ensuring the
+     * list is cleared when no cached data is present.
+     */
     useEffect(() => {
-        // Only update when the request corresponds to the current statementPeriod
-        if (isStatementPeriodLoaded && statementPeriod && lastRequestedPeriodRef.current === statementPeriod) {
-            const serverSorted = [
-                ...(budgetResult.personalTransactions?.transactions || []),
-                ...(budgetResult.jointTransactions?.transactions || []),
-            ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+        // If period is not ready, clear and wait
+        if (!statementPeriod || !isStatementPeriodLoaded) {
+            setLocalTx([]);
+            return;
+        }
 
-            const projSorted =
-                Array.isArray(projectedTx) && projectedTx.length > 0
-                    ? [...projectedTx].map((p) => ({ ...p, __isProjected: true })).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
-                    : [];
+        // Build canonical query keys to probe cache
+        const budgetKey = filters?.account
+            ? budgetQK.accountListKey(String(filters.account), { statementPeriod })
+            : budgetQK.listKey({ statementPeriod });
+
+        const projKey = filters?.account
+            ? projectedQK.accountListKey(String(filters.account), { statementPeriod })
+            : projectedQK.listKey({ statementPeriod });
+
+        // Try to read cached values from react-query client
+        const cachedBudget = queryClient.getQueryData(budgetKey);
+        const cachedProjected = queryClient.getQueryData(projKey);
+
+        // If we have cached data, immediately populate localTx from cache to avoid UI flash.
+        if (cachedBudget || cachedProjected) {
+            const serverArr = cachedBudget ? extractTransactionsFromBudgetRaw(cachedBudget) : extractTransactionsFromBudgetRaw(budgetResult.data);
+            const projArr = cachedProjected ? extractProjectedTransactions(cachedProjected) : (Array.isArray(projectedTx) ? projectedTx.map((t) => ({ ...(t || {}), __isProjected: true })) : []);
+
+            const serverSorted = [...serverArr].sort((a, b) => {
+                const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
+                const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
+                return db - da;
+            });
+
+            const projSorted = [...projArr].sort((a, b) => {
+                const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
+                const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
+                return db - da;
+            });
 
             setLocalTx((prev) => {
                 const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
                 return [...localOnly, ...projSorted, ...serverSorted];
             });
 
-            logger.info('[useTransactionTable] Populated localTx for current period', { statementPeriod });
+            return;
         }
-        // otherwise ignore stale fetches
-    }, [isStatementPeriodLoaded, statementPeriod, budgetResult.personalTransactions, budgetResult.jointTransactions, projectedTx]);
 
+        // No cached data — clear and allow query hooks to fetch and population effect to run.
+        setLocalTx([]);
+        // Intentionally depend on statementPeriod and account to trigger on navigation / period change.
+    }, [statementPeriod, isStatementPeriodLoaded, filters?.account, queryClient, budgetResult.data, projectedTx]);
+
+    /**
+     * Populate localTx when server/projected query results become available.
+     *
+     * Watch explicit lengths so the effect re-runs when cached or fresh data is present.
+     */
     useEffect(() => {
-        lastRequestedPeriodRef.current = statementPeriod;
-        setLocalTx([]); // clear immediately to avoid stale UI flash
-        logger.info('[useTransactionTable] Cleared localTx for period change', { statementPeriod });
-    }, [statementPeriod]);
+        if (!statementPeriod || !isStatementPeriodLoaded) return;
 
-    // Totals
+        const personalArr = budgetResult.personalTransactions?.transactions ?? [];
+        const jointArr = budgetResult.jointTransactions?.transactions ?? [];
+
+        const serverSorted = [...personalArr, ...jointArr].sort((a, b) => {
+            const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
+            const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
+            return db - da;
+        });
+
+        const projSorted = Array.isArray(projectedTx) && projectedTx.length > 0
+            ? [...projectedTx].map((p) => ({ ...p, __isProjected: true })).sort((a, b) => {
+                const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
+                const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
+                return db - da;
+            })
+            : [];
+
+        setLocalTx((prev) => {
+            const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
+            const merged = [...localOnly, ...projSorted, ...serverSorted];
+            return merged;
+        });
+    }, [
+        filters?.account,
+        statementPeriod,
+        isStatementPeriodLoaded,
+        budgetResult.personalTransactions?.transactions?.length,
+        budgetResult.jointTransactions?.transactions?.length,
+        Array.isArray(projectedTx) ? projectedTx.length : 0,
+    ]);
+
+    // --- Totals & derived values ---
     const projectedTotal = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         if (!Array.isArray(projectedTx)) return 0;
@@ -345,7 +459,6 @@ export function useTransactionTable(filters = {}) {
                     else budgetIds.push(id);
                 });
 
-                // Perform deletes in parallel
                 await Promise.all([
                     ...budgetIds.map((id) =>
                         budgetApi.deleteBudgetTransaction(id).catch((err) => {
@@ -359,10 +472,8 @@ export function useTransactionTable(filters = {}) {
                     ),
                 ]);
 
-                // Invalidate / refetch relevant queries
                 if (budgetIds.length > 0) {
                     try {
-                        // Invalidate budget transactions queries for this account/period to force refetch
                         queryClient.invalidateQueries({ queryKey: budgetQK.invalidateListsKey() });
                         if (typeof budgetResult.refetch === 'function') await budgetResult.refetch();
                     } catch (err) {
@@ -372,7 +483,6 @@ export function useTransactionTable(filters = {}) {
 
                 if (projectionIds.length > 0) {
                     try {
-                        // Invalidate projected queries
                         queryClient.invalidateQueries({ queryKey: projectedQK.invalidateListsKey() });
                         await refetchProjected();
                     } catch (err) {
@@ -396,10 +506,8 @@ export function useTransactionTable(filters = {}) {
             try {
                 logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod });
                 await budgetApi.uploadBudgetTransactions(file, statementPeriod);
-                // Invalidate queries and refetch
                 try { await budgetResult.refetch(); } catch (err) { logger.error('refetch after upload failed', err); }
                 try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after upload failed', err); }
-                // Invalidate global budget/projection keys as well
                 queryClient.invalidateQueries({ queryKey: budgetQK.invalidateListsKey() });
                 queryClient.invalidateQueries({ queryKey: projectedQK.invalidateListsKey() });
                 logger.info('handleFileChange: upload complete');
@@ -544,14 +652,10 @@ export function useTransactionTable(filters = {}) {
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
 
                     if (txToPersist.__isProjected) {
-                        // projected create
                         const created = await projectedApi.createProjectedTransaction(payload);
                         const createdWithFlag = { ...created, __isProjected: true };
-
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? createdWithFlag : t)));
                         logger.info('handleSaveRow: created projection', { tempId: id, createdId: created.id });
-
-                        // Invalidate projection queries and refetch
                         try {
                             queryClient.invalidateQueries({ queryKey: projectedQK.invalidateListsKey() });
                             await refetchProjected();
@@ -559,7 +663,6 @@ export function useTransactionTable(filters = {}) {
                             logger.error('refetchProjected after create failed', err);
                         }
                     } else {
-                        // budget create
                         const created = await budgetApi.createBudgetTransaction(payload);
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
                         logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
@@ -583,13 +686,11 @@ export function useTransactionTable(filters = {}) {
                             setEditing({ id: newTx.id, mode: 'row' });
                             logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id });
                         } else {
-                            // invalidate & refetch budget queries
                             try { queryClient.invalidateQueries({ queryKey: budgetQK.invalidateListsKey() }); } catch (e) { logger.error('invalidate budget queries failed', e); }
                             try { await budgetResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
                         }
                     }
                 } else {
-                    // update path
                     logger.info('handleSaveRow: updating transaction', { id, statementPeriod, isProjection: !!txToPersist.__isProjected });
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
 
@@ -661,7 +762,6 @@ export function useTransactionTable(filters = {}) {
         total: typeof total === 'number' ? total : String(total),
     });
 
-    // --- Expose API surface ---
     return {
         localTx,
         loading,
