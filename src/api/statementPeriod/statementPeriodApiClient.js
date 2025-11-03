@@ -15,7 +15,7 @@
  * @module StatementPeriodApiClient
  */
 
-import ApiClient from './ApiClient';
+import ApiClient from '../ApiClient';
 
 /**
  * Standardized logger for this module.

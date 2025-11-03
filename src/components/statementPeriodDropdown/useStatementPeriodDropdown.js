@@ -1,11 +1,45 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import localCacheService from "../../services/LocalCacheService";
-import { generateOptions, getCurrentOption } from "../../services/StatementPeriodService";
+/**
+ * useStatementPeriodDropdown
+ * - Controlled dropdown hook for statement periods.
+ * - Now respects environment-configured prev/forward defaults:
+ *   REACT_APP_STATEMENT_PERIOD_PREV_MONTHS and REACT_APP_STATEMENT_PERIOD_FORWARD_MONTHS
+ * - Uses useStatementPeriodQuery to fetch server-backed statement periods and falls back
+ *   to generateOptions when server data is absent or errors.
+ *
+ * @module components/statementPeriodDropdown/useStatementPeriodDropdown
+ */
 
+import { useMemo, useRef, useState, useCallback } from 'react';
+import useStatementPeriodQuery from '../../hooks/useStatementPeriodQuery';
+import { generateOptions, getCurrentOption } from '../../services/StatementPeriodService';
+
+/**
+ * Logger for useStatementPeriodDropdown
+ * @constant
+ */
 const logger = {
     info: (...args) => console.log('[useStatementPeriodDropdown]', ...args),
     error: (...args) => console.error('[useStatementPeriodDropdown]', ...args),
 };
+
+/**
+ * Read integer env var with fallback (local copy to avoid additional imports).
+ *
+ * @param {string} name
+ * @param {number} fallback
+ * @returns {number}
+ */
+function readEnvInt(name, fallback) {
+    try {
+        const raw = (typeof process !== 'undefined' && process.env && process.env[name]) ? String(process.env[name]) : undefined;
+        if (!raw) return fallback;
+        const n = Number.parseInt(raw, 10);
+        return Number.isNaN(n) ? fallback : n;
+    } catch (err) {
+        logger.error('readEnvInt failed for', name, err);
+        return fallback;
+    }
+}
 
 /**
  * useStatementPeriodDropdown.
@@ -13,14 +47,34 @@ const logger = {
  * Does NOT own selectedValue; expects it to be managed by provider/context.
  *
  * @param {object} [params]
- * @param {number} [params.prev=1]
- * @param {number} [params.forward=5]
+ * @param {number} [params.prev] - override prev months (defaults to env or 1)
+ * @param {number} [params.forward] - override forward months (defaults to env or 5)
  * @param {Date} [params.anchor=new Date()]
  * @returns {object} Dropdown state/actions for UI consumption.
  */
-export default function useStatementPeriodDropdown({ prev = 1, forward = 5, anchor = new Date() } = {}) {
-    const options = useMemo(() => generateOptions({ anchor, prev, forward }), [anchor, prev, forward]);
-    const defaultOpt = useMemo(() => getCurrentOption(options), [options]);
+export default function useStatementPeriodDropdown({ prev, forward, anchor = new Date() } = {}) {
+    // Resolve defaults from env when not provided
+    const envPrev = readEnvInt('REACT_APP_STATEMENT_PERIOD_PREV_MONTHS', readEnvInt('STATEMENT_PERIOD_PREV_MONTHS', 1));
+    const envForward = readEnvInt('REACT_APP_STATEMENT_PERIOD_FORWARD_MONTHS', readEnvInt('STATEMENT_PERIOD_FORWARD_MONTHS', 5));
+
+    const effectivePrev = typeof prev === 'number' ? prev : envPrev;
+    const effectiveForward = typeof forward === 'number' ? forward : envForward;
+
+    // Server-backed normalized options via hook (respects the effective prev/forward)
+    const { options: serverOptions, defaultOpt: serverDefault, isLoading: serverLoading, isError } =
+        useStatementPeriodQuery({ prev: effectivePrev, forward: effectiveForward, anchor });
+
+    // Local fallback (identical to prior behavior)
+    const fallbackOptions = useMemo(() => generateOptions({ anchor, prev: effectivePrev, forward: effectiveForward }), [anchor, effectivePrev, effectiveForward]);
+    const fallbackDefault = useMemo(() => getCurrentOption(fallbackOptions), [fallbackOptions]);
+
+    // Choose options: prefer server when present (and not empty)
+    const options = useMemo(() => {
+        if (Array.isArray(serverOptions) && serverOptions.length > 0) return serverOptions;
+        return fallbackOptions;
+    }, [serverOptions, fallbackOptions]);
+
+    const defaultOpt = serverDefault || fallbackDefault;
 
     // Only open/close, saving, and UI refs are managed here
     const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +140,8 @@ export default function useStatementPeriodDropdown({ prev = 1, forward = 5, anch
         defaultOpt,
         isOpen,
         isSaving,
+        isLoading: serverLoading,
+        isError,
         containerRef,
         toggleOpen,
         onButtonKeyDown,
