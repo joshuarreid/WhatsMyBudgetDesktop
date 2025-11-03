@@ -1,14 +1,33 @@
+/**
+ * useTransactionTable
+ *
+ * Migration notes:
+ * - Migrated server API calls to new API modules (api/budgetTransaction & api/projectedTransaction).
+ * - Removed reliance on TransactionEvents.publish; instead we invalidate relevant react-query
+ *   keys and/or call the provided refetch helpers so react-query remains the source of truth.
+ * - Preserves the previous public API/behavior (local temp rows, optimistic UI for temp rows,
+ *   merging projected + budget rows, sorting, totals) while using the new clients.
+ *
+ * Responsibilities:
+ * - Compose account/statementPeriod filters from StatementPeriodContext
+ * - Load budget + projected transactions via the composed hook useBudgetAndProjectedTransactionsForAccount
+ *   and the projected hook useProjectedTransactions
+ * - Provide create/update/delete/upload handlers that call the new API modules and ensure queries
+ *   are invalidated or refetched after mutations.
+ *
+ * @module hooks/useTransactionTable
+ */
+
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStatementPeriodContext } from '../../../context/StatementPeriodProvider';
 import useProjectedTransactions from '../../../hooks/useProjectedTransactions';
-import localCacheService from '../../../services/LocalCacheService';
 import { useBudgetAndProjectedTransactionsForAccount } from '../../../hooks/useTransactions';
-import { publish as publishTransactionEvents } from '../../../services/TransactionEvents';
 import {
     get as getConfig,
     getCriticalityForCategory,
     getCategories,
-    getDefaultPaymentMethodForAccount
+    getDefaultPaymentMethodForAccount,
 } from '../../../config/config.js';
 import {
     DEFAULT_CRITICALITY_OPTIONS,
@@ -16,14 +35,12 @@ import {
     TEMP_ID_PREFIX,
     CONFIG_KEYS,
 } from '../utils/constants';
-import budgetTransactionService from '../../../services/BudgetTransactionService';
-import projectedTransactionService from '../../../services/ProjectedTransactionService';
 import useTransactionToolbar from './useTransactionToolbar';
 
-/**
- * Logger for useTransactionTable.
- * @constant
- */
+// Migrate service calls to new API modules
+import budgetApi from '../../../api/budgetTransaction/budgetTransaction';
+import projectedApi from '../../../api/projectedTransaction/projectedTransaction';
+
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
     error: (...args) => console.error('[useTransactionTable]', ...args),
@@ -95,14 +112,12 @@ function annotateProjection(arr) {
 
 /**
  * useTransactionTable
- * Main hook for TransactionTable business logic and state management.
- * Passes statementPeriod from StatementPeriodContext as a filter.
  *
- * @function useTransactionTable
- * @param {Object} filters
- * @returns {Object} Transaction table API surface
+ * @param {Object} filters - initial filter shape passed from component (may include account, category, etc.)
+ * @returns {Object} API surface consumed by TransactionTable component
  */
-export function useTransactionTable(filters) {
+export function useTransactionTable(filters = {}) {
+    const queryClient = useQueryClient();
 
     const { statementPeriod, isLoaded: isStatementPeriodLoaded } = useStatementPeriodContext();
     const currentPeriodRef = useRef(statementPeriod);
@@ -116,96 +131,68 @@ export function useTransactionTable(filters) {
     const editValueRef = useRef('');
     const fileInputRef = useRef(null);
 
-    // --- Compose filters with statement period from context ---
-    /** @type {Object} */
-    const accountFilters = useMemo(() => ({
-        ...(filters || {}),
-        statementPeriod,
-    }), [filters, statementPeriod]);
+    // Compose filters with statementPeriod from context
+    const accountFilters = useMemo(() => ({ ...(filters || {}), statementPeriod }), [filters, statementPeriod]);
 
-    /**
-     * Fetches transactions for account and statement period.
-     * @type {Object}
-     */
+    // Fetch budget + projected together using the composed hook
     const txResult = useBudgetAndProjectedTransactionsForAccount(accountFilters);
 
-    // --- Transactions integration ---
+    // Flatten server transactions for UI (sorted desc)
     const serverTx = useMemo(
         () => [
             ...(txResult.personalTransactions?.transactions || []),
-            ...(txResult.jointTransactions?.transactions || [])
+            ...(txResult.jointTransactions?.transactions || []),
         ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)),
         [txResult.personalTransactions, txResult.jointTransactions]
     );
 
+    // Projected transactions via new hook (keeps same signature)
     const {
         projectedTx = [],
         loading: projectedLoading = false,
         error: projectedError = null,
-        refetch: refetchProjected
+        refetch: refetchProjected,
     } = useProjectedTransactions({ statementPeriod, account: filters?.account || undefined });
 
-    /**
-     * localTx - Holds the transaction rows for the table.
-     * Cleared immediately when statementPeriod changes to prevent stale row flash.
-     */
+    // localTx holds combined rows (local temp rows + server + projected)
     const [localTx, setLocalTx] = useState(() => [...serverTx]);
 
     useEffect(() => {
-        // When fetches complete, check if their period matches current context
-        if (
-            isStatementPeriodLoaded &&
-            statementPeriod &&
-            lastRequestedPeriodRef.current === statementPeriod
-        ) {
-            // Only update state if the data is for the correct period
-            const serverTx = [
+        // Only update when the request corresponds to the current statementPeriod
+        if (isStatementPeriodLoaded && statementPeriod && lastRequestedPeriodRef.current === statementPeriod) {
+            const serverSorted = [
                 ...(txResult.personalTransactions?.transactions || []),
-                ...(txResult.jointTransactions?.transactions || [])
+                ...(txResult.jointTransactions?.transactions || []),
             ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
 
-            const projSorted = Array.isArray(projectedTx) && projectedTx.length > 0
-                ? [...projectedTx].map((p) => ({ ...p, __isProjected: true })).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
-                : [];
+            const projSorted =
+                Array.isArray(projectedTx) && projectedTx.length > 0
+                    ? [...projectedTx].map((p) => ({ ...p, __isProjected: true })).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
+                    : [];
 
             setLocalTx((prev) => {
                 const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-                return [...localOnly, ...projSorted, ...serverTx];
+                return [...localOnly, ...projSorted, ...serverSorted];
             });
+
             logger.info('[useTransactionTable] Populated localTx for current period', { statementPeriod });
         }
-        // Else, do nothing: prevents stale fetches from updating state!
+        // otherwise ignore stale fetches
     }, [isStatementPeriodLoaded, statementPeriod, txResult.personalTransactions, txResult.jointTransactions, projectedTx]);
 
-    /**
-     * Clear transactions immediately when statementPeriod changes.
-     * This prevents stale rows from flashing when switching statement periods.
-     */
     useEffect(() => {
         lastRequestedPeriodRef.current = statementPeriod;
-        setLocalTx([]); // clear immediately
+        setLocalTx([]); // clear immediately to avoid stale UI flash
         logger.info('[useTransactionTable] Cleared localTx for period change', { statementPeriod });
-
-        // fetch transactions for new period (optionally, trigger refetch here if not in fetch hooks)
     }, [statementPeriod]);
 
-
-
-    /**
-     * Computes projected total only if statement period is loaded and defined.
-     * @type {number}
-     */
+    // Totals
     const projectedTotal = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         if (!Array.isArray(projectedTx)) return 0;
         return projectedTx.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     }, [projectedTx, isStatementPeriodLoaded, statementPeriod]);
 
-
-    /**
-     * Computes total only if statement period is loaded and defined.
-     * @type {number}
-     */
     const total = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         const serverTotal = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
@@ -213,31 +200,16 @@ export function useTransactionTable(filters) {
         return serverTotal + projTotal;
     }, [txResult, projectedTx, isStatementPeriodLoaded, statementPeriod]);
 
-    /**
-     * Computes personal balance only if statement period is loaded and defined.
-     * @type {number}
-     */
     const personalBalance = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         return typeof txResult.personalTotal === 'number' ? txResult.personalTotal : Number(txResult.personalTotal) || 0;
     }, [txResult.personalTotal, isStatementPeriodLoaded, statementPeriod]);
 
-    /**
-     * Computes joint balance only if statement period is loaded and defined.
-     * @type {number}
-     */
     const jointBalance = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         return typeof txResult.jointTotal === 'number' ? txResult.jointTotal : Number(txResult.jointTotal) || 0;
     }, [txResult.jointTotal, isStatementPeriodLoaded, statementPeriod]);
 
-
-
-
-    /**
-     * Computes transaction count only if statement period is loaded and defined.
-     * @type {number}
-     */
     const count = useMemo(() => {
         if (!isStatementPeriodLoaded || !statementPeriod) return 0;
         const countFromServer = (txResult.personalTransactions?.count || 0) + (txResult.jointTransactions?.count || 0);
@@ -247,12 +219,7 @@ export function useTransactionTable(filters) {
     const loading = txResult.loading || projectedLoading || false;
     const error = txResult.error || projectedError || null;
 
-    // --- Selection ---
-    /**
-     * Toggles selection for a transaction by id.
-     * @function toggleSelect
-     * @param {string|number} id
-     */
+    // --- Selection helpers ---
     const toggleSelect = useCallback((id) => {
         setSelectedIds((prev) => {
             const copy = new Set(prev);
@@ -261,29 +228,19 @@ export function useTransactionTable(filters) {
             return copy;
         });
     }, []);
-    /**
-     * Marks all transactions selected, or clears selection.
-     * @function toggleSelectAll
-     */
+
     const isAllSelected = localTx.length > 0 && selectedIds.size === localTx.length;
+
     const toggleSelectAll = useCallback(() => {
         setSelectedIds((prev) => {
             if (isAllSelected) return new Set();
             return new Set(localTx.map((t) => t.id));
         });
     }, [localTx, isAllSelected]);
-    /**
-     * Makes a temporary id for new transactions.
-     * @function makeTempId
-     * @returns {string}
-     */
+
     const makeTempId = useCallback(() => `${TEMP_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
 
-    // --- Transaction Creation ---
-    /**
-     * Handles addition of new budget transaction row and opens editor.
-     * @function handleAddTransaction
-     */
+    // --- Create helpers ---
     const handleAddTransaction = useCallback(() => {
         const defaultCrit = '';
         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
@@ -306,10 +263,6 @@ export function useTransactionTable(filters) {
         logger.info('handleAddTransaction: created local new tx', { tempId: newTx.id, statementPeriod: newTx.statementPeriod });
     }, [makeTempId, filters, statementPeriod]);
 
-    /**
-     * Handles addition of new projected transaction row and opens editor.
-     * @function handleAddProjection
-     */
     const handleAddProjection = useCallback(() => {
         const defaultCrit = '';
         const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
@@ -333,11 +286,6 @@ export function useTransactionTable(filters) {
         logger.info('handleAddProjection: created local new projected tx', { tempId: newProj.id, statementPeriod: newProj.statementPeriod });
     }, [makeTempId, filters, statementPeriod]);
 
-    /**
-     * Cancels editing and removes temp rows where applicable.
-     * @function handleCancelRow
-     * @param {string|number} id
-     */
     const handleCancelRow = useCallback((id) => {
         if (String(id).startsWith(TEMP_ID_PREFIX)) {
             setLocalTx((prev) => {
@@ -363,11 +311,7 @@ export function useTransactionTable(filters) {
         }
     }, []);
 
-    /**
-     * Handles deletion of selected transactions (local and server-side).
-     * @function handleDeleteSelected
-     * @async
-     */
+    // --- Delete selected ---
     const handleDeleteSelected = useCallback(
         async () => {
             if (selectedIds.size === 0) return;
@@ -384,6 +328,7 @@ export function useTransactionTable(filters) {
                 logger.info('handleDeleteSelected: removed local-only ids', { localOnly });
             }
             if (toDeleteFromAPI.length === 0) return;
+
             try {
                 const budgetIds = [];
                 const projectionIds = [];
@@ -393,70 +338,64 @@ export function useTransactionTable(filters) {
                     if (isProjection) projectionIds.push(id);
                     else budgetIds.push(id);
                 });
+
+                // Perform deletes in parallel
                 await Promise.all([
                     ...budgetIds.map((id) =>
-                        budgetTransactionService.deleteTransaction(id).catch((err) => {
+                        budgetApi.deleteBudgetTransaction(id).catch((err) => {
                             logger.error(`Failed to delete budget transaction ${id}`, err);
                         })
                     ),
                     ...projectionIds.map((id) =>
-                        projectedTransactionService.deleteTransaction(id).catch((err) => {
+                        projectedApi.deleteProjectedTransaction(id).catch((err) => {
                             logger.error(`Failed to delete projected transaction ${id}`, err);
                         })
                     ),
                 ]);
+
+                // Invalidate / refetch relevant queries
                 if (budgetIds.length > 0) {
-                    try { await txResult.refetch(); } catch (err) { logger.error('refetch after delete failed', err); }
-                    try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'delete', ids: budgetIds }); } catch (err) { logger.error('publish transaction event failed', err); }
+                    try {
+                        // Invalidate budget transactions queries for this account/period to force refetch
+                        queryClient.invalidateQueries({ queryKey: ['budgetTransactions'] });
+                        if (typeof txResult.refetch === 'function') await txResult.refetch();
+                    } catch (err) {
+                        logger.error('refetch/invalidate after budget delete failed', err);
+                    }
                 }
+
                 if (projectionIds.length > 0) {
                     try {
-                        const acct = filters?.account || undefined;
-                        const acctList = acct
-                            ? await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
-                                logger.error('getTransactionsForAccount after delete failed', err);
-                                return null;
-                            })
-                            : null;
-                        if (acctList) {
-                            const flattened = flattenAccountProjectedList(acctList);
-                            const annotated = annotateProjection(flattened);
-                            setLocalTx((prev) => {
-                                const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-                                const projSorted = annotated.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
-                                return [...localOnly, ...projSorted, ...serverTx];
-                            });
-                        } else {
-                            try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after delete failed', err); }
-                        }
+                        // Invalidate projected queries
+                        queryClient.invalidateQueries({ queryKey: ['projections'] });
+                        await refetchProjected();
                     } catch (err) {
-                        logger.error('refetchProjected/account list update failed', err);
+                        logger.error('refetchProjected/invalidate after projection delete failed', err);
                     }
-                    try { publishTransactionEvents({ type: 'projectionsChanged', reason: 'delete', ids: projectionIds, account: filters?.account, statementPeriod }); } catch (err) { logger.error('publish projection event failed', err); }
                 }
+
                 logger.info('handleDeleteSelected: deleted server ids', { budgetIds, projectionIds });
             } catch (err) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, txResult, refetchProjected, localTx, projectedTx, serverTx, statementPeriod, filters]
+        [selectedIds, txResult, refetchProjected, localTx, projectedTx, serverTx, statementPeriod, filters, queryClient]
     );
 
-    /**
-     * Handles file input change (import CSV).
-     * @function handleFileChange
-     * @async
-     */
+    // --- File upload (CSV import) ---
     const handleFileChange = useCallback(
         async (ev) => {
             const file = ev.target.files && ev.target.files[0];
             if (!file) return;
             try {
                 logger.info('handleFileChange: uploading file', { fileName: file.name, statementPeriod });
-                await budgetTransactionService.uploadTransactions(file, statementPeriod);
-                await txResult.refetch();
-                try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'upload', fileName: file.name }); } catch (err) { logger.error('publish transaction event failed', err); }
+                await budgetApi.uploadBudgetTransactions(file, statementPeriod);
+                // Invalidate queries and refetch
+                try { await txResult.refetch(); } catch (err) { logger.error('refetch after upload failed', err); }
                 try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after upload failed', err); }
+                // Invalidate global budget/projection keys as well
+                queryClient.invalidateQueries({ queryKey: ['budgetTransactions'] });
+                queryClient.invalidateQueries({ queryKey: ['projections'] });
                 logger.info('handleFileChange: upload complete');
             } catch (err) {
                 logger.error('Upload failed', err);
@@ -464,40 +403,22 @@ export function useTransactionTable(filters) {
                 ev.target.value = '';
             }
         },
-        [txResult, statementPeriod, refetchProjected]
+        [txResult, statementPeriod, refetchProjected, queryClient]
     );
-    /**
-     * Opens file picker for CSV import.
-     * @function openFilePicker
-     */
+
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
-    /**
-     * Starts editing a field in a transaction row.
-     * @function startEditingField
-     * @param {string|number} id
-     * @param {string} field
-     * @param {string} initial
-     */
+
     const startEditingField = useCallback((id, field, initial = '') => {
         setEditing({ id, mode: 'field', field });
         editValueRef.current = initial;
         logger.info('startEditingField', { id, field, initial });
     }, []);
-    /**
-     * Starts editing a row.
-     * @function startEditingRow
-     * @param {string|number} id
-     */
+
     const startEditingRow = useCallback((id) => {
         setEditing({ id, mode: 'row' });
         logger.info('startEditingRow', { id });
     }, []);
-    /**
-     * Converts ISO date string to input date format.
-     * @function toInputDate
-     * @param {string} iso
-     * @returns {string}
-     */
+
     function toInputDate(iso) {
         try {
             const d = new Date(iso);
@@ -509,46 +430,30 @@ export function useTransactionTable(filters) {
             return '';
         }
     }
-    /**
-     * Handles cell double click for editing.
-     * @function handleCellDoubleClick
-     * @param {Object} tx
-     * @param {string} field
-     */
-    const handleCellDoubleClick = useCallback((tx, field) => {
-        const initial =
-            field === 'transactionDate'
-                ? tx.transactionDate
-                    ? toInputDate(tx.transactionDate)
-                    : toInputDate(new Date().toISOString())
-                : tx[field] != null
-                    ? String(tx[field])
-                    : '';
-        startEditingField(tx.id, field, initial);
-    }, [startEditingField]);
-    /**
-     * Handles key event in edit mode.
-     * @function handleEditKey
-     * @param {Event} e
-     * @param {string|number} id
-     * @param {string} field
-     */
-    const handleEditKey = useCallback(
-        (e, id, field) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-            } else if (e.key === 'Escape') {
-                setEditing(null);
-            }
+
+    const handleCellDoubleClick = useCallback(
+        (tx, field) => {
+            const initial =
+                field === 'transactionDate'
+                    ? tx.transactionDate
+                        ? toInputDate(tx.transactionDate)
+                        : toInputDate(new Date().toISOString())
+                    : tx[field] != null
+                        ? String(tx[field])
+                        : '';
+            startEditingField(tx.id, field, initial);
         },
-        []
+        [startEditingField]
     );
-    /**
-     * Validates transaction for creation.
-     * @function validateForCreate
-     * @param {Object} tx
-     * @returns {Array<string>}
-     */
+
+    const handleEditKey = useCallback((e, id, field) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+        } else if (e.key === 'Escape') {
+            setEditing(null);
+        }
+    }, []);
+
     const validateForCreate = useCallback((tx) => {
         const errors = [];
         if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
@@ -573,12 +478,7 @@ export function useTransactionTable(filters) {
         }
         return errors;
     }, []);
-    /**
-     * Strips client-only fields before sending to API.
-     * @function stripClientFields
-     * @param {Object} tx
-     * @returns {Object}
-     */
+
     const stripClientFields = useCallback((tx) => {
         const copy = { ...tx };
         delete copy.id;
@@ -586,11 +486,8 @@ export function useTransactionTable(filters) {
         delete copy.__isProjected;
         return copy;
     }, []);
-    /**
-     * Persists a row (create or update).
-     * @function handleSaveRow
-     * @async
-     */
+
+    // --- Save row (create or update) ---
     const handleSaveRow = useCallback(
         async (id, updatedFields = {}, addAnother = false) => {
             let txToPersist = null;
@@ -607,15 +504,18 @@ export function useTransactionTable(filters) {
                 logger.error('handleSaveRow: transaction not found locally', { id, updatedFields });
                 return;
             }
+
             setSaveErrors((prev) => {
                 if (!prev[id]) return prev;
                 const copy = { ...prev };
                 delete copy[id];
                 return copy;
             });
+
             if (statementPeriod) {
                 txToPersist = { ...txToPersist, statementPeriod };
             }
+
             const isNew = String(id).startsWith(TEMP_ID_PREFIX) || txToPersist.__isNew;
             if (isNew) {
                 const validationErrors = validateForCreate(txToPersist);
@@ -625,58 +525,39 @@ export function useTransactionTable(filters) {
                     return;
                 }
             }
+
             setSavingIds((prev) => {
                 const copy = new Set(prev);
                 copy.add(id);
                 return copy;
             });
+
             try {
                 if (isNew) {
                     logger.info('handleSaveRow: creating new transaction', { id, statementPeriod, isProjection: !!txToPersist.__isProjected });
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
+
                     if (txToPersist.__isProjected) {
-                        const created = await projectedTransactionService.createTransaction(payload);
+                        // projected create
+                        const created = await projectedApi.createProjectedTransaction(payload);
                         const createdWithFlag = { ...created, __isProjected: true };
+
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? createdWithFlag : t)));
-                        try {
-                            publishTransactionEvents({
-                                type: 'projectionsChanged',
-                                reason: 'create',
-                                transaction: createdWithFlag,
-                                account: createdWithFlag.account,
-                                statementPeriod: createdWithFlag.statementPeriod
-                            });
-                        } catch (err) { logger.error('publish projection event failed', err); }
                         logger.info('handleSaveRow: created projection', { tempId: id, createdId: created.id });
+
+                        // Invalidate projection queries and refetch
                         try {
-                            const acct = filters?.account || payload.account || undefined;
-                            if (acct) {
-                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
-                                    logger.error('getTransactionsForAccount after create failed', err);
-                                    return null;
-                                });
-                                if (acctList) {
-                                    const flattened = flattenAccountProjectedList(acctList);
-                                    const annotated = annotateProjection(flattened);
-                                    setLocalTx((prev) => {
-                                        const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-                                        const projSorted = annotated.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
-                                        return [...localOnly, ...projSorted, ...serverTx];
-                                    });
-                                } else {
-                                    try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
-                                }
-                            } else {
-                                try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
-                            }
+                            queryClient.invalidateQueries({ queryKey: ['projections'] });
+                            await refetchProjected();
                         } catch (err) {
-                            logger.error('account-projected refresh failed', err);
+                            logger.error('refetchProjected after create failed', err);
                         }
                     } else {
-                        const created = await budgetTransactionService.createTransaction(payload);
+                        // budget create
+                        const created = await budgetApi.createBudgetTransaction(payload);
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
-                        try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'create', transaction: created }); } catch (err) { logger.error('publish transaction event failed', err); }
                         logger.info('handleSaveRow: created', { tempId: id, createdId: created.id });
+
                         if (addAnother) {
                             const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
                             const newTx = {
@@ -694,56 +575,31 @@ export function useTransactionTable(filters) {
                             };
                             setLocalTx((prev) => [newTx, ...(prev || [])]);
                             setEditing({ id: newTx.id, mode: 'row' });
-                            logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id, defaultCriticality: newTx.criticality, defaultPaymentMethod: newTx.paymentMethod });
+                            logger.info('handleSaveRow: added another new tx temp', { newTempId: newTx.id });
                         } else {
+                            // invalidate & refetch budget queries
+                            try { queryClient.invalidateQueries({ queryKey: ['budgetTransactions'] }); } catch (e) { logger.error('invalidate budget queries failed', e); }
                             try { await txResult.refetch(); } catch (e) { logger.error('refetch after create failed', e); }
-                            try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after create failed', err); }
                         }
                     }
                 } else {
+                    // update path
                     logger.info('handleSaveRow: updating transaction', { id, statementPeriod, isProjection: !!txToPersist.__isProjected });
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
+
                     if (txToPersist.__isProjected) {
-                        await projectedTransactionService.updateTransaction(id, payload);
-                        try {
-                            publishTransactionEvents({
-                                type: 'projectionsChanged',
-                                reason: 'update',
-                                id,
-                                payload,
-                                account: payload.account || filters?.account,
-                                statementPeriod: payload.statementPeriod || statementPeriod
-                            });
-                        } catch (err) { logger.error('publish projection event failed', err); }
+                        await projectedApi.updateProjectedTransaction(id, payload);
                         logger.info('handleSaveRow: updated projection', { id });
                         try {
-                            const acct = filters?.account || payload.account || undefined;
-                            if (acct) {
-                                const acctList = await projectedTransactionService.getTransactionsForAccount({ account: acct, statementPeriod }).catch((err) => {
-                                    logger.error('getTransactionsForAccount after update failed', err);
-                                    return null;
-                                });
-                                if (acctList) {
-                                    const flattened = flattenAccountProjectedList(acctList);
-                                    const annotated = annotateProjection(flattened);
-                                    setLocalTx((prev) => {
-                                        const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
-                                        const projSorted = annotated.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
-                                        return [...localOnly, ...projSorted, ...serverTx];
-                                    });
-                                } else {
-                                    try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
-                                }
-                            } else {
-                                try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
-                            }
+                            queryClient.invalidateQueries({ queryKey: ['projections'] });
+                            await refetchProjected();
                         } catch (err) {
-                            logger.error('account-projected refresh failed', err);
+                            logger.error('refetchProjected after update failed', err);
                         }
                     } else {
-                        await budgetTransactionService.updateTransaction(id, payload);
-                        try { publishTransactionEvents({ type: 'transactionsChanged', reason: 'update', id, payload }); } catch (err) { logger.error('publish transaction event failed', err); }
+                        await budgetApi.updateBudgetTransaction(id, payload);
                         logger.info('handleSaveRow: updated', { id });
+                        try { queryClient.invalidateQueries({ queryKey: ['budgetTransactions'] }); } catch (e) { logger.error('invalidate after update failed', e); }
                         try { await txResult.refetch(); } catch (e) { logger.error('refetch after update failed', e); }
                         try { await refetchProjected(); } catch (err) { logger.error('refetchProjected after update failed', err); }
                     }
@@ -752,11 +608,7 @@ export function useTransactionTable(filters) {
                 logger.error('handleSaveRow: persist failed', err);
                 setSaveErrors((prev) => ({ ...prev, [id]: err.message || String(err) }));
                 if (!isNew) {
-                    try {
-                        await txResult.refetch();
-                    } catch (fetchErr) {
-                        logger.error('fetchTransactions after failed persist also failed', fetchErr);
-                    }
+                    try { await txResult.refetch(); } catch (fetchErr) { logger.error('fetchTransactions after failed persist also failed', fetchErr); }
                 }
             } finally {
                 setSavingIds((prev) => {
@@ -766,17 +618,19 @@ export function useTransactionTable(filters) {
                 });
             }
         },
-        [makeTempId, txResult, validateForCreate, filters, stripClientFields, statementPeriod, refetchProjected, serverTx]
+        [
+            makeTempId,
+            txResult,
+            validateForCreate,
+            filters,
+            stripClientFields,
+            statementPeriod,
+            refetchProjected,
+            serverTx,
+            queryClient,
+        ]
     );
 
-    /**
-     * Handles field save in edit mode.
-     * @function handleSaveEdit
-     * @param {string|number} id
-     * @param {string} field
-     * @param {any} value
-     * @async
-     */
     const handleSaveEdit = useCallback(
         async (id, field, value) => {
             const patch = {};
@@ -788,10 +642,7 @@ export function useTransactionTable(filters) {
         [handleSaveRow]
     );
 
-    // --- Toolbar logic ---
-    /**
-     * useTransactionToolbar - exposes toolbar logic for UI
-     */
+    // --- Toolbar ---
     const toolbar = useTransactionToolbar({
         onAdd: handleAddTransaction,
         onAddProjection: handleAddProjection,
@@ -845,7 +696,7 @@ export function useTransactionTable(filters) {
         getCriticalityForCategory,
         categoryOptions: CATEGORY_OPTIONS || [],
         isCategoryDropdown: IS_CATEGORY_DROPDOWN,
-        toolbar, // <-- toolbar logic for UI
+        toolbar,
     };
 }
 

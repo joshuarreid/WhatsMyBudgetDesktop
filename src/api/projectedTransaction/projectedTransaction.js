@@ -2,12 +2,13 @@
  * Thin fetcher module for ProjectedTransaction (projections) endpoints.
  *
  * - Responsible for creating its own ProjectedTransactionApiClient instance.
- * - Consumers simply call the exported functions (no baseURL, apiPath or transaction-id references here).
+ * - Consumers simply call the exported functions (no baseURL, apiPath or X-Transaction-ID references here).
  * - ApiClient is responsible for resolving process.env.BASE_URL and attaching X-Transaction-ID header.
  *
- * JSDoc uses "projectedTransactionId" to avoid confusion with the X-Transaction-ID header.
+ * This module delegates account-scoped calls to the client helper getAccountProjectedTransactionList()
+ * which mirrors the robust endpoint building done in ProjectedTransactionApiClient.
  *
- * @module projectedTransaction
+ * @module src/api/projectedTransaction/projectedTransaction
  */
 
 import ProjectedTransactionApiClient from './projectedTransactionApiClient';
@@ -54,9 +55,9 @@ export async function fetchAllProjectedTransactions() {
  *       X-Transaction-ID header (which is generated/managed by ApiClient).
  *
  * @async
- * @param {string|number} projectedTransactionId - the projected transaction identifier (resource id)
+ * @param {string|number} projectedTransactionId - StatementPeriod resource identifier
  * @returns {Promise<Object>} ProjectedTransaction
- * @throws {Error|Object} validation error or ApiClient error
+ * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function fetchProjectedTransactionById(projectedTransactionId) {
     logger.info('fetchProjectedTransactionById called', { projectedTransactionId });
@@ -72,9 +73,9 @@ export async function fetchProjectedTransactionById(projectedTransactionId) {
  * Create a projected transaction.
  *
  * @async
- * @param {Object} payload - ProjectedTransaction payload
+ * @param {Object} payload - ProjectedTransaction payload (POJO)
  * @returns {Promise<Object>} created ProjectedTransaction
- * @throws {Error|Object} validation error or ApiClient error
+ * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function createProjectedTransaction(payload) {
     logger.info('createProjectedTransaction called');
@@ -87,16 +88,13 @@ export async function createProjectedTransaction(payload) {
 }
 
 /**
- * Update a projected transaction by id.
- *
- * NOTE: the identifier parameter is a projectedTransactionId (resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
+ * Update an existing projected transaction by id.
  *
  * @async
- * @param {string|number} projectedTransactionId
- * @param {Object} payload
+ * @param {string|number} projectedTransactionId - ProjectedTransaction resource identifier
+ * @param {Object} payload - Partial or full ProjectedTransaction payload
  * @returns {Promise<Object>} updated ProjectedTransaction
- * @throws {Error|Object} validation error or ApiClient error
+ * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function updateProjectedTransaction(projectedTransactionId, payload) {
     logger.info('updateProjectedTransaction called', { projectedTransactionId });
@@ -111,13 +109,10 @@ export async function updateProjectedTransaction(projectedTransactionId, payload
 /**
  * Delete a projected transaction by id.
  *
- * NOTE: the identifier parameter is a projectedTransactionId (resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
- *
  * @async
- * @param {string|number} projectedTransactionId
+ * @param {string|number} projectedTransactionId - ProjectedTransaction resource identifier
  * @returns {Promise<void|Object>}
- * @throws {Error|Object} validation error or ApiClient error
+ * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function deleteProjectedTransaction(projectedTransactionId) {
     logger.info('deleteProjectedTransaction called', { projectedTransactionId });
@@ -133,8 +128,8 @@ export async function deleteProjectedTransaction(projectedTransactionId) {
  * Delete all projected transactions.
  *
  * @async
- * @returns {Promise<Object>} { deletedCount }
- * @throws {Object} normalized ApiClient error
+ * @returns {Promise<Object>} { deletedCount } or raw server response
+ * @throws {Object} normalized ApiClient error when request fails
  */
 export async function deleteAllProjectedTransactions() {
     logger.info('deleteAllProjectedTransactions called');
@@ -153,7 +148,7 @@ export async function deleteAllProjectedTransactions() {
  * @param {string} account - account name
  * @param {Object} [filters={}] - optional filters (statementPeriod, category, etc.)
  * @returns {Promise<Object>} AccountProjectedTransactionList
- * @throws {Error|Object} validation error or ApiClient error
+ * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function fetchAccountProjectedTransactionList(account, filters = {}) {
     logger.info('fetchAccountProjectedTransactionList called', { account });

@@ -1,6 +1,8 @@
 /**
  * useBudgetTransactionsQuery
  * - Hook wrapping TanStack Query (v5) to fetch budget transactions with filters.
+ * - Uses centralized query keys from budgetTransactionQueryKeys so queries and
+ *   invalidations can be shared across the app.
  * - Normalizes server response into a stable shape used by the UI:
  *   {
  *     personalTransactions: { transactions: Array, count: number },
@@ -16,9 +18,8 @@
  *   }
  *
  * Conventions:
- * - Query key is derived from the filters object so queries cache and invalidate correctly.
+ * - Query key is derived from the filters object using budgetTransactionQueryKeys helpers.
  * - Conservative defaults: no automatic refetching; callers can override via options.
- * - Adds __isProjected flag is not set here (projected transactions are handled by useProjectedTransactionQuery).
  *
  * @module hooks/useBudgetTransactionsQuery
  */
@@ -26,6 +27,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import budgetTransactionApi from '../api/budgetTransaction/budgetTransaction';
+import qk from '../api/budgetTransaction/budgetTransactionQueryKeys';
 
 const logger = {
     info: (...args) => console.log('[useBudgetTransactionsQuery]', ...args),
@@ -33,24 +35,29 @@ const logger = {
 };
 
 /**
- * Build a stable query key for budget transactions from filters.
+ * Convert filters into a canonical query key using budgetTransactionQueryKeys helpers.
+ *
+ * - If filters include an account, use accountListKey(account, restFilters)
+ * - Otherwise use listKey(filters) or listKey(null) when no filters provided
  *
  * @param {Object} filters
- * @returns {Array<any>} query key
+ * @returns {Array<any>} react-query key
  */
 function buildQueryKey(filters = {}) {
-    // keep keys explicit so different filter shapes produce stable keys
-    const { account, statementPeriod, category, criticality, paymentMethod, page, pageSize } = filters || {};
-    return [
-        'budgetTransactions',
-        account ?? '',
-        statementPeriod ?? '',
-        category ?? '',
-        criticality ?? '',
-        paymentMethod ?? '',
-        page ?? '',
-        pageSize ?? '',
-    ];
+    try {
+        const hasFilters = filters && Object.keys(filters).length > 0;
+        if (hasFilters && filters.account) {
+            const { account, ...rest } = filters;
+            const restFilters = Object.keys(rest).length ? rest : null;
+            return qk.accountListKey(String(account), restFilters);
+        }
+        const listFilters = hasFilters ? filters : null;
+        return qk.listKey(listFilters);
+    } catch (err) {
+        logger.error('buildQueryKey failed, falling back to default key', err, { filters });
+        // Fallback to a conservative key shape
+        return ['budgetTransactions', filters?.account ?? '', filters?.statementPeriod ?? '', filters?.category ?? ''];
+    }
 }
 
 /**
@@ -143,7 +150,6 @@ function normalizeRawResponse(raw) {
         }
 
         // Case: server returns other wrapper shapes (try to find arrays)
-        // e.g., { data: [...], total: 123 }, or { transactions: [...], total: ... }
         const maybeArr = raw.data ?? raw.transactions ?? raw.results ?? null;
         if (Array.isArray(maybeArr)) {
             personal.transactions = maybeArr;

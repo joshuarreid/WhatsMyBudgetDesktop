@@ -1,70 +1,84 @@
 /**
- * Thin API client for the /projections resource (ProjectedTransaction).
+ * ProjectedTransactionApiClient - thin client for /projections endpoints.
  *
  * - Extends ApiClient and delegates HTTP work to ApiClient.
- * - Api path is provided to ApiClient via the super() constructor (apiPath = 'api/projections').
- *   This keeps all base URL handling inside ApiClient (process.env.BASE_URL).
- * - Methods supply only short postfixes ('', 'account', id) so they don't build full URLs.
- * - No X-Transaction-ID parameters anywhere — ApiClient generates & attaches the header.
- * - Keeps JSDoc, logger and validation per project conventions.
+ * - Uses a robust endpoint builder so callers don't end up with duplicated path segments
+ *   when ApiClient.baseURL already contains resource suffixes (eg. ".../api/projections").
+ * - Default ApiClient apiPath is "api" so resource('projections') becomes "/api/projections".
+ * - Exposes account-scoped helper getAccountProjectedTransactionList(...) that chooses the correct
+ *   endpoint form depending on how the underlying ApiClient was configured (mirrors LocalCacheApiClient / BudgetTransactionApiClient behavior).
  *
- * Example:
- *   this.get('')           -> resolves to /api/projections
- *   this.get('account')    -> resolves to /api/projections/account
- *   this.get('123')        -> resolves to /api/projections/123
- *
- * @module ProjectedTransactionApiClient
+ * @module src/api/projectedTransaction/projectedTransactionApiClient
  */
 
-import ApiClient from './ApiClient';
+import ApiClient from '../ApiClient';
 
-/**
- * Standardized logger for this module.
- * @constant
- */
 const logger = {
     info: (...args) => console.log('[ProjectedTransactionApiClient]', ...args),
     error: (...args) => console.error('[ProjectedTransactionApiClient]', ...args),
 };
 
-/**
- * ProjectedTransactionApiClient - thin client for /projections endpoints.
- */
 export default class ProjectedTransactionApiClient extends ApiClient {
     /**
      * Create a ProjectedTransactionApiClient instance.
      *
-     * Notes:
-     *  - Do NOT reference any base URLs here. ApiClient resolves baseURL from process.env.BASE_URL
-     *    when a baseURL is not explicitly passed in options.
-     *  - The apiPath defaults to 'api/projections' so that methods only supply postfixes.
+     * Note:
+     * - ApiClient resolves baseURL from process.env.REACT_APP_BASE_URL or process.env.BASE_URL if not passed.
+     * - apiPath defaults to 'api' so resource methods are built via resource('projections', ...).
      *
-     * @param {Object} [options={}] - forwarded to ApiClient constructor (optional)
-     * @param {string} [options.baseURL] - optional override (rare; usually omitted)
+     * @param {Object} [options={}] forwarded to ApiClient constructor (optional)
+     * @param {string} [options.baseURL] optional override (rare)
      * @param {number} [options.timeout]
-     * @param {string} [options.apiPath] - optional override for the apiPath (defaults to 'api/projections')
+     * @param {string} [options.apiPath] optional override for apiPath
      */
     constructor(options = {}) {
-        const apiPath = options.apiPath ?? 'api/projections';
+        const apiPath = options.apiPath ?? 'api';
         super({ ...options, apiPath });
-        logger.info('constructed', { apiPath });
+        logger.info('constructed', { baseURL: this.baseURL, apiPath: this.apiPath });
     }
 
     /**
-     * Normalize a relative postfix into an endpoint string acceptable by ApiClient.
+     * Build the resource endpoint for projections (delegates to ApiClient.resourceEndpoint)
      *
-     * - Removes leading/trailing slashes to avoid duplicate slashes when ApiClient builds the final URL.
-     * - When empty string provided returns '' which causes ApiClient to use the configured apiPath alone.
-     *
-     * @param {string} [relative=''] - relative path segment under the configured apiPath
-     * @returns {string} cleaned relative path (no leading slash) or '' for root
+     * @param {string} [relative=''] relative segment under 'projections'
+     * @returns {string} endpoint string (no leading slash)
      */
-    buildPath(relative = '') {
-        return String(relative || '').replace(/^\/+|\/+$/g, '');
+    resource(relative = '') {
+        return this.resourceEndpoint('projections', relative);
     }
 
     /**
-     * Fetch all projected transactions.
+     * If the ApiClient.baseURL already includes "/api/projections" then callers should use the
+     * short relative form (eg. 'account', 'upload', '123') appended to that baseURL.
+     *
+     * Otherwise use the resource() value (eg. 'projections', 'projections/account', 'projections/123')
+     * which ApiClient._buildUrl will prefix with the apiPath ('/api').
+     *
+     * @private
+     * @param {string} relative - relative postfix under projections resource
+     * @returns {string} endpoint to call with ApiClient.get/post/... (may be absolute resource URL or resource(...) form)
+     */
+    _buildResourceEndpointForClient(relative = '') {
+        try {
+            const base = String(this.baseURL ?? '').replace(/\/+$/, '');
+            const relClean = String(relative ?? '').replace(/^\/+|\/+$/g, '');
+
+            if (base.endsWith('/api/projections')) {
+                // base already points at /api/projections -> call relative directly (absolute URL)
+                if (!relClean) return base; // absolute URL for resource root
+                return `${base}/${relClean}`;
+            }
+
+            // Default behavior: let ApiClient prefix apiPath -> use resource('relative')
+            return this.resource(relClean);
+        } catch (err) {
+            logger.error('_buildResourceEndpointForClient failed, falling back to resource()', err);
+            return this.resource(relative);
+        }
+    }
+
+    /**
+     * Get all projected transactions.
      *
      * @async
      * @returns {Promise<Object>} ProjectedTransactionList
@@ -72,83 +86,69 @@ export default class ProjectedTransactionApiClient extends ApiClient {
      */
     async getAllProjectedTransactions() {
         logger.info('getAllProjectedTransactions called');
-        const path = this.buildPath('');
-        return this.get(path);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.get(endpoint);
     }
 
     /**
-     * Fetch a single projected transaction by id.
-     *
-     * NOTE: the id is a projectedTransactionId (resource id). This is NOT the X-Transaction-ID header.
+     * Get a projected transaction by id.
      *
      * @async
-     * @param {string|number} projectedTransactionId - Transaction id
-     * @returns {Promise<Object>} ProjectedTransaction
-     * @throws {Error} validation error from validateId
-     * @throws {Object} normalized ApiClient error
+     * @param {string|number} projectedTransactionId - resource id
+     * @returns {Promise<Object>}
      */
     async getProjectedTransactionById(projectedTransactionId) {
         logger.info('getProjectedTransactionById called', { projectedTransactionId });
         this.validateId(projectedTransactionId, 'ProjectedTransaction');
         const safeId = encodeURIComponent(String(projectedTransactionId));
-        const path = this.buildPath(safeId);
-        return this.get(path);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.get(endpoint);
     }
 
     /**
      * Create a projected transaction.
      *
      * @async
-     * @param {Object} transaction - ProjectedTransaction payload (POJO)
-     * @returns {Promise<Object>} created ProjectedTransaction
-     * @throws {Error} validation error from validateRequired
-     * @throws {Object} normalized ApiClient error
+     * @param {Object} transaction - payload
+     * @returns {Promise<Object>}
      */
     async createProjectedTransaction(transaction) {
         logger.info('createProjectedTransaction called');
         this.validateRequired(transaction, 'transaction', 'object');
-        const path = this.buildPath('');
-        return this.post(path, transaction);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.post(endpoint, transaction);
     }
 
     /**
      * Update a projected transaction by id.
      *
-     * NOTE: id is a projectedTransactionId (resource id).
-     *
      * @async
-     * @param {string|number} projectedTransactionId - Transaction id
-     * @param {Object} transaction - Partial or full ProjectedTransaction payload
-     * @returns {Promise<Object>} updated ProjectedTransaction
-     * @throws {Error} validation error from validateId / validateRequired
-     * @throws {Object} normalized ApiClient error
+     * @param {string|number} projectedTransactionId
+     * @param {Object} transaction
+     * @returns {Promise<Object>}
      */
     async updateProjectedTransaction(projectedTransactionId, transaction) {
         logger.info('updateProjectedTransaction called', { projectedTransactionId });
         this.validateId(projectedTransactionId, 'ProjectedTransaction');
         this.validateRequired(transaction, 'transaction', 'object');
         const safeId = encodeURIComponent(String(projectedTransactionId));
-        const path = this.buildPath(safeId);
-        return this.put(path, transaction);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.put(endpoint, transaction);
     }
 
     /**
      * Delete a projected transaction by id.
      *
-     * NOTE: id is a projectedTransactionId (resource id).
-     *
      * @async
-     * @param {string|number} projectedTransactionId - Transaction id
-     * @returns {Promise<void|Object>} no-content on success
-     * @throws {Error} validation error from validateId
-     * @throws {Object} normalized ApiClient error
+     * @param {string|number} projectedTransactionId
+     * @returns {Promise<void|Object>}
      */
     async deleteProjectedTransaction(projectedTransactionId) {
         logger.info('deleteProjectedTransaction called', { projectedTransactionId });
         this.validateId(projectedTransactionId, 'ProjectedTransaction');
         const safeId = encodeURIComponent(String(projectedTransactionId));
-        const path = this.buildPath(safeId);
-        return this.delete(path);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.delete(endpoint);
     }
 
     /**
@@ -156,32 +156,29 @@ export default class ProjectedTransactionApiClient extends ApiClient {
      *
      * @async
      * @returns {Promise<Object>} { deletedCount }
-     * @throws {Object} normalized ApiClient error
      */
     async deleteAllProjectedTransactions() {
         logger.info('deleteAllProjectedTransactions called');
-        const path = this.buildPath('');
-        return this.delete(path);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.delete(endpoint);
     }
 
     /**
-     * Get personal & joint projected transactions for a specific account.
+     * Get account scoped projected transactions (personal + joint).
      *
-     * Corresponds to controller: GET /api/projections/account?account=...&statementPeriod=...
+     * Corresponds to server GET /api/projections/account?account=...&statementPeriod=...
      *
      * @async
      * @param {string} account - account name (required)
-     * @param {Object} [filters={}] - optional filters: { statementPeriod, category, criticality, paymentMethod }
+     * @param {Object} [filters={}] - optional filters (statementPeriod, category, criticality, paymentMethod)
      * @returns {Promise<Object>} AccountProjectedTransactionList
-     * @throws {Error} validation error when account missing
-     * @throws {Object} normalized ApiClient error
      */
     async getAccountProjectedTransactionList(account, filters = {}) {
-        logger.info('getAccountProjectedTransactionList called', { account });
+        logger.info('getAccountProjectedTransactionList called', { account, filters });
         this.validateRequired(account, 'account', 'string');
 
-        const params = { account, ...filters };
-        const path = this.buildPath('account');
-        return this.get(path, params);
+        const endpoint = this._buildResourceEndpointForClient('account');
+        const params = { account, ...(filters || {}) };
+        return this.get(endpoint, params);
     }
 }

@@ -1,20 +1,21 @@
 /**
  * useProjectedTransactionQuery
  * - Hooks for fetching projected (planned) transactions via TanStack Query (v5).
- * - Provides:
- *    - useProjectedTransactions({ account, statementPeriod }) -> { projectedTx, loading, error, refetch }
+ * - Uses centralized query keys from projectedTransactionQueryKeys so queries and
+ *   invalidations can be shared across the app.
  *
  * Conventions:
  * - Uses the statementPeriod and account values to build a stable query key.
  * - Normalizes server response shapes into a flat array of projection items.
  * - Annotates each returned projection with __isProjected: true for UI consumers.
  *
- * JSDoc, logging and Bulletproof React conventions followed.
+ * @module hooks/useProjectedTransactionQuery
  */
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import projectedTransactionApi from '../api/projectedTransaction/projectedTransaction';
+import qk from '../api/projectedTransaction/projectedTransactionQueryKeys';
 
 const logger = {
     info: (...args) => console.log('[useProjectedTransactionQuery]', ...args),
@@ -50,19 +51,32 @@ function annotateProjections(arr) {
 }
 
 /**
- * Build a query key for projected transactions.
+ * Build a react-query key for projected transactions using centralized helpers.
  *
  * @param {string|undefined} account
  * @param {string|undefined} statementPeriod
  * @returns {Array<any>} react-query key
  */
 function buildQueryKey(account, statementPeriod) {
-    if (account) return ['projections', 'account', String(account), String(statementPeriod ?? '')];
-    return ['projections', 'all', String(statementPeriod ?? '')];
+    try {
+        if (account) {
+            // accountListKey(account, filters)
+            const filters = statementPeriod ? { statementPeriod } : null;
+            return qk.accountListKey(account, filters);
+        }
+        // listKey(filters)
+        const filters = statementPeriod ? { statementPeriod } : null;
+        return qk.listKey(filters);
+    } catch (err) {
+        logger.error('buildQueryKey failed', err, { account, statementPeriod });
+        // fallback to a sensible key
+        return account ? ['projections', 'account', String(account), String(statementPeriod ?? '')] : ['projections', 'all', String(statementPeriod ?? '')];
+    }
 }
 
 /**
  * useProjectedTransactions
+ *
  * - Fetches projected transactions for a given account + statementPeriod (if account supplied).
  * - Returns normalized, annotated array of projected transactions and query helpers.
  *
