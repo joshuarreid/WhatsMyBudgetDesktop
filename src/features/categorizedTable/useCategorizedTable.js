@@ -2,21 +2,22 @@
  * useCategorizedTable
  *
  * - Computes the categorized table data (totals by category, rows, formatting)
- *   using the new react-query powered `useBudgetTransactionsQuery` hook.
- * - Removes TransactionEvents subscription (we no longer rely on pub/sub here).
- * - Keeps the same return shape so consuming components do not need to change.
+ *   using the react-query powered `useBudgetTransactionsQuery` hook.
+ * - Also fetches projected transactions (via useProjectedTransactions query hook)
+ *   and computes projected totals (per-criticality and per-category) so UI components
+ *   don't need to call query hooks themselves.
+ * - Keeps the same return shape and adds:
+ *     - projectedTotal
+ *     - projectedTotalsByCategory
  *
- * Responsibilities:
- * - Normalize filters (back-compat when caller passes props object)
- * - Call useBudgetTransactionsQuery directly for the data the UI needs
- * - Merge personal + joint transactions for display and compute totals-by-category
+ * JSDoc, logging and Bulletproof React conventions applied.
  *
  * @module hooks/useCategorizedTable
  */
 
 import { useMemo } from 'react';
-import useBudgetTransactionsQuery from "../../hooks/useBudgetTransactionQuery";
-
+import useBudgetTransactionsQuery from '../../hooks/useBudgetTransactionQuery';
+import useProjectedTransactionsQuery from '../../hooks/useProjectedTransactionQuery';
 
 const logger = {
     info: (...args) => console.log('[useCategorizedTable]', ...args),
@@ -26,7 +27,7 @@ const logger = {
 /**
  * useCategorizedTable
  *
- * @param {Object} propsOrFilters - either a filters object or the full props object (backwards compatibility)
+ * @param {Object|{filters:Object}} propsOrFilters - either a filters object or the full props object (backwards compatibility)
  * @returns {{
  *   filters: Object,
  *   txResult: Object,
@@ -36,19 +37,23 @@ const logger = {
  *   error: any,
  *   totalsByCategory: Record<string, number>,
  *   rows: Array<[string, number]>,
- *   fmt: Intl.NumberFormat
+ *   fmt: Intl.NumberFormat,
+ *   projectedTotal: number,
+ *   projectedTotalsByCategory: Record<string, number>,
+ *   projectedTx: Array,
+ *   refetchProjected: Function
  * }}
  */
 export default function useCategorizedTable(propsOrFilters = {}) {
     try {
-        // Backwards-compatible normalization: component may pass { filters } or raw filters
-        const filters = propsOrFilters?.filters ?? propsOrFilters;
+        // Normalize input (support either props object or direct filters)
+        const filters = propsOrFilters?.filters ?? propsOrFilters ?? {};
         logger.info('normalized filters', filters);
 
-        // Use the new react-query powered hook directly
+        // Budget transactions (react-query)
         const txResult = useBudgetTransactionsQuery(filters || {});
 
-        // Combine personal and joint transactions for display, sorted by date desc
+        // Merge personal + joint transactions
         const transactions = useMemo(() => {
             try {
                 const personal = txResult.personalTransactions?.transactions ?? [];
@@ -64,19 +69,14 @@ export default function useCategorizedTable(propsOrFilters = {}) {
             }
         }, [txResult.personalTransactions, txResult.jointTransactions]);
 
-        // Use the total provided by the normalized query result when possible
-        const totalSum =
-            typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
-
+        // Totals from budgetResult
+        const totalSum = typeof txResult.total === 'number' ? txResult.total : Number(txResult.total) || 0;
         const loading = txResult.loading || false;
         const error = txResult.error || null;
 
         logger.info(`transactions: count=${transactions.length} totalSum=${totalSum}`);
 
-        /**
-         * totalsByCategory
-         * - Map of category -> summed amount
-         */
+        // totalsByCategory (from budget transactions)
         const totalsByCategory = useMemo(() => {
             logger.info('calculating category totals (useMemo)');
             return transactions.reduce((acc, tx) => {
@@ -92,10 +92,7 @@ export default function useCategorizedTable(propsOrFilters = {}) {
             }, /** @type {Record<string, number>} */ ({}));
         }, [transactions]);
 
-        /**
-         * rows
-         * - Sorted entries suitable for rendering (category, amount)
-         */
+        // rows sorted alphabetically by category
         const rows = useMemo(() => {
             try {
                 return Object.entries(totalsByCategory).sort(([a], [b]) => a.localeCompare(b));
@@ -105,9 +102,7 @@ export default function useCategorizedTable(propsOrFilters = {}) {
             }
         }, [totalsByCategory]);
 
-        /**
-         * Currency formatter
-         */
+        // currency formatter
         const fmt = useMemo(
             () =>
                 new Intl.NumberFormat('en-US', {
@@ -116,6 +111,64 @@ export default function useCategorizedTable(propsOrFilters = {}) {
                 }),
             []
         );
+
+        // --- Projected transactions (react-query) ---
+        // Fetch projected transactions scoped to account + statementPeriod when present
+        const projectedQuery = useProjectedTransactionsQuery(
+            {
+                account: filters?.account,
+                statementPeriod: filters?.statementPeriod,
+            },
+            {
+                // align caching behavior with budget hook defaults (callers can override)
+                staleTime: Infinity,
+                cacheTime: Infinity,
+                refetchOnWindowFocus: false,
+                refetchOnReconnect: false,
+                retry: false,
+            }
+        );
+
+        const projectedTx = projectedQuery.projectedTx ?? [];
+        const refetchProjected = projectedQuery.refetch;
+
+        // Compute projected totals for the hook's filters (especially criticality)
+        const projectedTotalsByCategory = useMemo(() => {
+            try {
+                if (!Array.isArray(projectedTx)) return {};
+                const critFilter = filters?.criticality ? String(filters.criticality).toLowerCase() : '';
+                return projectedTx
+                    .filter((tx) => {
+                        if (!critFilter) return true;
+                        return String(tx.criticality || '').toLowerCase() === critFilter;
+                    })
+                    .reduce((acc, tx) => {
+                        const cat = tx?.category || 'Uncategorized';
+                        const amount = Number(tx?.amount) || 0;
+                        acc[cat] = (acc[cat] || 0) + amount;
+                        return acc;
+                    }, /** @type {Record<string, number>} */ ({}));
+            } catch (err) {
+                logger.error('projectedTotalsByCategory computation failed', err, projectedTx);
+                return {};
+            }
+        }, [projectedTx, filters?.criticality]);
+
+        const projectedTotal = useMemo(() => {
+            try {
+                if (!Array.isArray(projectedTx)) return 0;
+                const critFilter = filters?.criticality ? String(filters.criticality).toLowerCase() : '';
+                return projectedTx
+                    .filter((tx) => {
+                        if (!critFilter) return true;
+                        return String(tx.criticality || '').toLowerCase() === critFilter;
+                    })
+                    .reduce((s, tx) => s + (Number(tx.amount) || 0), 0);
+            } catch (err) {
+                logger.error('projectedTotal computation failed', err, projectedTx);
+                return 0;
+            }
+        }, [projectedTx, filters?.criticality]);
 
         return {
             filters,
@@ -127,6 +180,11 @@ export default function useCategorizedTable(propsOrFilters = {}) {
             totalsByCategory,
             rows,
             fmt,
+            // projection outputs
+            projectedTotal,
+            projectedTotalsByCategory,
+            projectedTx,
+            refetchProjected,
         };
     } catch (err) {
         logger.error('hook error', err);
