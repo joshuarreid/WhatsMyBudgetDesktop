@@ -1,23 +1,17 @@
 /**
- * Thin API client for the /transactions resource.
+ * BudgetTransactionApiClient - thin client for /transactions endpoints.
  *
  * - Extends ApiClient and delegates HTTP work to ApiClient.
- * - Api path is provided to ApiClient via the super() constructor (apiPath = 'api/transactions').
- *   This keeps all base URL handling inside ApiClient (process.env.BASE_URL).
- * - Methods supply only short postfixes ('' | 'upload' | id) so they don't build full URLs.
- * - No X-Transaction-ID parameters anywhere — ApiClient generates & attaches the header.
- * - Keep JSDoc, logger and validation per project conventions.
+ * - Uses a robust endpoint builder so callers don't end up with duplicated path segments
+ *   when ApiClient.baseURL already contains resource suffixes (eg. ".../api/transactions").
+ * - Default ApiClient apiPath is "api" (so resource('transactions') becomes "/api/transactions").
+ * - Exposes account-scoped helper getAccountTransactions(...) that chooses the correct endpoint
+ *   form depending on how the underlying ApiClient was configured (mirrors LocalCacheApiClient behavior).
  *
- * NOTE: ApiClient will prefix the apiPath to any endpoint passed to get/post/put/delete.
- * Example:
- *   this.get('')            -> '/api/transactions'
- *   this.get('upload')      -> '/api/transactions/upload'
- *   this.get('123')         -> '/api/transactions/123'
- *
- * @module BudgetTransactionApiClient
+ * @module src/api/budgetTransaction/budgetTransactionApiClient
  */
 
-import ApiClient from './ApiClient';
+import ApiClient from '../ApiClient';
 
 /**
  * Standardized logger for this module.
@@ -38,32 +32,57 @@ export default class BudgetTransactionApiClient extends ApiClient {
      * Note:
      *  - Do NOT reference any base URLs here. ApiClient resolves baseURL from process.env.BASE_URL
      *    when a baseURL is not explicitly passed in options.
-     *  - The apiPath defaults to 'api/transactions' so that methods only supply postfixes.
+     *  - The apiPath defaults to 'api' so resource methods are built via resource('transactions', ...)
      *
      * @param {Object} [options={}] - forwarded to ApiClient constructor (optional)
      * @param {string} [options.baseURL] - optional override (rare; usually omitted)
      * @param {number} [options.timeout]
-     * @param {string} [options.apiPath] - optional override for the apiPath (defaults to 'api/transactions')
+     * @param {string} [options.apiPath] - optional override for the apiPath (defaults to 'api')
      */
     constructor(options = {}) {
-        // prefer an explicit override if provided; otherwise use the hardcoded api path for this resource
-        const apiPath = options.apiPath ?? 'api/transactions';
+        const apiPath = options.apiPath ?? 'api';
         super({ ...options, apiPath });
-        logger.info('constructed', { apiPath });
+        logger.info('constructed', { baseURL: this.baseURL, apiPath: this.apiPath });
     }
 
     /**
-     * Normalize a relative postfix into an endpoint string acceptable by ApiClient.
-     *
-     * - Removes leading/trailing slashes to avoid duplicate slashes when ApiClient builds the final URL.
-     * - When empty string provided returns '' which causes ApiClient to use the configured apiPath alone.
-     *
-     * @param {string} [relative=''] - relative path segment under the configured apiPath
-     * @returns {string} cleaned relative path (no leading slash) or '' for root
+     * Build the resource endpoint for transactions (delegates to ApiClient.resourceEndpoint)
+     * @param {string} [relative=''] - relative path under 'transactions' (no leading slash)
+     * @returns {string} endpoint string (no leading slash) suitable for ApiClient.get/post/etc.
      */
-    buildPath(relative = '') {
-        const rel = String(relative || '').replace(/^\/+|\/+$/g, '');
-        return rel;
+    resource(relative = '') {
+        return this.resourceEndpoint('transactions', relative);
+    }
+
+    /**
+     * If the ApiClient.baseURL already includes "/api/transactions" then callers should use the
+     * short relative form (eg. 'account', 'upload', '123') appended to that baseURL.
+     *
+     * Otherwise use the resource() value (eg. 'transactions', 'transactions/upload', 'transactions/123')
+     * which ApiClient._buildUrl will prefix with the apiPath ('/api').
+     *
+     * @private
+     * @param {string} relative - relative postfix under transactions resource
+     * @returns {string} endpoint to call with ApiClient.get/post/... (may be absolute resource path or resource(...) form)
+     */
+    _buildResourceEndpointForClient(relative = '') {
+        try {
+            const base = String(this.baseURL ?? '').replace(/\/+$/, '');
+            const relClean = String(relative ?? '').replace(/^\/+|\/+$/g, '');
+
+            if (base.endsWith('/api/transactions')) {
+                // base already points at /api/transactions -> call 'account' or id directly (axios will request base + /rel)
+                if (!relClean) return base; // absolute URL to the resource root
+                // return an absolute URL so ApiClient.makeRequest treats it as full URL
+                return `${base}/${relClean}`;
+            }
+
+            // Default behavior: let ApiClient prefix apiPath -> use resource('relative')
+            return this.resource(relClean);
+        } catch (err) {
+            logger.error('_buildResourceEndpointForClient failed, falling back to resource()', err);
+            return this.resource(relative);
+        }
     }
 
     /**
@@ -75,8 +94,8 @@ export default class BudgetTransactionApiClient extends ApiClient {
      */
     async getAllBudgetTransactions() {
         logger.info('getAllBudgetTransactions called');
-        const url = this.buildPath('');
-        return this.get(url);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.get(endpoint);
     }
 
     /**
@@ -87,15 +106,44 @@ export default class BudgetTransactionApiClient extends ApiClient {
      * @returns {Promise<Object>} BudgetTransactionList
      */
     async getTransactions(filters = {}) {
-        logger.info('getTransactions called', { hasFilters: Object.keys(filters || {}).length > 0 });
-        const url = this.buildPath('');
-        return this.get(url, filters);
+        logger.info('getTransactions called', { hasFilters: Object.keys(filters || {}).length > 0, filters });
+
+        // If caller included an account, prefer account-specific helper which handles endpoint form.
+        if (filters && typeof filters === 'object' && filters.account) {
+            // Delegate to getAccountTransactions which will choose correct endpoint.
+            const { account, ...rest } = filters;
+            return this.getAccountTransactions(account, rest || {});
+        }
+
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.get(endpoint, filters);
+    }
+
+    /**
+     * Account-scoped transactions getter.
+     * - This helper ensures the client calls the correct endpoint whether the baseURL already
+     *   contains the resource path or not.
+     *
+     * @async
+     * @param {string} account - account name (required)
+     * @param {Object} [filters={}] - additional filters (statementPeriod, category, criticality, paymentMethod)
+     * @returns {Promise<Object>} AccountBudgetTransactionList
+     */
+    async getAccountTransactions(account, filters = {}) {
+        logger.info('getAccountTransactions called', { account, filters });
+        this.validateRequired(account, 'account', 'string');
+
+        // Build endpoint relative to transactions resource
+        const endpointRelative = `account${filters && Object.keys(filters).length ? '' : ''}`; // 'account'
+        const endpoint = this._buildResourceEndpointForClient(endpointRelative);
+
+        // Merge account into params for account endpoint (server expects account as a param)
+        const params = { account, ...(filters || {}) };
+        return this.get(endpoint, params);
     }
 
     /**
      * Get a budget transaction by id.
-     *
-     * NOTE: the id is a budgetTransactionId (resource id). This is NOT the X-Transaction-ID header.
      *
      * @async
      * @param {string|number} budgetTransactionId - resource identifier
@@ -105,8 +153,8 @@ export default class BudgetTransactionApiClient extends ApiClient {
         logger.info('getBudgetTransactionById called', { budgetTransactionId });
         this.validateId(budgetTransactionId, 'BudgetTransaction');
         const safeId = encodeURIComponent(String(budgetTransactionId));
-        const url = this.buildPath(safeId);
-        return this.get(url);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.get(endpoint);
     }
 
     /**
@@ -119,44 +167,40 @@ export default class BudgetTransactionApiClient extends ApiClient {
     async createBudgetTransaction(transaction) {
         logger.info('createBudgetTransaction called');
         this.validateRequired(transaction, 'transaction', 'object');
-        const url = this.buildPath('');
-        return this.post(url, transaction);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.post(endpoint, transaction);
     }
 
     /**
      * Update an existing budget transaction by id.
      *
-     * NOTE: id is a budgetTransactionId (resource id).
-     *
      * @async
-     * @param {string|number} budgetTransactionId - resource identifier
-     * @param {Object} transaction - Partial or full transaction payload
-     * @returns {Promise<Object>} updated BudgetTransaction
+     * @param {string|number} budgetTransactionId
+     * @param {Object} transaction
+     * @returns {Promise<Object>}
      */
     async updateBudgetTransaction(budgetTransactionId, transaction) {
         logger.info('updateBudgetTransaction called', { budgetTransactionId });
         this.validateId(budgetTransactionId, 'BudgetTransaction');
         this.validateRequired(transaction, 'transaction', 'object');
         const safeId = encodeURIComponent(String(budgetTransactionId));
-        const url = this.buildPath(safeId);
-        return this.put(url, transaction);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.put(endpoint, transaction);
     }
 
     /**
      * Delete a budget transaction by id.
      *
-     * NOTE: id is a budgetTransactionId (resource id).
-     *
      * @async
-     * @param {string|number} budgetTransactionId - resource identifier
-     * @returns {Promise<void|Object>}
+     * @param {string|number} budgetTransactionId
+     * @returns {Promise<any>}
      */
     async deleteBudgetTransaction(budgetTransactionId) {
         logger.info('deleteBudgetTransaction called', { budgetTransactionId });
         this.validateId(budgetTransactionId, 'BudgetTransaction');
         const safeId = encodeURIComponent(String(budgetTransactionId));
-        const url = this.buildPath(safeId);
-        return this.delete(url);
+        const endpoint = this._buildResourceEndpointForClient(safeId);
+        return this.delete(endpoint);
     }
 
     /**
@@ -167,8 +211,8 @@ export default class BudgetTransactionApiClient extends ApiClient {
      */
     async deleteAllBudgetTransactions() {
         logger.info('deleteAllBudgetTransactions called');
-        const url = this.buildPath('');
-        return this.delete(url);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.delete(endpoint);
     }
 
     /**
@@ -188,7 +232,7 @@ export default class BudgetTransactionApiClient extends ApiClient {
         formData.append('file', file);
         formData.append('statementPeriod', String(statementPeriod));
 
-        const url = this.buildPath('upload');
-        return this.post(url, formData, { headers: {} });
+        const endpoint = this._buildResourceEndpointForClient('upload');
+        return this.post(endpoint, formData, { headers: {} });
     }
 }

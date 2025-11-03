@@ -7,7 +7,10 @@
  *
  * JSDoc uses "budgetTransactionId" to avoid confusion with the X-Transaction-ID header.
  *
- * @module budgetTransaction
+ * This module now delegates account-scoped calls to the client helper getAccountTransactions()
+ * which mirrors the robust endpoint building done in BudgetTransactionApiClient.
+ *
+ * @module src/api/budgetTransaction/budgetTransaction
  */
 
 import BudgetTransactionApiClient from './budgetTransactionApiClient';
@@ -24,7 +27,6 @@ const logger = {
 /**
  * Internal API client instance managed by this module.
  * The constructor is invoked with no baseURL so ApiClient will resolve process.env.BASE_URL.
- * Consumers do not need to know or pass base URLs.
  *
  * @type {BudgetTransactionApiClient}
  * @private
@@ -34,8 +36,10 @@ const apiClient = new BudgetTransactionApiClient();
 /**
  * Fetch all budget transactions or a filtered list when filters provided.
  *
- * The server typically returns a BudgetTransactionList. This function tolerates
- * response shapes that nest results under `budgetTransactions`.
+ * Behavior:
+ * - If filters.account is provided, call the account-scoped client helper getAccountTransactions()
+ *   which will choose the correct endpoint form for the configured ApiClient.
+ * - Otherwise call list or filtered list at the standard endpoints.
  *
  * @async
  * @param {Object} [filters={}] - optional filters to pass to the list endpoint (account, statementPeriod, category, etc.)
@@ -43,10 +47,22 @@ const apiClient = new BudgetTransactionApiClient();
  * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function fetchAllBudgetTransactions(filters = {}) {
-    logger.info('fetchAllBudgetTransactions called', { hasFilters: Object.keys(filters || {}).length > 0 });
+    logger.info('fetchAllBudgetTransactions called', { hasFilters: Object.keys(filters || {}).length > 0, filters });
+
     try {
-        const response = Object.keys(filters || {}).length ? await apiClient.getTransactions(filters) : await apiClient.getAllBudgetTransactions();
-        return response?.budgetTransactions || response;
+        if (filters && typeof filters === 'object' && filters.account) {
+            const { account, ...rest } = filters;
+            logger.info('Delegating to getAccountTransactions', { account, rest });
+            return await apiClient.getAccountTransactions(String(account), rest || {});
+        }
+
+        if (filters && Object.keys(filters).length) {
+            logger.info('Calling generic getTransactions with filters', { filters });
+            return await apiClient.getTransactions(filters);
+        }
+
+        logger.info('Calling getAllBudgetTransactions (no filters)');
+        return await apiClient.getAllBudgetTransactions();
     } catch (err) {
         logger.error('fetchAllBudgetTransactions failed', err);
         throw err;
@@ -56,13 +72,9 @@ export async function fetchAllBudgetTransactions(filters = {}) {
 /**
  * Fetch a budget transaction by id.
  *
- * NOTE: the identifier parameter is a budgetTransactionId (resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
- *
  * @async
  * @param {string|number} budgetTransactionId - the budget transaction identifier (resource id)
  * @returns {Promise<any>} BudgetTransaction
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function fetchBudgetTransactionById(budgetTransactionId) {
     logger.info('fetchBudgetTransactionById called', { budgetTransactionId });
@@ -80,7 +92,6 @@ export async function fetchBudgetTransactionById(budgetTransactionId) {
  * @async
  * @param {Object} payload - BudgetTransaction payload
  * @returns {Promise<any>} created BudgetTransaction
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function createBudgetTransaction(payload) {
     logger.info('createBudgetTransaction called');
@@ -95,14 +106,10 @@ export async function createBudgetTransaction(payload) {
 /**
  * Update a budget transaction by id.
  *
- * NOTE: the identifier parameter is a budgetTransactionId (the resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
- *
  * @async
  * @param {string|number} budgetTransactionId - the budget transaction identifier
  * @param {Object} payload - updated fields
  * @returns {Promise<any>} updated BudgetTransaction
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function updateBudgetTransaction(budgetTransactionId, payload) {
     logger.info('updateBudgetTransaction called', { budgetTransactionId });
@@ -117,13 +124,9 @@ export async function updateBudgetTransaction(budgetTransactionId, payload) {
 /**
  * Delete a budget transaction by id.
  *
- * NOTE: the identifier parameter is a budgetTransactionId (the resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
- *
  * @async
  * @param {string|number} budgetTransactionId - the budget transaction identifier
  * @returns {Promise<any>} no-content or response body
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function deleteBudgetTransaction(budgetTransactionId) {
     logger.info('deleteBudgetTransaction called', { budgetTransactionId });
@@ -142,7 +145,6 @@ export async function deleteBudgetTransaction(budgetTransactionId) {
  * @param {File|Blob} file - CSV file
  * @param {string} statementPeriod - required statementPeriod
  * @returns {Promise<any>} bulk import result from server
- * @throws {Error|Object} validation error or normalized ApiClient error
  */
 export async function uploadBudgetTransactions(file, statementPeriod) {
     logger.info('uploadBudgetTransactions called', { statementPeriod });
