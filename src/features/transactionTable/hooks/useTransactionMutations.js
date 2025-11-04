@@ -135,17 +135,32 @@ export default function useTransactionMutations(deps = {}) {
                 if (isNew) {
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
 
+                    // capture the attempted account (the account the UI attempted to create in)
+                    const attemptedAccount = (payload.account ?? filters?.account ?? null);
+                    const attemptedIsJoint = attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint';
+
                     if (txToPersist.__isProjected) {
                         // create projected
                         const created = await projectedApi.createProjectedTransaction(payload);
                         const createdWithFlag = { ...created, __isProjected: true };
                         setLocalTx((prev) => (prev || []).map((t) => (t.id === id ? createdWithFlag : t)));
 
-                        // invalidate appropriate keys (account/member handling inside helper)
+                        // invalidate appropriate keys:
+                        // 1) invalidate the account the server returned (member accounts if split)
                         try {
                             invalidateAccountAndMembers(created.account ?? payload.account ?? filters?.account ?? null);
                         } catch (e) {
                             logger.error('invalidate projected after create failed', e);
+                        }
+
+                        // 2) If the original attempted account was 'joint', also invalidate joint keys so
+                        //    joint transactionTable and joint categoryTable refresh even if the server split rows.
+                        if (attemptedIsJoint) {
+                            try {
+                                invalidateAccountAndMembers('joint');
+                            } catch (e) {
+                                logger.error('invalidate joint after projected create failed', e);
+                            }
                         }
                     } else {
                         // create budget transaction
@@ -157,6 +172,16 @@ export default function useTransactionMutations(deps = {}) {
                             invalidateAccountAndMembers(acctToInvalidate);
                         } catch (e) {
                             logger.error('invalidate budget queries failed', e);
+                        }
+
+                        // If created in joint (attempted), also invalidate joint so joint-category views refresh
+                        const attemptedIsJointBudget = attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint';
+                        if (attemptedIsJointBudget) {
+                            try {
+                                invalidateAccountAndMembers('joint');
+                            } catch (e) {
+                                logger.error('invalidate joint after budget create failed', e);
+                            }
                         }
 
                         if (addAnother) {
@@ -178,7 +203,6 @@ export default function useTransactionMutations(deps = {}) {
                                 setLocalTx((prev) => [newTx, ...(prev || [])]);
                                 setEditing({ id: newTx.id, mode: 'row' });
                             } catch (e) {
-                                // fallback: still fine if addAnother fails
                                 logger.error('addAnother flow failed', e);
                             }
                         }
@@ -193,12 +217,32 @@ export default function useTransactionMutations(deps = {}) {
                         } catch (e) {
                             logger.error('invalidate projected after update failed', e);
                         }
+
+                        // If the edit was attempted on the joint screen, also ensure joint keys are invalidated
+                        try {
+                            const attemptedAccount = (payload.account ?? filters?.account ?? null);
+                            if (attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint') {
+                                invalidateAccountAndMembers('joint');
+                            }
+                        } catch (e) {
+                            logger.error('invalidate joint after projected update failed', e);
+                        }
                     } else {
                         await budgetApi.updateBudgetTransaction(id, payload);
                         try {
                             invalidateAccountAndMembers(payload.account ?? filters?.account ?? null);
                         } catch (e) {
                             logger.error('invalidate budget queries after update failed', e);
+                        }
+
+                        // Also consider joint invalidation when the attempted account was joint
+                        try {
+                            const attemptedAccount = (payload.account ?? filters?.account ?? null);
+                            if (attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint') {
+                                invalidateAccountAndMembers('joint');
+                            }
+                        } catch (e) {
+                            logger.error('invalidate joint after budget update failed', e);
                         }
                     }
                 }
@@ -288,6 +332,8 @@ export default function useTransactionMutations(deps = {}) {
                     try {
                         const acct = filters?.account ?? null;
                         invalidateAccountAndMembers(acct);
+                        // also invalidate joint when we attempted deletion from joint view
+                        if (acct && String(acct).toLowerCase() === 'joint') invalidateAccountAndMembers('joint');
                     } catch (err) {
                         logger.error('invalidate after budget delete failed', err);
                     }
@@ -297,6 +343,7 @@ export default function useTransactionMutations(deps = {}) {
                     try {
                         const projAcct = filters?.account ?? null;
                         invalidateAccountAndMembers(projAcct);
+                        if (projAcct && String(projAcct).toLowerCase() === 'joint') invalidateAccountAndMembers('joint');
                     } catch (err) {
                         logger.error('invalidate after projection delete failed', err);
                     }
@@ -324,6 +371,7 @@ export default function useTransactionMutations(deps = {}) {
                 try {
                     const acct = filters?.account ?? null;
                     invalidateAccountAndMembers(acct);
+                    if (acct && String(acct).toLowerCase() === 'joint') invalidateAccountAndMembers('joint');
                 } catch (e) {
                     logger.error('invalidate after upload failed', e);
                 }
