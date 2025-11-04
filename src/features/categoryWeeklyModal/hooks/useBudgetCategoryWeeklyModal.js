@@ -13,7 +13,7 @@
 import { useMemo } from 'react';
 
 import useCategoryWeeklyData from './useCategoryWeeklyData';
-import useBudgetTransactionsQuery from "../../hooks/useBudgetTransactionQuery";
+import useBudgetTransactionsQuery from "../../../hooks/useBudgetTransactionQuery";
 
 /**
  * Standardized logger for this module.

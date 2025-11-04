@@ -12,7 +12,7 @@
 import React from 'react';
 import { useTransactionTable } from './hooks/useTransactionTable';
 import { useStatementPeriodContext } from '../../context/StatementPeriodProvider';
-import './TransactionTable.css';
+import './styles/TransactionTable.css';
 import BalanceWidget from './components/BalanceWidget/BalanceWidget';
 import TransactionTableToolbar from './components/TransactionTableToolbar/TransactionTableToolbar';
 import TransactionTableHeader from './components/TransactionTableHeader/TransactionTableHeader';

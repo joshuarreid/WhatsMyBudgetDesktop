@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import SidebarLink from "./SidebarLink";
-import useViewsAccordion from "./useViewsAccordion";
+import useViewsAccordion from "../hooks/useViewsAccordion";
 
 /**
  * ViewsAccordion - presentation + ARIA

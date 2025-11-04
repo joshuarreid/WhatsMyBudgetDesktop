@@ -4,7 +4,7 @@ import { useTransactionTable } from '../transactionTable/hooks/useTransactionTab
 import CompactTransactionHeader from './components/CompactTransactionHeader';
 import CompactTransactionRow from './components/CompactTransactionRow';
 import CompactTransactionBalanceRow from './components/CompactTransactionBalanceRow';
-import './CompactTransactionTable.css';
+import './styles/CompactTransactionTable.css';
 
 const logger = {
     info: (...args) => console.log('[CompactTransactionTable]', ...args),

@@ -26,7 +26,7 @@ import User1Screen from "./screens/User1Screen/User1Screen";
 import User2Screen from "./screens/User2Screen/User2Screen";
 import TransactionScreen from "./screens/TransactionScreen/TransactionScreen";
 import { StatementPeriodProvider } from './context/StatementPeriodProvider';
-import PaymentScreen from "./features/payments/components/PaymentScreen";
+import PaymentScreen from "./screens/PaymentsScreen/PaymentScreen";
 import { queryClient } from './lib/queryClient';
 
 /**

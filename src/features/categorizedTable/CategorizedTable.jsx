@@ -7,8 +7,8 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import useCategorizedTable from './useCategorizedTable';
-import './CategorizedTable.css';
+import useCategorizedTable from './hooks/useCategorizedTable';
+import './styles/CategorizedTable.css';
 import CategoryTableHeader from './components/CategoryTableHeader';
 import CategoryTableBody from './components/CategoryTableBody';
 import CategoryTableFooter from './components/CategoryTableFooter';

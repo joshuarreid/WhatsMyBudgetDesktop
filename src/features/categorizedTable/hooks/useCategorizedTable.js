@@ -16,8 +16,8 @@
  */
 
 import { useMemo } from 'react';
-import useBudgetTransactionsQuery from '../../hooks/useBudgetTransactionQuery';
-import useProjectedTransactionsQuery from '../../hooks/useProjectedTransactionQuery';
+import useBudgetTransactionsQuery from '../../../hooks/useBudgetTransactionQuery';
+import useProjectedTransactionsQuery from '../../../hooks/useProjectedTransactionQuery';
 
 const logger = {
     info: (...args) => console.log('[useCategorizedTable]', ...args),

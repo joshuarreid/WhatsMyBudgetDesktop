@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import PropTypes from 'prop-types';
-import './Modal.css';
-import useLockBodyScroll from './useLockBodyScroll';
-import useFocusTrap from './useFocusTrap';
+import './styles/Modal.css';
+import useLockBodyScroll from './hooks/useLockBodyScroll';
+import useFocusTrap from './hooks/useFocusTrap';
 
 const logger = {
     info: (...args) => console.log('[Modal]', ...args),
