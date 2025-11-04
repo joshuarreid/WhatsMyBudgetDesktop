@@ -1,217 +1,248 @@
 /**
  * usePaymentsData
- * - Business logic for the payments summary screen: fetches, normalizes, and manages payment summary data.
- * - Clears stale data immediately on statementPeriod change and on unmount.
- * - Always subscribes to provider context for live updates.
- * - Bulletproof React conventions, robust logging, and JSDoc.
  *
- * @module usePaymentsData
- * @returns {Object} { cards, users, payments, breakdowns, loading, error }
+ * Migration (wired to paymentSummaryQuery):
+ * - Replaces manual per-account fetch/fetchQuery logic with the centralized
+ *   usePaymentSummaryQuery hook which fetches the payment-summary for a list
+ *   of accounts in a single request (server supports CSV accounts).
+ * - Keeps the same output shape so UI components do not need changes.
+ *
+ * Behavior:
+ * - Clears stale UI immediately when statementPeriod changes (no stale flashes).
+ * - Subscribes to the react-query result from usePaymentSummaryQuery; when data
+ *   arrives we compute `payments` and `breakdowns` and publish them to state.
+ *
+ * Conventions:
+ * - Bulletproof React: hook contains side-effects and data transformation only.
+ * - Robust logging and JSDoc per project conventions.
+ *
+ * @module hooks/usePaymentsData
  */
-import { useEffect, useRef, useState, useMemo } from "react";
-import { useStatementPeriodContext } from "../../../context/StatementPeriodProvider";
-import PaymentSummaryService from "../../../services/PaymentSummaryService";
-import { getAccounts, getPaymentMethods } from "../../../config/config.js";
 
-/**
- * Logger for usePaymentsData hook.
- * @constant
- */
+import { useEffect, useState, useMemo } from "react";
+
+import { useStatementPeriodContext } from "../../../context/StatementPeriodProvider";
+import { getAccounts, getPaymentMethods } from "../../../config/config.js";
+import {usePaymentSummaryQuery} from "../../../hooks/paymentSummaryQuery";
+
 const logger = {
-    info: (...args) => console.log('[usePaymentsData]', ...args),
-    error: (...args) => console.error('[usePaymentsData]', ...args),
+    info: (...args) => console.log("[usePaymentsData]", ...args),
+    error: (...args) => console.error("[usePaymentsData]", ...args),
 };
 
 /**
- * usePaymentsData
- * - Business logic for payments summary screen.
- * - Fetches payment summary and breakdowns for the current statement period.
- * - Clears all stale data instantly on period change or unmount.
- * - Handles race conditions robustly.
+ * normalizeTx
+ * - Defensive accessor used when input shapes vary; returns canonical fields.
  *
- * @returns {Object} { cards, users, payments, breakdowns, loading, error }
+ * @param {Object} tx
+ * @returns {{ account: string, paymentMethod: string, amount: number, category: string }}
+ */
+function normalizeTx(tx = {}) {
+    try {
+        return {
+            account: String(tx.account ?? tx.owner ?? "").toLowerCase(),
+            paymentMethod: String(tx.paymentMethod ?? tx.card ?? tx.payment_method ?? "").toLowerCase(),
+            amount: Number(tx.amount) || 0,
+            category: tx.category == null ? "Uncategorized" : String(tx.category),
+        };
+    } catch (err) {
+        logger.error("normalizeTx failed", err, tx);
+        return { account: "", paymentMethod: "", amount: 0, category: "Uncategorized" };
+    }
+}
+
+/**
+ * computeSummaryFromApi
+ * - Convert server-side PaymentSummaryResponse[] into the two structures:
+ *   payments: { [card]: { [user]: amount } }
+ *   breakdowns: { [card]: { [user]: [{ category, amount, type }] } }
+ *
+ * @param {Array|any} apiData - raw data returned from payment summary endpoint
+ * @param {Array<string>} cards - known cards list
+ * @param {Array<string>} users - known users list
+ * @returns {{ payments: Object, breakdowns: Object }}
+ */
+function computeSummaryFromApi(apiData = [], cards = [], users = []) {
+    const paymentsResult = {};
+    const breakdownsResult = {};
+
+    // Initialize buckets
+    cards.forEach((card) => {
+        const key = String(card).toLowerCase();
+        paymentsResult[key] = {};
+        breakdownsResult[key] = {};
+        users.forEach((u) => {
+            paymentsResult[key][u] = 0;
+            breakdownsResult[key][u] = [];
+        });
+    });
+
+    // Support both array response or object wrapper
+    const list = Array.isArray(apiData) ? apiData : (apiData?.summary ?? apiData?.paymentSummaries ?? []);
+
+    if (!Array.isArray(list) || list.length === 0) {
+        return { payments: paymentsResult, breakdowns: breakdownsResult };
+    }
+
+    // Each item is expected to be a user summary object:
+    // { account, creditCardTotals: { card: amount }, creditCardCategoryBreakdowns: { card: { category: amount } } }
+    list.forEach((userSummary) => {
+        try {
+            const account = String(userSummary.account ?? userSummary.owner ?? "").toLowerCase();
+            if (!account) return;
+
+            // card totals (may be nested under creditCardTotals or cardTotals depending on API)
+            const cardTotals =
+                userSummary.creditCardTotals ??
+                userSummary.cardTotals ??
+                userSummary.creditCardTotalsByPaymentMethod ??
+                {};
+
+            Object.entries(cardTotals || {}).forEach(([cardName, total]) => {
+                const cardKey = String(cardName).toLowerCase();
+                if (!paymentsResult[cardKey]) paymentsResult[cardKey] = {};
+                if (typeof paymentsResult[cardKey][account] !== "number") paymentsResult[cardKey][account] = 0;
+                paymentsResult[cardKey][account] = (paymentsResult[cardKey][account] || 0) + (Number(total) || 0);
+            });
+
+            // category breakdowns: creditCardCategoryBreakdowns common shape
+            const cardCats = userSummary.creditCardCategoryBreakdowns ?? userSummary.cardCategoryBreakdowns ?? {};
+            Object.entries(cardCats || {}).forEach(([cardName, cats]) => {
+                const cardKey = String(cardName).toLowerCase();
+                if (!breakdownsResult[cardKey]) breakdownsResult[cardKey] = {};
+                if (!Array.isArray(breakdownsResult[cardKey][account])) breakdownsResult[cardKey][account] = [];
+
+                // cats might be an object { category: amount } or an array of { category, amount }
+                if (Array.isArray(cats)) {
+                    cats.forEach((c) => {
+                        const category = String(c.category ?? c.name ?? "Uncategorized");
+                        const amount = Number(c.amount ?? 0) || 0;
+                        const existing = breakdownsResult[cardKey][account].find((e) => String(e.category) === category);
+                        if (existing) existing.amount = (Number(existing.amount) || 0) + amount;
+                        else breakdownsResult[cardKey][account].push({ category, amount, type: "Actual" });
+                    });
+                } else if (cats && typeof cats === "object") {
+                    Object.entries(cats).forEach(([category, amt]) => {
+                        const catName = String(category);
+                        const amount = Number(amt) || 0;
+                        const existing = breakdownsResult[cardKey][account].find((e) => String(e.category) === catName);
+                        if (existing) existing.amount = (Number(existing.amount) || 0) + amount;
+                        else breakdownsResult[cardKey][account].push({ category: catName, amount, type: "Actual" });
+                    });
+                }
+            });
+        } catch (err) {
+            logger.error("computeSummaryFromApi: failed to process userSummary", err, userSummary);
+        }
+    });
+
+    // Defensive: ensure every card/user exists
+    cards.forEach((card) => {
+        const key = String(card).toLowerCase();
+        paymentsResult[key] = paymentsResult[key] || {};
+        breakdownsResult[key] = breakdownsResult[key] || {};
+        users.forEach((u) => {
+            if (typeof paymentsResult[key][u] !== "number") paymentsResult[key][u] = 0;
+            if (!Array.isArray(breakdownsResult[key][u])) breakdownsResult[key][u] = [];
+        });
+    });
+
+    return { payments: paymentsResult, breakdowns: breakdownsResult };
+}
+
+/**
+ * usePaymentsData
+ *
+ * @returns {{
+ *   cards: Array<string>,
+ *   users: Array<string>,
+ *   payments: Object,
+ *   breakdowns: Object,
+ *   loading: boolean,
+ *   error: any
+ * }}
  */
 export function usePaymentsData() {
-    /**
-     * Normalized cards and users, recomputed if config changes.
-     * @type {Array<string>}
-     */
-    const cards = useMemo(() => getPaymentMethods().map((c) => c.toLowerCase()), []);
-    const users = useMemo(() => getAccounts()
-        .filter((u) => ["josh", "anna"].includes(u.toLowerCase()))
-        .map((u) => u.toLowerCase()), []);
+    const { statementPeriod } = useStatementPeriodContext();
 
-    /**
-     * Local state for payments and breakdowns.
-     */
+    const cards = useMemo(() => getPaymentMethods().map((c) => String(c).toLowerCase()), []);
+    const users = useMemo(
+        () =>
+            getAccounts()
+                .filter((u) => ["josh", "anna"].includes(String(u).toLowerCase()))
+                .map((u) => String(u).toLowerCase()),
+        []
+    );
+
     const [payments, setPayments] = useState({});
     const [breakdowns, setBreakdowns] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Context subscription: always up-to-date statement period.
-    const { statementPeriod } = useStatementPeriodContext();
-    // Track last seen statementPeriod so we can detect actual changes.
-    const lastPeriodRef = useRef();
+    // Use centralized query: fetch payment summary for all users in one request
+    const { data: apiData, isLoading: apiLoading, isError: apiIsError, error: apiError } =
+        usePaymentSummaryQuery({ accounts: users, statementPeriod }, { staleTime: Infinity, cacheTime: Infinity });
 
-    /**
-     * Immediate clearing effect: runs on statementPeriod change and on unmount.
-     * Guarantees UI never renders stale data.
-     */
+    // Immediate clear on statementPeriod change to avoid stale flashes
     useEffect(() => {
-        logger.info("Immediate clearing effect: statementPeriod changed or leaving page.", { statementPeriod });
+        logger.info("usePaymentsData: clearing state for new statementPeriod", { statementPeriod });
         setPayments({});
         setBreakdowns({});
         setLoading(true);
         setError(null);
-
-        // Cleanup on unmount
-        return () => {
-            logger.info("Cleanup on unmount: clearing all payments/breakdowns/loading/error.");
-            setPayments({});
-            setBreakdowns({});
-            setLoading(true);
-            setError(null);
-        };
     }, [statementPeriod]);
 
-    /**
-     * Data fetch effect: runs whenever statementPeriod changes.
-     * Only updates state if fetch matches the latest statementPeriod.
-     * Handles race conditions and ensures UI is always fresh.
-     */
+    // When apiData becomes available, compute and set the results
     useEffect(() => {
-        let isMounted = true;
-        lastPeriodRef.current = statementPeriod;
-
-        /**
-         * Fetches payment summary from backend.
-         * @async
-         * @function fetchData
-         * @throws {Error} If the API request fails.
-         */
-        async function fetchData(period) {
-            logger.info("fetchData: effect started", { cards, users, statementPeriod: period });
-            try {
-                if (!period) {
-                    if (isMounted) {
-                        setPayments({});
-                        setBreakdowns({});
-                        setLoading(false);
-                        setError(null);
-                    }
-                    return;
-                }
-
-                const raw = await PaymentSummaryService.getPaymentSummary({
-                    accounts: users,
-                    statementPeriod: period,
-                });
-
-                const summary = Array.isArray(raw) ? raw : raw.summary;
-                logger.info("fetchData: API response", { summary });
-
-                // If the period changed during fetch, ignore this result
-                if (!isMounted || lastPeriodRef.current !== period) {
-                    logger.info("fetchData: statementPeriod changed during fetch, discarding result.", {
-                        lastPeriod: lastPeriodRef.current, period
-                    });
-                    return;
-                }
-
-                // If no results, clear and exit
-                if (!summary || summary.length === 0) {
-                    setPayments({});
-                    setBreakdowns({});
-                    setLoading(false);
-                    setError(null);
-                    return;
-                }
-
-                // Build normalized payments and breakdowns objects for table and UI
-                const paymentsResult = {};
-                const breakdownsResult = {};
-
-                summary.forEach((userSummary) => {
-                    const account = String(userSummary.account).toLowerCase();
-
-                    // Card totals
-                    Object.entries(userSummary.creditCardTotals || {}).forEach(
-                        ([card, total]) => {
-                            const normalizedCard = String(card).toLowerCase();
-                            if (!paymentsResult[normalizedCard]) paymentsResult[normalizedCard] = {};
-                            paymentsResult[normalizedCard][account] = Number(total) || 0;
-                        }
-                    );
-
-                    // Category breakdowns
-                    Object.entries(userSummary.creditCardCategoryBreakdowns || {}).forEach(
-                        ([card, cats]) => {
-                            const normalizedCard = String(card).toLowerCase();
-                            if (!breakdownsResult[normalizedCard]) breakdownsResult[normalizedCard] = {};
-                            breakdownsResult[normalizedCard][account] = Object.entries(cats).map(
-                                ([category, amount]) => ({
-                                    category: String(category),
-                                    amount: Number(amount) || 0,
-                                    type: "Actual",
-                                })
-                            );
-                        }
-                    );
-                });
-
-                // Defensive: ensure all card/user keys exist, zero if missing
-                cards.forEach((card) => {
-                    paymentsResult[card] = paymentsResult[card] || {};
-                    breakdownsResult[card] = breakdownsResult[card] || {};
-                    users.forEach((user) => {
-                        if (typeof paymentsResult[card][user] !== "number")
-                            paymentsResult[card][user] = 0;
-                        if (!Array.isArray(breakdownsResult[card][user]))
-                            breakdownsResult[card][user] = [];
-                    });
-                });
-
-                logger.info("fetchData: Final payments result", paymentsResult);
-                logger.info("fetchData: Final breakdowns result", breakdownsResult);
-
-                setPayments(paymentsResult);
-                setBreakdowns(breakdownsResult);
-                setLoading(false);
-                setError(null);
-            } catch (err) {
-                logger.error("fetchData: Failed to fetch payment summary", err);
-                if (isMounted) {
-                    setPayments({});
-                    setBreakdowns({});
-                    setError(err);
-                    setLoading(false);
-                }
-            }
+        if (!statementPeriod) {
+            // nothing to show yet
+            setPayments({});
+            setBreakdowns({});
+            setLoading(false);
+            setError(null);
+            return;
         }
 
-        // Only fetch if we have a valid period
-        if (statementPeriod) {
-            fetchData(statementPeriod);
-        } else {
+        if (apiIsError) {
+            logger.error("usePaymentsData: payment summary query error", apiError);
+            setPayments({});
+            setBreakdowns({});
+            setError(apiError);
+            setLoading(false);
+            return;
+        }
+
+        if (apiLoading) {
             setLoading(true);
+            return;
         }
 
-        // Cleanup: mark as unmounted so late fetches can't update state
-        return () => {
-            isMounted = false;
-        };
-    }, [cards, users, statementPeriod]);
+        // apiData may be undefined if query disabled or not fetched; handle defensively
+        try {
+            const { payments: p, breakdowns: b } = computeSummaryFromApi(apiData, cards, users);
+            setPayments(p);
+            setBreakdowns(b);
+            setLoading(false);
+            setError(null);
+        } catch (err) {
+            logger.error("usePaymentsData: failed to compute summary from apiData", err, apiData);
+            setPayments({});
+            setBreakdowns({});
+            setError(err);
+            setLoading(false);
+        }
+    }, [apiData, apiLoading, apiIsError, apiError, statementPeriod, cards, users]);
 
-    logger.info("usePaymentsData: hook state", {
+    logger.info("usePaymentsData state", {
+        statementPeriod,
         cards,
         users,
-        payments,
-        breakdowns,
         loading,
         error,
-        statementPeriod,
+        paymentsCount: Object.keys(payments).length,
     });
 
     return { cards, users, payments, breakdowns, loading, error };
 }
+
+export default usePaymentsData;

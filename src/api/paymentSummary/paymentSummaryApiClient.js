@@ -1,19 +1,17 @@
 /**
- * Thin API client for the /payment-summary resource.
+ * PaymentSummaryApiClient - robust client for /payment-summary endpoints.
  *
  * - Extends ApiClient and delegates HTTP work to ApiClient.
- * - Api path is provided to ApiClient via the super() constructor (apiPath = 'api/payment-summary').
- *   This keeps all base URL handling inside ApiClient (process.env.BASE_URL).
- * - Methods supply only short postfixes ('') and query params. No baseURL or X-Transaction-ID handling here.
- * - Keep JSDoc, logger and validation per project conventions.
+ * - Uses the same endpoint-building strategy as BudgetTransactionApiClient so callers
+ *   don't need to worry whether ApiClient.baseURL already contains the resource suffix
+ *   (e.g. ".../api/payment-summary").
+ * - Default apiPath is 'api' (not 'api/payment-summary') so ApiClient._buildUrl
+ *   prefixes the apiPath consistently; resource('payment-summary') is used for calls.
  *
- * Example:
- *   this.get('') -> resolves to /api/payment-summary
- *
- * @module PaymentSummaryApiClient
+ * @module api/paymentSummary/paymentSummaryApiClient
  */
 
-import ApiClient from './ApiClient';
+import ApiClient from '../ApiClient';
 
 /**
  * Standardized logger for this module.
@@ -24,65 +22,82 @@ const logger = {
     error: (...args) => console.error('[PaymentSummaryApiClient]', ...args),
 };
 
-/**
- * PaymentSummaryApiClient - thin client for /payment-summary endpoints.
- */
 export default class PaymentSummaryApiClient extends ApiClient {
     /**
      * Create a PaymentSummaryApiClient instance.
      *
-     * Notes:
-     *  - Do NOT reference any base URLs here. ApiClient resolves baseURL from process.env.BASE_URL
-     *    when a baseURL is not explicitly passed in options.
-     *  - The apiPath defaults to 'api/payment-summary' so that methods only supply postfixes.
-     *
      * @param {Object} [options={}] - forwarded to ApiClient constructor (optional)
-     * @param {string} [options.baseURL] - optional override (rare; usually omitted)
+     * @param {string} [options.baseURL] - optional override for baseURL
      * @param {number} [options.timeout]
-     * @param {string} [options.apiPath] - optional override for the apiPath (defaults to 'api/payment-summary')
+     * @param {string} [options.apiPath] - optional override for apiPath (defaults to 'api')
      */
     constructor(options = {}) {
-        const apiPath = options.apiPath ?? 'api/payment-summary';
+        // IMPORTANT: default apiPath is 'api' (not 'api/payment-summary') so resource(...) works like budget client
+        const apiPath = options.apiPath ?? 'api';
         super({ ...options, apiPath });
-        logger.info('constructed', { apiPath });
+        logger.info('constructed', { apiPath, baseURL: this.baseURL });
     }
 
     /**
-     * Normalize a relative postfix into an endpoint string acceptable by ApiClient.
+     * Clean a relative path segment (remove leading/trailing slashes).
      *
-     * - Removes leading/trailing slashes to avoid duplicate slashes when ApiClient builds the final URL.
-     * - When empty string provided returns '' which causes ApiClient to use the configured apiPath alone.
-     *
-     * @param {string} [relative=''] - relative path segment under the configured apiPath
-     * @returns {string} cleaned relative path (no leading slash) or '' for root
+     * @param {string} [relative='']
+     * @returns {string}
      */
     buildPath(relative = '') {
         return String(relative || '').replace(/^\/+|\/+$/g, '');
     }
 
     /**
+     * Build the resource endpoint similar to BudgetTransactionApiClient strategy:
+     * - If baseURL already ends with '/api/payment-summary', call absolute base or base/rel
+     * - Otherwise return resource('payment-summary', relative) so ApiClient prefixes apiPath
+     *
+     * @param {string} [relative=''] - relative postfix under payment-summary resource
+     * @returns {string} endpoint to pass to ApiClient methods
+     */
+    _buildResourceEndpointForClient(relative = '') {
+        try {
+            const base = String(this.baseURL ?? '').replace(/\/+$/, '');
+            const relClean = String(relative ?? '').replace(/^\/+|\/+$/g, '');
+
+            // If base already points to the payment-summary resource root -> use absolute URLs
+            if (base.endsWith('/api/payment-summary')) {
+                if (!relClean) return base;
+                return `${base}/${relClean}`;
+            }
+
+            // Default: let ApiClient prefix apiPath -> use resource('payment-summary', rel)
+            return this.resource(relClean);
+        } catch (err) {
+            logger.error('_buildResourceEndpointForClient failed, falling back to resource()', err);
+            return this.resource(relative);
+        }
+    }
+
+    /**
+     * Return the resource endpoint path under apiPath that ApiClient understands.
+     *
+     * @param {string} [relative='']
+     * @returns {string}
+     */
+    resource(relative = '') {
+        return this.resourceEndpoint('payment-summary', relative);
+    }
+
+    /**
      * Fetch payment summary for one or more accounts for a given statement period.
-     *
-     * The backend expects:
-     *   - accounts: comma separated list
-     *   - statementPeriod: string
-     *
-     * ApiClient will attach X-Transaction-ID and default headers automatically.
      *
      * @async
      * @param {string|string[]} accounts - single account or array of accounts (required)
      * @param {string} statementPeriod - statement period identifier (required)
-     * @returns {Promise<Array<Object>>} array of PaymentSummaryResponse objects
-     * @throws {Error} when required params are missing or invalid
-     * @throws {Object} normalized ApiClient error when request fails
+     * @returns {Promise<Array<Object>>}
      */
     async getPaymentSummary(accounts, statementPeriod) {
         logger.info('getPaymentSummary called', { statementPeriod });
 
-        // Validate statementPeriod
         this.validateRequired(statementPeriod, 'statementPeriod', 'string');
 
-        // Normalize & validate accounts input
         let accountsCsv = '';
         if (Array.isArray(accounts)) {
             if (accounts.length === 0) {
@@ -90,7 +105,6 @@ export default class PaymentSummaryApiClient extends ApiClient {
             }
             accountsCsv = accounts.map((a) => String(a).trim()).filter(Boolean).join(',');
         } else {
-            // treat as string
             this.validateRequired(accounts, 'accounts', 'string');
             accountsCsv = String(accounts).trim();
             if (!accountsCsv) throw new Error('accounts cannot be empty');
@@ -101,7 +115,7 @@ export default class PaymentSummaryApiClient extends ApiClient {
             statementPeriod: String(statementPeriod),
         };
 
-        const path = this.buildPath('');
-        return this.get(path, params);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.get(endpoint, params);
     }
 }
