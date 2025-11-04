@@ -11,6 +11,9 @@
  *   instead of only invalidating broad list keys. This guarantees components that subscribe to
  *   account-scoped keys (and filters like statementPeriod) will refetch and update when a
  *   transaction is created/updated/deleted.
+ * - When budget transactions change (create/update/delete/upload) the paymentSummary query is
+ *   also invalidated so the payments UI refreshes immediately. This now uses the canonical
+ *   paymentSummaryQueryKeys.summaryKey(...) helper (the same key shape consumers use).
  * - Uses queryClient.getQueryData to probe cache when trying to avoid flashes.
  *
  * Conventions:
@@ -29,6 +32,7 @@ import {
     getCriticalityForCategory,
     getCategories,
     getDefaultPaymentMethodForAccount,
+    getAccounts,
 } from '../../../config/config.js';
 import {
     DEFAULT_CRITICALITY_OPTIONS,
@@ -40,6 +44,7 @@ import budgetApi from '../../../api/budgetTransaction/budgetTransaction';
 import projectedApi from '../../../api/projectedTransaction/projectedTransaction';
 import budgetQK from '../../../api/budgetTransaction/budgetTransactionQueryKeys';
 import projectedQK from '../../../api/projectedTransaction/projectedTransactionQueryKeys';
+import paymentSummaryQK from '../../../api/paymentSummary/paymentSummaryQueryKeys';
 
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -156,6 +161,19 @@ export function useTransactionTable(filters = {}) {
     const queryClient = useQueryClient();
 
     const { statementPeriod, isLoaded: isStatementPeriodLoaded } = useStatementPeriodContext();
+
+    // --- Derived canonical accounts used by the payments summary hook elsewhere ---
+    const canonicalPaymentAccounts = useMemo(() => {
+        try {
+            // Match usePaymentsData's user list: only include known accounts (example: josh, anna)
+            return getAccounts()
+                .filter((u) => ['josh', 'anna'].includes(String(u).toLowerCase()))
+                .map((u) => String(u).toLowerCase());
+        } catch (err) {
+            logger.error('failed to compute canonicalPaymentAccounts', err);
+            return [];
+        }
+    }, []);
 
     // --- Table state ---
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -453,6 +471,21 @@ export function useTransactionTable(filters = {}) {
                     } catch (err) {
                         logger.error('invalidate after budget delete failed', err);
                     }
+
+                    // ALSO invalidate payment summary for this statementPeriod (so payments UI refreshes)
+                    try {
+                        // Invalidate the canonical payments key used by payments screen (all known accounts)
+                        const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
+                        queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
+
+                        // Optionally invalidate a per-account summary if filter.account present (mirror possible callers)
+                        if (filters?.account) {
+                            const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
+                            queryClient.invalidateQueries({ queryKey: perAccountKey });
+                        }
+                    } catch (err) {
+                        logger.error('invalidate paymentSummary after budget delete failed', err);
+                    }
                 }
 
                 if (projectionIds.length > 0) {
@@ -467,7 +500,7 @@ export function useTransactionTable(filters = {}) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, localTx, projectedTx, statementPeriod, filters, queryClient]
+        [selectedIds, localTx, projectedTx, statementPeriod, filters, queryClient, canonicalPaymentAccounts]
     );
 
     // --- File upload (CSV import) ---
@@ -484,13 +517,21 @@ export function useTransactionTable(filters = {}) {
                 } catch (e) {
                     logger.error('invalidate after upload failed', e);
                 }
+
+                // ALSO invalidate payment summary for this period so payments UI updates
+                try {
+                    const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
+                    queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
+                } catch (e) {
+                    logger.error('invalidate paymentSummary after upload failed', e);
+                }
             } catch (err) {
                 logger.error('Upload failed', err);
             } finally {
                 ev.target.value = '';
             }
         },
-        [statementPeriod, filters?.account, queryClient]
+        [statementPeriod, filters?.account, queryClient, canonicalPaymentAccounts]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
@@ -646,6 +687,19 @@ export function useTransactionTable(filters = {}) {
                             logger.error('invalidate budget queries failed', e);
                         }
 
+                        // ALSO invalidate payment summary for this period so payments UI updates
+                        try {
+                            const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
+                            queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
+
+                            if (filters?.account) {
+                                const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
+                                queryClient.invalidateQueries({ queryKey: perAccountKey });
+                            }
+                        } catch (err) {
+                            logger.error('invalidate paymentSummary after create failed', err);
+                        }
+
                         if (addAnother) {
                             const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
                             const newTx = {
@@ -685,6 +739,19 @@ export function useTransactionTable(filters = {}) {
                         } catch (e) {
                             logger.error('invalidate budget queries after update failed', e);
                         }
+
+                        // ALSO invalidate payment summary for this period so payments UI updates
+                        try {
+                            const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
+                            queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
+
+                            if (filters?.account) {
+                                const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
+                                queryClient.invalidateQueries({ queryKey: perAccountKey });
+                            }
+                        } catch (err) {
+                            logger.error('invalidate paymentSummary after update failed', err);
+                        }
                     }
                 }
             } catch (err) {
@@ -711,6 +778,7 @@ export function useTransactionTable(filters = {}) {
             refetchProjected,
             serverTx,
             queryClient,
+            canonicalPaymentAccounts,
         ]
     );
 
