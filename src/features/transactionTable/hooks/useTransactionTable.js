@@ -48,6 +48,7 @@ import projectedApi from '../../../api/projectedTransaction/projectedTransaction
 import budgetQK from '../../../api/budgetTransaction/budgetTransactionQueryKeys';
 import projectedQK from '../../../api/projectedTransaction/projectedTransactionQueryKeys';
 import paymentSummaryQK from '../../../api/paymentSummary/paymentSummaryQueryKeys';
+import { invalidateAccountAndMembers as invalidateAccountAndMembersHelper } from './transactionInvalidation';
 
 const logger = {
     info: (...args) => console.log('[useTransactionTable]', ...args),
@@ -217,87 +218,16 @@ export function useTransactionTable(filters = {}) {
      *
      * - When a change happens on 'joint' we need to also invalidate member accounts (user1, user2 etc.)
      *   because the server-side processing may split/join transactions across accounts.
-     * - This helper invalidates budget + projected + paymentSummary query keys for the provided
-     *   account or, when account === 'joint', for each member account (and joint itself).
+     * - This wrapper delegates to the centralized transactionInvalidation helper which performs the
+     *   actual queryClient.invalidateQueries calls.
      *
      * @param {string|null|undefined} acct - account identifier (may be 'joint' or a member)
      */
     const invalidateAccountAndMembers = useCallback((acct) => {
         try {
-            const norm = acct == null ? null : String(acct).trim();
-            if (!norm) {
-                // nothing specific to invalidate; invalidate list-level keys
-                queryClient.invalidateQueries({ queryKey: budgetQK.invalidateListsKey() });
-                queryClient.invalidateQueries({ queryKey: projectedQK.invalidateListsKey() });
-                return;
-            }
-
-            const lower = String(norm).toLowerCase();
-
-            if (lower === 'joint') {
-                // Invalidate joint key
-                try {
-                    const jointKey = budgetQK.accountListKey('joint', { statementPeriod });
-                    queryClient.invalidateQueries({ queryKey: jointKey });
-                } catch (e) {
-                    logger.error('invalidate joint account key failed', e);
-                }
-
-                // Also invalidate each member account key so user compact tables refresh after a joint create that gets split
-                try {
-                    const members = getAccounts().map((a) => String(a).toLowerCase()).filter((a) => a && a !== 'joint');
-                    members.forEach((m) => {
-                        const acctKey = budgetQK.accountListKey(String(m), { statementPeriod });
-                        queryClient.invalidateQueries({ queryKey: acctKey });
-                        const projKey = projectedQK.accountListKey(String(m), { statementPeriod });
-                        queryClient.invalidateQueries({ queryKey: projKey });
-
-                        // payment summary per-member
-                        try {
-                            const perAccountKey = paymentSummaryQK.summaryKey([String(m)], statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: perAccountKey });
-                        } catch (psErr) {
-                            logger.error('invalidate per-account paymentSummary failed for', m, psErr);
-                        }
-                    });
-                } catch (err) {
-                    logger.error('invalidate member accounts after joint change failed', err);
-                }
-
-                // Also invalidate aggregate payment summary used by payments page
-                try {
-                    const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
-                    queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
-                } catch (e) {
-                    logger.error('invalidate aggregate payment summary failed', e);
-                }
-
-                return;
-            }
-
-            // Normal single-account invalidation
-            try {
-                const acctKey = budgetQK.accountListKey(String(norm), { statementPeriod });
-                queryClient.invalidateQueries({ queryKey: acctKey });
-            } catch (e) {
-                logger.error('invalidate budget account key failed', e);
-            }
-
-            try {
-                const projKey = projectedQK.accountListKey(String(norm), { statementPeriod });
-                queryClient.invalidateQueries({ queryKey: projKey });
-            } catch (e) {
-                logger.error('invalidate projected account key failed', e);
-            }
-
-            try {
-                const perAccountKey = paymentSummaryQK.summaryKey([String(norm)], statementPeriod);
-                queryClient.invalidateQueries({ queryKey: perAccountKey });
-            } catch (e) {
-                logger.error('invalidate paymentSummary per-account failed', e);
-            }
+            invalidateAccountAndMembersHelper(queryClient, acct, statementPeriod, canonicalPaymentAccounts);
         } catch (err) {
-            logger.error('invalidateAccountAndMembers failed', err, acct);
+            logger.error('invalidateAccountAndMembers wrapper failed', err, acct);
         }
     }, [queryClient, statementPeriod, canonicalPaymentAccounts]);
 
