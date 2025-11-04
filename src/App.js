@@ -27,7 +27,7 @@ import User2Screen from "./screens/User2Screen/User2Screen";
 import TransactionScreen from "./screens/TransactionScreen/TransactionScreen";
 import { StatementPeriodProvider } from './context/StatementPeriodProvider';
 import PaymentScreen from "./screens/PaymentsScreen/PaymentScreen";
-import { queryClient } from './lib/queryClient';
+import { queryClient } from './config/queryClient';
 
 /**
  * Standardized logger for App.
