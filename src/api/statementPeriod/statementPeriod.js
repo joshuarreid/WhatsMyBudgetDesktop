@@ -2,12 +2,13 @@
  * Thin fetcher module for StatementPeriod endpoints.
  *
  * - Responsible for creating its own StatementPeriodApiClient instance.
- * - Consumers simply call the exported functions (no baseURL, apiPath or X-Transaction-ID references here).
+ * - Consumers call the exported functions (no baseURL/apiPath/X-Transaction-ID here).
  * - ApiClient is responsible for resolving process.env.BASE_URL and attaching X-Transaction-ID header.
  *
- * JSDoc uses "statementPeriodId" to avoid confusion with the X-Transaction-ID header.
+ * This module follows the same pattern as budgetTransaction.js: single client instance,
+ * thin wrapper functions delegating to the client, robust logging and JSDoc.
  *
- * @module statementPeriod
+ * @module api/statementPeriod/statementPeriod
  */
 
 import StatementPeriodApiClient from './statementPeriodApiClient';
@@ -23,7 +24,7 @@ const logger = {
 
 /**
  * Internal API client instance managed by this module.
- * Constructed without an explicit baseURL so ApiClient will resolve process.env.BASE_URL.
+ * Constructed without explicit baseURL so ApiClient will resolve process.env.BASE_URL.
  *
  * @type {StatementPeriodApiClient}
  * @private
@@ -42,7 +43,6 @@ export async function fetchAllStatementPeriods() {
     logger.info('fetchAllStatementPeriods called');
     try {
         const response = await apiClient.getAllStatementPeriods();
-        // tolerate different response shapes
         return response?.statementPeriods || response;
     } catch (err) {
         logger.error('fetchAllStatementPeriods failed', err);
@@ -52,9 +52,6 @@ export async function fetchAllStatementPeriods() {
 
 /**
  * Fetch a statement period by id.
- *
- * NOTE: the identifier parameter is a statementPeriodId (the resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
  *
  * @async
  * @function fetchStatementPeriodById
@@ -94,9 +91,6 @@ export async function createStatementPeriod(payload) {
 /**
  * Update an existing statement period by id.
  *
- * NOTE: the identifier parameter is a statementPeriodId (the resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
- *
  * @async
  * @function updateStatementPeriod
  * @param {string|number} statementPeriodId - StatementPeriod resource identifier
@@ -116,9 +110,6 @@ export async function updateStatementPeriod(statementPeriodId, payload) {
 
 /**
  * Delete a statement period by id.
- *
- * NOTE: the identifier parameter is a statementPeriodId (the resource id). This is NOT the
- *       X-Transaction-ID header (which is generated/managed by ApiClient).
  *
  * @async
  * @function deleteStatementPeriod

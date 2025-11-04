@@ -1,16 +1,22 @@
 /**
  * useStatementPeriodDropdown
  * - Controlled dropdown hook for statement periods.
- * - Now respects environment-configured prev/forward defaults:
- *   REACT_APP_STATEMENT_PERIOD_PREV_MONTHS and REACT_APP_STATEMENT_PERIOD_FORWARD_MONTHS
- * - Uses useStatementPeriodQuery to fetch server-backed statement periods and falls back
+ * - Respects environment-configured prev/forward defaults.
+ * - Uses the statement-period query hook (renamed to useStatementPeriodsQuery) and falls back
  *   to generateOptions when server data is absent or errors.
  *
  * @module components/statementPeriodDropdown/useStatementPeriodDropdown
  */
 
 import { useMemo, useRef, useState, useCallback } from 'react';
-import useStatementPeriodQuery from '../../hooks/useStatementPeriodQuery';
+/**
+ * NOTE:
+ * The application now exposes the statement-period query hook as a named export
+ * `useStatementPeriodsQuery`. To remain backwards compatible with existing callers
+ * that expect `useStatementPeriodQuery` as a function import, we alias the named
+ * export to the original name here.
+ */
+import { useStatementPeriodsQuery as useStatementPeriodQuery } from '../../hooks/useStatementPeriodQuery';
 import { generateOptions, getCurrentOption } from '../../services/StatementPeriodService';
 
 /**
@@ -61,8 +67,13 @@ export default function useStatementPeriodDropdown({ prev, forward, anchor = new
     const effectiveForward = typeof forward === 'number' ? forward : envForward;
 
     // Server-backed normalized options via hook (respects the effective prev/forward)
-    const { options: serverOptions, defaultOpt: serverDefault, isLoading: serverLoading, isError } =
-        useStatementPeriodQuery({ prev: effectivePrev, forward: effectiveForward, anchor });
+    // We alias the named export to maintain the original local name used by callers.
+    const {
+        options: serverOptions,
+        defaultOpt: serverDefault,
+        isLoading: serverLoading,
+        isError,
+    } = useStatementPeriodQuery({ prev: effectivePrev, forward: effectiveForward, anchor });
 
     // Local fallback (identical to prior behavior)
     const fallbackOptions = useMemo(() => generateOptions({ anchor, prev: effectivePrev, forward: effectiveForward }), [anchor, effectivePrev, effectiveForward]);

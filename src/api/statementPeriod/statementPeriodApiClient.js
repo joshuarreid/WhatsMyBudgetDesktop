@@ -1,18 +1,11 @@
 /**
- * Thin API client for the /statements resource (StatementPeriod).
+ * StatementPeriodApiClient - thin client for /statements endpoints.
  *
- * - Extends ApiClient and delegates HTTP work to ApiClient.
- * - Api path is provided to ApiClient via the super() constructor (apiPath = 'api/statements').
- *   This keeps all base URL handling inside ApiClient (process.env.BASE_URL).
- * - Methods supply only short postfixes ('', id) so they don't build full URLs.
- * - No X-Transaction-ID parameters anywhere — ApiClient generates & attaches the header.
- * - Keeps JSDoc, logger and validation per project conventions.
+ * - Mirrors BudgetTransactionApiClient endpoint-building strategy so callers don't need
+ *   to worry whether ApiClient.baseURL already contains the resource suffix.
+ * - Default apiPath is 'api' so resource('statements') resolves to '/api/statements'.
  *
- * Example:
- *   this.get('')   -> resolves to /api/statements
- *   this.get('123')-> resolves to /api/statements/123
- *
- * @module StatementPeriodApiClient
+ * @module api/statementPeriod/statementPeriodApiClient
  */
 
 import ApiClient from '../ApiClient';
@@ -26,53 +19,81 @@ const logger = {
     error: (...args) => console.error('[StatementPeriodApiClient]', ...args),
 };
 
-/**
- * StatementPeriodApiClient - thin client for /statements endpoints.
- */
 export default class StatementPeriodApiClient extends ApiClient {
     /**
      * Create a StatementPeriodApiClient instance.
      *
-     * Notes:
-     *  - Do NOT reference any base URLs here. ApiClient resolves baseURL from process.env.BASE_URL
-     *    when a baseURL is not explicitly passed in options.
-     *  - The apiPath defaults to 'api/statements' so that methods only supply postfixes.
-     *
      * @param {Object} [options={}] - forwarded to ApiClient constructor (optional)
-     * @param {string} [options.baseURL] - optional override (rare; usually omitted)
+     * @param {string} [options.baseURL] - optional override for baseURL
      * @param {number} [options.timeout]
-     * @param {string} [options.apiPath] - optional override for the apiPath (defaults to 'api/statements')
+     * @param {string} [options.apiPath] - optional override for apiPath (defaults to 'api')
      */
     constructor(options = {}) {
-        const apiPath = options.apiPath ?? 'api/statements';
+        // default to 'api' so resource('statements') becomes '/api/statements'
+        const apiPath = options.apiPath ?? 'api';
         super({ ...options, apiPath });
-        logger.info('constructed', { apiPath });
+        logger.info('constructed', { apiPath, baseURL: this.baseURL });
     }
 
     /**
-     * Normalize a relative postfix into an endpoint string acceptable by ApiClient.
+     * Clean a relative path segment (remove leading/trailing slashes).
      *
-     * - Removes leading/trailing slashes to avoid duplicate slashes when ApiClient builds the final URL.
-     * - When empty string provided returns '' which causes ApiClient to use the configured apiPath alone.
-     *
-     * @param {string} [relative=''] - relative path segment under the configured apiPath
-     * @returns {string} cleaned relative path (no leading slash) or '' for root
+     * @param {string} [relative='']
+     * @returns {string}
      */
     buildPath(relative = '') {
         return String(relative || '').replace(/^\/+|\/+$/g, '');
     }
 
     /**
+     * Build endpoint that works whether baseURL already includes '/api/statements' or not.
+     *
+     * Strategy:
+     * - If ApiClient.baseURL already ends with '/api/statements', return absolute base or base/rel
+     * - Otherwise return resource('statements', rel) so ApiClient prefixes apiPath
+     *
+     * @param {string} [relative='']
+     * @returns {string}
+     */
+    _buildResourceEndpointForClient(relative = '') {
+        try {
+            const base = String(this.baseURL ?? '').replace(/\/+$/, '');
+            const relClean = String(relative ?? '').replace(/^\/+|\/+$/g, '');
+
+            if (base.endsWith('/api/statements')) {
+                if (!relClean) return base;
+                return `${base}/${relClean}`;
+            }
+
+            // Default: let ApiClient prefix apiPath -> use resource('statements', rel)
+            return this.resource(relClean);
+        } catch (err) {
+            logger.error('_buildResourceEndpointForClient failed', err);
+            return this.resource(relative);
+        }
+    }
+
+    /**
+     * Return the resource endpoint path under apiPath that ApiClient understands.
+     *
+     * @param {string} [relative='']
+     * @returns {string}
+     */
+    resource(relative = '') {
+        return this.resourceEndpoint('statements', relative);
+    }
+
+    /**
      * Fetch all statement periods.
      *
      * @async
-     * @returns {Promise<Array<Object>>} list of StatementPeriod
-     * @throws {Object} normalized ApiClient error
+     * @returns {Promise<Array<Object>>} list of StatementPeriod objects
+     * @throws {Object} normalized ApiClient error when request fails
      */
     async getAllStatementPeriods() {
         logger.info('getAllStatementPeriods called');
-        const path = this.buildPath('');
-        return this.get(path);
+        const endpoint = this._buildResourceEndpointForClient('');
+        return this.get(endpoint);
     }
 
     /**
@@ -91,7 +112,7 @@ export default class StatementPeriodApiClient extends ApiClient {
         logger.info('getStatementPeriodById called', { statementPeriodId });
         this.validateId(statementPeriodId, 'StatementPeriod');
         const safeId = encodeURIComponent(String(statementPeriodId));
-        const path = this.buildPath(safeId);
+        const path = this._buildResourceEndpointForClient(this.buildPath(safeId));
         return this.get(path);
     }
 
@@ -107,7 +128,7 @@ export default class StatementPeriodApiClient extends ApiClient {
     async createStatementPeriod(statementPeriod) {
         logger.info('createStatementPeriod called');
         this.validateRequired(statementPeriod, 'statementPeriod', 'object');
-        const path = this.buildPath('');
+        const path = this._buildResourceEndpointForClient(this.buildPath(''));
         return this.post(path, statementPeriod);
     }
 
@@ -128,7 +149,7 @@ export default class StatementPeriodApiClient extends ApiClient {
         this.validateId(statementPeriodId, 'StatementPeriod');
         this.validateRequired(statementPeriod, 'statementPeriod', 'object');
         const safeId = encodeURIComponent(String(statementPeriodId));
-        const path = this.buildPath(safeId);
+        const path = this._buildResourceEndpointForClient(this.buildPath(safeId));
         return this.put(path, statementPeriod);
     }
 
@@ -147,7 +168,7 @@ export default class StatementPeriodApiClient extends ApiClient {
         logger.info('deleteStatementPeriod called', { statementPeriodId });
         this.validateId(statementPeriodId, 'StatementPeriod');
         const safeId = encodeURIComponent(String(statementPeriodId));
-        const path = this.buildPath(safeId);
+        const path = this._buildResourceEndpointForClient(this.buildPath(safeId));
         return this.delete(path);
     }
 
@@ -155,12 +176,12 @@ export default class StatementPeriodApiClient extends ApiClient {
      * Delete all statement periods.
      *
      * @async
-     * @returns {Promise<Object>} { deletedCount }
+     * @returns {Promise<Object>} { deletedCount } or server response
      * @throws {Object} normalized ApiClient error
      */
     async deleteAllStatementPeriods() {
         logger.info('deleteAllStatementPeriods called');
-        const path = this.buildPath('');
+        const path = this._buildResourceEndpointForClient(this.buildPath(''));
         return this.delete(path);
     }
 }
