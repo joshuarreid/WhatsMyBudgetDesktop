@@ -1,8 +1,8 @@
 /**
  * useTransactionTable
  *
- * - Thin composition hook that wires together queries, local optimistic state, mutations and invalidation.
- * - Local UI state has been moved into useTransactionLocalState for readability and testability.
+ * - Composition hook that wires together: read queries, local UI state, and mutation handlers.
+ * - Mutation logic has been moved to useTransactionMutations for clarity and testability.
  *
  * @module hooks/useTransactionTable
  */
@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useStatementPeriodContext } from '../../../context/StatementPeriodProvider';
 import useTransactionQueries from './useTransactionQueries';
 import useTransactionLocalState from './useTransactionLocalState';
+import useTransactionMutations from './useTransactionMutations';
 import {
     get as getConfig,
     getCriticalityForCategory,
@@ -25,11 +26,6 @@ import {
     CONFIG_KEYS,
 } from '../utils/constants';
 import useTransactionToolbar from './useTransactionToolbar';
-import budgetApi from '../../../api/budgetTransaction/budgetTransaction';
-import projectedApi from '../../../api/projectedTransaction/projectedTransaction';
-import budgetQK from '../../../api/budgetTransaction/budgetTransactionQueryKeys';
-import projectedQK from '../../../api/projectedTransaction/projectedTransactionQueryKeys';
-import paymentSummaryQK from '../../../api/paymentSummary/paymentSummaryQueryKeys';
 import { invalidateAccountAndMembers as invalidateAccountAndMembersHelper } from './transactionInvalidation';
 
 const logger = {
@@ -76,68 +72,6 @@ const CATEGORY_OPTIONS = (() => {
 const IS_CATEGORY_DROPDOWN = Array.isArray(CATEGORY_OPTIONS) && CATEGORY_OPTIONS.length > 0;
 
 /**
- * Helper: safely build an account-scoped budget query key for invalidation/lookup.
- *
- * @param {string|undefined} account
- * @param {string|undefined} statementPeriod
- * @returns {Array<any>}
- */
-function buildBudgetAccountKey(account, statementPeriod) {
-    try {
-        if (!account) return budgetQK.listKey(statementPeriod ? { statementPeriod } : null);
-        const filters = statementPeriod ? { statementPeriod } : null;
-        return budgetQK.accountListKey(String(account), filters);
-    } catch (err) {
-        logger.error('buildBudgetAccountKey failed', err);
-        return budgetQK.listKey(statementPeriod ? { statementPeriod } : null);
-    }
-}
-
-/**
- * Helper: build projected account key
- *
- * @param {string|undefined} account
- * @param {string|undefined} statementPeriod
- */
-function buildProjectedAccountKey(account, statementPeriod) {
-    try {
-        if (!account) return projectedQK.listKey(statementPeriod ? { statementPeriod } : null);
-        const filters = statementPeriod ? { statementPeriod } : null;
-        return projectedQK.accountListKey(String(account), filters);
-    } catch (err) {
-        logger.error('buildProjectedAccountKey failed', err);
-        return projectedQK.listKey(statementPeriod ? { statementPeriod } : null);
-    }
-}
-
-/**
- * Flattens AccountProjectedTransactionList into an array usable by UI.
- *
- * @param {Object} accountList
- * @returns {Array}
- */
-function flattenAccountProjectedList(accountList) {
-    try {
-        const personal = accountList?.personalTransactions?.transactions || [];
-        const joint = accountList?.jointTransactions?.transactions || [];
-        return [...personal, ...joint];
-    } catch (err) {
-        logger.error('flattenAccountProjectedList failed', err);
-        return [];
-    }
-}
-
-/**
- * Annotates array with __isProjected: true for UI
- * @param {Array} arr
- * @returns {Array}
- */
-function annotateProjection(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr.map((item) => ({ ...(item || {}), __isProjected: true }));
-}
-
-/**
  * useTransactionTable
  *
  * @param {Object} filters - initial filter shape passed from component (may include account, category, etc.)
@@ -145,7 +79,6 @@ function annotateProjection(arr) {
  */
 export function useTransactionTable(filters = {}) {
     const queryClient = useQueryClient();
-
     const { statementPeriod, isLoaded: isStatementPeriodLoaded } = useStatementPeriodContext();
 
     // --- Derived canonical accounts used by the payments summary hook elsewhere ---
@@ -220,6 +153,24 @@ export function useTransactionTable(filters = {}) {
         }
     }, [queryClient, statementPeriod, canonicalPaymentAccounts]);
 
+    // --- Mutation handlers (moved to useTransactionMutations) ---
+    const { handleSaveRow, handleDeleteSelected, handleFileChange } = useTransactionMutations({
+        queryClient,
+        filters,
+        statementPeriod,
+        canonicalPaymentAccounts,
+        invalidateAccountAndMembers,
+        setLocalTx,
+        setSaveErrors,
+        setSavingIds,
+        setEditing,
+        makeTempId,
+        budgetResult,
+        refetchProjected,
+        localTx,
+        projectedTx,
+    });
+
     /**
      * Clear transactions immediately when statementPeriod changes to avoid stale flashes.
      * Also try to populate from react-query cache immediately to prevent flashing.
@@ -233,18 +184,35 @@ export function useTransactionTable(filters = {}) {
         }
 
         // attempt to populate from cache immediately for better UX (avoid flash)
-        const budgetKey = buildBudgetAccountKey(filters?.account, statementPeriod);
-        const projKey = buildProjectedAccountKey(filters?.account, statementPeriod);
+        const budgetQK = (() => {
+            try {
+                const budgetQKMod = require('../../../api/budgetTransaction/budgetTransactionQueryKeys').default;
+                return budgetQKMod;
+            } catch {
+                return null;
+            }
+        })();
 
-        const cachedBudget = queryClient.getQueryData(budgetKey);
-        const cachedProjected = queryClient.getQueryData(projKey);
+        const projectedQK = (() => {
+            try {
+                const projectedQKMod = require('../../../api/projectedTransaction/projectedTransactionQueryKeys').default;
+                return projectedQKMod;
+            } catch {
+                return null;
+            }
+        })();
+
+        const budgetKey = budgetQK ? (filters?.account ? budgetQK.accountListKey(String(filters.account), { statementPeriod }) : budgetQK.listKey(statementPeriod ? { statementPeriod } : null)) : null;
+        const projKey = projectedQK ? (filters?.account ? projectedQK.accountListKey(String(filters.account), { statementPeriod }) : projectedQK.listKey(statementPeriod ? { statementPeriod } : null)) : null;
+
+        const cachedBudget = budgetKey ? queryClient.getQueryData(budgetKey) : null;
+        const cachedProjected = projKey ? queryClient.getQueryData(projKey) : null;
 
         if (cachedBudget || cachedProjected) {
             // normalize cached shapes to arrays
             let cachedServerArr = [];
             try {
                 if (cachedBudget) {
-                    // budget hook normalizes responses in various shapes; attempt to extract
                     const personal = cachedBudget.personalTransactions?.transactions ?? cachedBudget.personalTransactions ?? [];
                     const joint = cachedBudget.jointTransactions?.transactions ?? cachedBudget.jointTransactions ?? [];
                     if (Array.isArray(personal) || Array.isArray(joint)) {
@@ -259,15 +227,24 @@ export function useTransactionTable(filters = {}) {
                 logger.error('extracting cachedBudget failed', e);
             }
 
-            const cachedProjArr = cachedProjected ? flattenAccountProjectedList(cachedProjected) : [];
+            const cachedProjArr = cachedProjected ? (() => {
+                try {
+                    const personal = cachedProjected.personalTransactions?.transactions || [];
+                    const joint = cachedProjected.jointTransactions?.transactions || [];
+                    return [...personal, ...joint];
+                } catch (err) {
+                    logger.error('flattenAccountProjectedList failed', err);
+                    return [];
+                }
+            })() : [];
 
-            const serverSorted = cachedServerArr.sort((a, b) => {
+            const serverSorted = (cachedServerArr || []).sort((a, b) => {
                 const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
                 const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
                 return db - da;
             });
 
-            const projSorted = cachedProjArr.map((t) => ({ ...t, __isProjected: true })).sort((a, b) => {
+            const projSorted = (cachedProjArr || []).map((t) => ({ ...t, __isProjected: true })).sort((a, b) => {
                 const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
                 const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
                 return db - da;
@@ -316,181 +293,6 @@ export function useTransactionTable(filters = {}) {
         setLocalTx,
     ]);
 
-    // --- Save row (create or update) ---
-    const validateForCreate = useCallback((tx) => {
-        const errors = [];
-        if (!tx.name || String(tx.name).trim() === '') errors.push('Name is required');
-        if (tx.amount == null || Number.isNaN(Number(tx.amount))) errors.push('Amount must be a number');
-        if (tx.criticality != null && String(tx.criticality).trim() !== '') {
-            const val = String(tx.criticality).trim();
-            const match = CRITICALITY_OPTIONS.find((o) => o.toLowerCase() === val.toLowerCase());
-            if (!match) {
-                errors.push(`Criticality must be one of: ${CRITICALITY_OPTIONS.join(', ')}`);
-            }
-        }
-        if (IS_CATEGORY_DROPDOWN) {
-            const val = tx.category == null ? '' : String(tx.category).trim();
-            if (val === '') {
-                errors.push('Category is required');
-            } else {
-                const matched = CATEGORY_OPTIONS.find((c) => c === val);
-                if (!matched) {
-                    errors.push(`Category must be one of: ${CATEGORY_OPTIONS.join(', ')}`);
-                }
-            }
-        }
-        return errors;
-    }, []);
-
-    const stripClientFields = useCallback((tx) => {
-        const copy = { ...tx };
-        delete copy.id;
-        delete copy.__isNew;
-        delete copy.__isProjected;
-        return copy;
-    }, []);
-
-    const handleSaveRow = useCallback(
-        async (id, updatedFields = {}, addAnother = false) => {
-            let txToPersist = null;
-            setLocalTx((prev) =>
-                prev.map((t) => {
-                    if (t.id !== id) return t;
-                    const updated = { ...t, ...updatedFields };
-                    txToPersist = updated;
-                    return updated;
-                })
-            );
-            setEditing(null);
-            if (!txToPersist) {
-                logger.error('handleSaveRow: transaction not found locally', { id, updatedFields });
-                return;
-            }
-
-            setSaveErrors((prev) => {
-                if (!prev[id]) return prev;
-                const copy = { ...prev };
-                delete copy[id];
-                return copy;
-            });
-
-            if (statementPeriod) {
-                txToPersist = { ...txToPersist, statementPeriod };
-            }
-
-            const isNew = String(id).startsWith(TEMP_ID_PREFIX) || txToPersist.__isNew;
-            if (isNew) {
-                const validationErrors = validateForCreate(txToPersist);
-                if (validationErrors.length > 0) {
-                    setSaveErrors((prev) => ({ ...prev, [id]: validationErrors.join('. ') }));
-                    return;
-                }
-            }
-
-            setSavingIds((prev) => {
-                const copy = new Set(prev);
-                copy.add(id);
-                return copy;
-            });
-
-            try {
-                if (isNew) {
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
-
-                    if (txToPersist.__isProjected) {
-                        const created = await projectedApi.createProjectedTransaction(payload);
-                        const createdWithFlag = { ...created, __isProjected: true };
-                        setLocalTx((prev) => prev.map((t) => (t.id === id ? createdWithFlag : t)));
-
-                        // invalidate keys for projected created item (handle joint -> member split case via helper)
-                        try {
-                            invalidateAccountAndMembers(created.account ?? payload.account ?? filters?.account);
-                        } catch (err) {
-                            logger.error('invalidate projected after create failed', err);
-                        }
-                    } else {
-                        const created = await budgetApi.createBudgetTransaction(payload);
-                        setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
-
-                        // Invalidate canonical keys for the created account, or if created in 'joint' invalidate members as well.
-                        try {
-                            const acctToInvalidate = created.account ?? payload.account ?? filters?.account;
-                            invalidateAccountAndMembers(acctToInvalidate);
-                        } catch (e) {
-                            logger.error('invalidate budget queries failed', e);
-                        }
-
-                        if (addAnother) {
-                            const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
-                            const newTx = {
-                                id: makeTempId(),
-                                name: '',
-                                amount: 0,
-                                category: '',
-                                criticality: '',
-                                transactionDate: new Date().toISOString(),
-                                account: filters?.account || '',
-                                paymentMethod: defaultPM,
-                                memo: '',
-                                __isNew: true,
-                                statementPeriod,
-                            };
-                            setLocalTx((prev) => [newTx, ...(prev || [])]);
-                            setEditing({ id: newTx.id, mode: 'row' });
-                        }
-                    }
-                } else {
-                    const payload = stripClientFields({ ...txToPersist, statementPeriod });
-
-                    if (txToPersist.__isProjected) {
-                        await projectedApi.updateProjectedTransaction(id, payload);
-                        try {
-                            invalidateAccountAndMembers(filters?.account ?? payload.account);
-                        } catch (err) {
-                            logger.error('invalidate projected after update failed', err);
-                        }
-                    } else {
-                        await budgetApi.updateBudgetTransaction(id, payload);
-                        try {
-                            invalidateAccountAndMembers(payload.account ?? filters?.account);
-                        } catch (e) {
-                            logger.error('invalidate budget queries after update failed', e);
-                        }
-                    }
-                }
-            } catch (err) {
-                logger.error('handleSaveRow: persist failed', err);
-                setSaveErrors((prev) => ({ ...prev, [id]: err.message || String(err) }));
-                if (!isNew) {
-                    try { await budgetResult.refetch(); } catch (fetchErr) { logger.error('fetchTransactions after failed persist also failed', fetchErr); }
-                }
-            } finally {
-                setSavingIds((prev) => {
-                    const copy = new Set(prev);
-                    copy.delete(id);
-                    return copy;
-                });
-            }
-        },
-        [
-            makeTempId,
-            budgetResult,
-            validateForCreate,
-            filters,
-            stripClientFields,
-            statementPeriod,
-            refetchProjected,
-            serverTx,
-            queryClient,
-            canonicalPaymentAccounts,
-            invalidateAccountAndMembers,
-            setLocalTx,
-            setEditing,
-            setSaveErrors,
-            setSavingIds,
-        ]
-    );
-
     const handleSaveEdit = useCallback(
         async (id, field, value) => {
             const patch = {};
@@ -502,103 +304,12 @@ export function useTransactionTable(filters = {}) {
         [handleSaveRow]
     );
 
-    /**
-     * handleDeleteSelected
-     * - Copy of previous delete flow kept here but using local state from the local hook.
-     */
-    const handleDeleteSelected = useCallback(
-        async () => {
-            if (selectedIds.size === 0) return;
-            const ids = Array.from(selectedIds);
-            const localOnly = ids.filter((id) => String(id).startsWith(TEMP_ID_PREFIX));
-            const toDeleteFromAPI = ids.filter((id) => !String(id).startsWith(TEMP_ID_PREFIX));
-            if (localOnly.length) {
-                setLocalTx((prev) => prev.filter((t) => !localOnly.includes(t.id)));
-                setSelectedIds((prev) => {
-                    const copy = new Set(prev);
-                    localOnly.forEach((id) => copy.delete(id));
-                    return copy;
-                });
-            }
-            if (toDeleteFromAPI.length === 0) return;
-
-            try {
-                const budgetIds = [];
-                const projectionIds = [];
-                toDeleteFromAPI.forEach((id) => {
-                    const localItem = (localTx || []).find((t) => String(t.id) === String(id));
-                    const isProjection = localItem?.__isProjected === true || (Array.isArray(projectedTx) && projectedTx.some((p) => String(p.id) === String(id)));
-                    if (isProjection) projectionIds.push(id);
-                    else budgetIds.push(id);
-                });
-
-                await Promise.all([
-                    ...budgetIds.map((id) =>
-                        budgetApi.deleteBudgetTransaction(id).catch((err) => {
-                            logger.error(`Failed to delete budget transaction ${id}`, err);
-                        })
-                    ),
-                    ...projectionIds.map((id) =>
-                        projectedApi.deleteProjectedTransaction(id).catch((err) => {
-                            logger.error(`Failed to delete projected transaction ${id}`, err);
-                        })
-                    ),
-                ]);
-
-                // Invalidate the account-scoped query keys so categorized table picks up changes
-                if (budgetIds.length > 0) {
-                    try {
-                        const acct = filters?.account ?? null;
-                        invalidateAccountAndMembers(acct);
-                    } catch (err) {
-                        logger.error('invalidate after budget delete failed', err);
-                    }
-                }
-
-                if (projectionIds.length > 0) {
-                    try {
-                        const projAcct = filters?.account ?? null;
-                        invalidateAccountAndMembers(projAcct);
-                    } catch (err) {
-                        logger.error('invalidate after projection delete failed', err);
-                    }
-                }
-            } catch (err) {
-                logger.error('Error deleting transactions', err);
-            }
-        },
-        [selectedIds, localTx, projectedTx, statementPeriod, filters, queryClient, canonicalPaymentAccounts, invalidateAccountAndMembers, setLocalTx, setSelectedIds]
-    );
-
-    // --- File upload (CSV import) ---
-    const handleFileChange = useCallback(
-        async (ev) => {
-            const file = ev.target.files && ev.target.files[0];
-            if (!file) return;
-            try {
-                await budgetApi.uploadBudgetTransactions(file, statementPeriod);
-                // Invalidate the relevant account-scoped queries
-                try {
-                    const acct = filters?.account ?? null;
-                    invalidateAccountAndMembers(acct);
-                } catch (e) {
-                    logger.error('invalidate after upload failed', e);
-                }
-            } catch (err) {
-                logger.error('Upload failed', err);
-            } finally {
-                if (ev?.target) ev.target.value = '';
-            }
-        },
-        [statementPeriod, filters?.account, queryClient, canonicalPaymentAccounts, invalidateAccountAndMembers]
-    );
-
-    // --- Toolbar ---
+    // --- Toolbar (created after handlers exist so references are initialized) ---
     const toolbar = useTransactionToolbar({
         onAdd: handleAddTransaction,
         onAddProjection: handleAddProjection,
         onImport: openFilePicker,
-        onDelete: handleDeleteSelected,
+        onDelete: () => handleDeleteSelected(selectedIds),
         selectedCount: selectedIds.size,
         fileInputRef,
         onFileChange: handleFileChange,
@@ -624,7 +335,7 @@ export function useTransactionTable(filters = {}) {
         toggleSelectAll,
         handleAddTransaction,
         handleAddProjection,
-        handleDeleteSelected,
+        handleDeleteSelected: () => handleDeleteSelected(selectedIds),
         handleFileChange,
         openFilePicker,
         handleCellDoubleClick,
