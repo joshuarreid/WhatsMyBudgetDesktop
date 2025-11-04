@@ -1,19 +1,27 @@
 /**
  * useTransactionMutations
  *
- * - Encapsulates all create/update/delete/upload mutation logic for transactions.
+ * - Encapsulates create/update/delete/upload mutation logic for transactions.
  * - Calls budgetApi / projectedApi, updates local optimistic state via injected setters,
  *   and triggers cache invalidation via the injected invalidateAccountAndMembers helper.
+ * - Simplified behavior: when creating a projected transaction from any account (including 'joint'),
+ *   the hook will refresh (fetchQuery) the projections for the same account (mirroring user screens),
+ *   then perform additional invalidation for member accounts so other screens update.
  *
- * This hook is side-effectful (API + queryClient) but kept decoupled from local state shape
- * by accepting setter callbacks and current local arrays as dependencies.
+ * Rationale:
+ * - The user requested that the joint flow behave the same as user screens: refetch the same
+ *   account's projections after create, and also throw in an extra invalidation for member/user caches.
+ * - This file applies that minimal, deterministic approach (fetch canonical for the mutated account),
+ *   and also invalidates the other account caches to keep their views up-to-date.
  *
  * @module hooks/useTransactionMutations
  */
 
 import { useCallback } from 'react';
+import { getAccounts } from '../../../config/config.js';
 import budgetApi from '../../../api/budgetTransaction/budgetTransaction';
 import projectedApi from '../../../api/projectedTransaction/projectedTransaction';
+import projectedQK from '../../../api/projectedTransaction/projectedTransactionQueryKeys';
 import { TEMP_ID_PREFIX } from '../utils/constants';
 
 const logger = {
@@ -34,7 +42,7 @@ const logger = {
  * @property {Function} setEditing - React setState for editing
  * @property {Function} makeTempId - function that returns a temporary id string
  * @property {Object} budgetResult - full budgetResult returned by read hook (used to refetch on error)
- * @property {Function} refetchProjected - function to refetch projected transactions
+ * @property {Function} refetchProjected - function to refetch projected transactions (optional)
  * @property {Array} localTx - current localTx array (used to detect row types)
  * @property {Array} projectedTx - current projectedTx array
  */
@@ -65,10 +73,11 @@ export default function useTransactionMutations(deps = {}) {
 
     /**
      * stripClientFields
-     * - Local helper to remove client-only fields before sending to API.
      *
-     * @param {Object} tx
-     * @returns {Object}
+     * Remove client-only fields before sending data to the API.
+     *
+     * @param {Object} tx - transaction object
+     * @returns {Object} sanitized copy
      */
     const stripClientFields = (tx) => {
         const copy = { ...tx };
@@ -79,14 +88,40 @@ export default function useTransactionMutations(deps = {}) {
     };
 
     /**
+     * updateLocalWithCreatedProjected
+     *
+     * Update the optimistic localTx row with the server-returned projected object
+     *
+     * @param {string} tempId - temporary id used on the client
+     * @param {Object|Array} created - server response (object or array)
+     */
+    const updateLocalWithCreatedProjected = (tempId, created) => {
+        try {
+            if (Array.isArray(created)) {
+                setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...(created[0] || {}), __isProjected: true } : t)));
+            } else {
+                setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...created, __isProjected: true } : t)));
+            }
+        } catch (err) {
+            logger.error('updateLocalWithCreatedProjected failed', err);
+        }
+    };
+
+    /**
      * handleSaveRow
      *
-     * - Persists a single row (create or update) to the appropriate API.
-     * - Updates localTx after server response and triggers invalidation.
+     * Persist a single transaction (create or update).
      *
-     * @param {string} id - id of the local row (may be temporary)
+     * Behavior summary for projected creates:
+     * - Persist to server
+     * - Update the optimistic local row with the server response
+     * - REFRESH (fetchQuery) the same account's projected list (mirrors user screen behavior)
+     * - Additionally invalidate/refresh member accounts so their screens update
+     *
+     * @param {string} id - local id (may be temporary)
      * @param {Object} updatedFields - partial fields to merge into existing local row
      * @param {boolean} [addAnother=false] - when creating, add a blank new row after success
+     * @returns {Promise<void>}
      */
     const handleSaveRow = useCallback(
         async (id, updatedFields = {}, addAnother = false) => {
@@ -136,34 +171,48 @@ export default function useTransactionMutations(deps = {}) {
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
 
                     // capture the attempted account (the account the UI attempted to create in)
-                    const attemptedAccount = (payload.account ?? filters?.account ?? null);
+                    const attemptedAccount = payload.account ?? filters?.account ?? 'joint';
                     const attemptedIsJoint = attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint';
 
                     if (txToPersist.__isProjected) {
-                        // create projected
+                        // create projected on server
                         const created = await projectedApi.createProjectedTransaction(payload);
-                        const createdWithFlag = { ...created, __isProjected: true };
-                        setLocalTx((prev) => (prev || []).map((t) => (t.id === id ? createdWithFlag : t)));
 
-                        // invalidate appropriate keys:
-                        // 1) invalidate the account the server returned (member accounts if split)
+                        // update the optimistic local row with server return
+                        updateLocalWithCreatedProjected(id, created);
+
+                        // REFRESH the projections for the same account (mirror user-screen behavior)
                         try {
-                            invalidateAccountAndMembers(created.account ?? payload.account ?? filters?.account ?? null);
-                        } catch (e) {
-                            logger.error('invalidate projected after create failed', e);
+                            const targetAccount = attemptedAccount ?? (created?.account ?? payload?.account ?? filters?.account ?? 'joint');
+                            await queryClient.fetchQuery({
+                                queryKey: projectedQK.accountListKey(String(targetAccount), { statementPeriod }),
+                                queryFn: () => projectedApi.getAccountProjectedTransactions(targetAccount, statementPeriod),
+                            });
+                            logger.info('fetched projections for account after create', { account: targetAccount, statementPeriod });
+                        } catch (err) {
+                            logger.error('failed to fetch projections for mutated account', err);
                         }
 
-                        // 2) If the original attempted account was 'joint', also invalidate joint keys so
-                        //    joint transactionTable and joint categoryTable refresh even if the server split rows.
-                        if (attemptedIsJoint) {
-                            try {
-                                invalidateAccountAndMembers('joint');
-                            } catch (e) {
-                                logger.error('invalidate joint after projected create failed', e);
-                            }
+                        // EXTRA: ensure member/user screens are updated. Invalidate (or refresh) their caches.
+                        // Use canonical accounts from config; filter out 'joint'.
+                        try {
+                            const members = getAccounts()
+                                .map((a) => String(a).toLowerCase())
+                                .filter((a) => a && a !== 'joint');
+
+                            // Invalidate member account keys so any component using account-scoped queries will refetch.
+                            members.forEach((m) => {
+                                try {
+                                    invalidateAccountAndMembers(m);
+                                } catch (e) {
+                                    logger.error('invalidate member account failed for', m, e);
+                                }
+                            });
+                        } catch (e) {
+                            logger.error('member invalidation after projected create failed', e);
                         }
                     } else {
-                        // create budget transaction
+                        // create budget transaction (unchanged behavior)
                         const created = await budgetApi.createBudgetTransaction(payload);
                         setLocalTx((prev) => (prev || []).map((t) => (t.id === id ? { ...created } : t)));
 
@@ -174,9 +223,7 @@ export default function useTransactionMutations(deps = {}) {
                             logger.error('invalidate budget queries failed', e);
                         }
 
-                        // If created in joint (attempted), also invalidate joint so joint-category views refresh
-                        const attemptedIsJointBudget = attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint';
-                        if (attemptedIsJointBudget) {
+                        if (attemptedIsJoint) {
                             try {
                                 invalidateAccountAndMembers('joint');
                             } catch (e) {
@@ -208,24 +255,27 @@ export default function useTransactionMutations(deps = {}) {
                         }
                     }
                 } else {
+                    // Update existing (unchanged behavior)
                     const payload = stripClientFields({ ...txToPersist, statementPeriod });
 
                     if (txToPersist.__isProjected) {
                         await projectedApi.updateProjectedTransaction(id, payload);
                         try {
+                            // refresh the projections for the account the edit was attempted on
+                            const attemptedAccount = payload.account ?? filters?.account ?? 'joint';
+                            await queryClient.fetchQuery({
+                                queryKey: projectedQK.accountListKey(String(attemptedAccount), { statementPeriod }),
+                                queryFn: () => projectedApi.getAccountProjectedTransactions(attemptedAccount, statementPeriod),
+                            });
+                            logger.info('fetched projections for account after update', { account: attemptedAccount, statementPeriod });
+                        } catch (err) {
+                            logger.error('failed to fetch projections after projected update', err);
+                        }
+
+                        try {
                             invalidateAccountAndMembers(filters?.account ?? payload.account ?? null);
                         } catch (e) {
                             logger.error('invalidate projected after update failed', e);
-                        }
-
-                        // If the edit was attempted on the joint screen, also ensure joint keys are invalidated
-                        try {
-                            const attemptedAccount = (payload.account ?? filters?.account ?? null);
-                            if (attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint') {
-                                invalidateAccountAndMembers('joint');
-                            }
-                        } catch (e) {
-                            logger.error('invalidate joint after projected update failed', e);
                         }
                     } else {
                         await budgetApi.updateBudgetTransaction(id, payload);
@@ -235,9 +285,8 @@ export default function useTransactionMutations(deps = {}) {
                             logger.error('invalidate budget queries after update failed', e);
                         }
 
-                        // Also consider joint invalidation when the attempted account was joint
                         try {
-                            const attemptedAccount = (payload.account ?? filters?.account ?? null);
+                            const attemptedAccount = payload.account ?? filters?.account ?? null;
                             if (attemptedAccount && String(attemptedAccount).toLowerCase() === 'joint') {
                                 invalidateAccountAndMembers('joint');
                             }
@@ -275,6 +324,7 @@ export default function useTransactionMutations(deps = {}) {
             statementPeriod,
             invalidateAccountAndMembers,
             budgetResult,
+            queryClient,
         ]
     );
 
@@ -288,6 +338,7 @@ export default function useTransactionMutations(deps = {}) {
      * NOTE: assumes selectedIds is provided externally (we accept it via deps closure).
      *
      * @param {Set<string>} selectedIds - set of selected ids to delete
+     * @returns {Promise<void>}
      */
     const handleDeleteSelected = useCallback(
         async (selectedIds) => {
@@ -361,6 +412,7 @@ export default function useTransactionMutations(deps = {}) {
      * - Handles CSV upload and invalidation after success.
      *
      * @param {Event} ev - file input change event
+     * @returns {Promise<void>}
      */
     const handleFileChange = useCallback(
         async (ev) => {
