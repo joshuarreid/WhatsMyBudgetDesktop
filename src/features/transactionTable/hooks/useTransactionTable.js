@@ -14,6 +14,9 @@
  * - When budget transactions change (create/update/delete/upload) the paymentSummary query is
  *   also invalidated so the payments UI refreshes immediately. This now uses the canonical
  *   paymentSummaryQueryKeys.summaryKey(...) helper (the same key shape consumers use).
+ * - When a transaction is created in the 'joint' account, the server may split it into per-user
+ *   rows. In that case we now proactively invalidate the account-scoped queries for the member
+ *   accounts (user1, user2, etc.) so their tables and compact views refresh.
  * - Uses queryClient.getQueryData to probe cache when trying to avoid flashes.
  *
  * Conventions:
@@ -208,6 +211,95 @@ export function useTransactionTable(filters = {}) {
 
     // localTx holds combined rows (local temp rows + server + projected)
     const [localTx, setLocalTx] = useState(() => [...serverTx]);
+
+    /**
+     * invalidateAccountAndMembers
+     *
+     * - When a change happens on 'joint' we need to also invalidate member accounts (user1, user2 etc.)
+     *   because the server-side processing may split/join transactions across accounts.
+     * - This helper invalidates budget + projected + paymentSummary query keys for the provided
+     *   account or, when account === 'joint', for each member account (and joint itself).
+     *
+     * @param {string|null|undefined} acct - account identifier (may be 'joint' or a member)
+     */
+    const invalidateAccountAndMembers = useCallback((acct) => {
+        try {
+            const norm = acct == null ? null : String(acct).trim();
+            if (!norm) {
+                // nothing specific to invalidate; invalidate list-level keys
+                queryClient.invalidateQueries({ queryKey: budgetQK.invalidateListsKey() });
+                queryClient.invalidateQueries({ queryKey: projectedQK.invalidateListsKey() });
+                return;
+            }
+
+            const lower = String(norm).toLowerCase();
+
+            if (lower === 'joint') {
+                // Invalidate joint key
+                try {
+                    const jointKey = budgetQK.accountListKey('joint', { statementPeriod });
+                    queryClient.invalidateQueries({ queryKey: jointKey });
+                } catch (e) {
+                    logger.error('invalidate joint account key failed', e);
+                }
+
+                // Also invalidate each member account key so user compact tables refresh after a joint create that gets split
+                try {
+                    const members = getAccounts().map((a) => String(a).toLowerCase()).filter((a) => a && a !== 'joint');
+                    members.forEach((m) => {
+                        const acctKey = budgetQK.accountListKey(String(m), { statementPeriod });
+                        queryClient.invalidateQueries({ queryKey: acctKey });
+                        const projKey = projectedQK.accountListKey(String(m), { statementPeriod });
+                        queryClient.invalidateQueries({ queryKey: projKey });
+
+                        // payment summary per-member
+                        try {
+                            const perAccountKey = paymentSummaryQK.summaryKey([String(m)], statementPeriod);
+                            queryClient.invalidateQueries({ queryKey: perAccountKey });
+                        } catch (psErr) {
+                            logger.error('invalidate per-account paymentSummary failed for', m, psErr);
+                        }
+                    });
+                } catch (err) {
+                    logger.error('invalidate member accounts after joint change failed', err);
+                }
+
+                // Also invalidate aggregate payment summary used by payments page
+                try {
+                    const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
+                    queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
+                } catch (e) {
+                    logger.error('invalidate aggregate payment summary failed', e);
+                }
+
+                return;
+            }
+
+            // Normal single-account invalidation
+            try {
+                const acctKey = budgetQK.accountListKey(String(norm), { statementPeriod });
+                queryClient.invalidateQueries({ queryKey: acctKey });
+            } catch (e) {
+                logger.error('invalidate budget account key failed', e);
+            }
+
+            try {
+                const projKey = projectedQK.accountListKey(String(norm), { statementPeriod });
+                queryClient.invalidateQueries({ queryKey: projKey });
+            } catch (e) {
+                logger.error('invalidate projected account key failed', e);
+            }
+
+            try {
+                const perAccountKey = paymentSummaryQK.summaryKey([String(norm)], statementPeriod);
+                queryClient.invalidateQueries({ queryKey: perAccountKey });
+            } catch (e) {
+                logger.error('invalidate paymentSummary per-account failed', e);
+            }
+        } catch (err) {
+            logger.error('invalidateAccountAndMembers failed', err, acct);
+        }
+    }, [queryClient, statementPeriod, canonicalPaymentAccounts]);
 
     /**
      * Clear transactions immediately when statementPeriod changes to avoid stale flashes.
@@ -466,32 +558,18 @@ export function useTransactionTable(filters = {}) {
                 // Invalidate the account-scoped query keys so categorized table picks up changes
                 if (budgetIds.length > 0) {
                     try {
-                        const acctKey = buildBudgetAccountKey(filters?.account, statementPeriod);
-                        queryClient.invalidateQueries({ queryKey: acctKey });
+                        // Use canonical budget account key helper (must match the key used by useBudgetTransactionsQuery)
+                        const acct = filters?.account ?? null;
+                        invalidateAccountAndMembers(acct);
                     } catch (err) {
                         logger.error('invalidate after budget delete failed', err);
-                    }
-
-                    // ALSO invalidate payment summary for this statementPeriod (so payments UI refreshes)
-                    try {
-                        // Invalidate the canonical payments key used by payments screen (all known accounts)
-                        const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
-                        queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
-
-                        // Optionally invalidate a per-account summary if filter.account present (mirror possible callers)
-                        if (filters?.account) {
-                            const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: perAccountKey });
-                        }
-                    } catch (err) {
-                        logger.error('invalidate paymentSummary after budget delete failed', err);
                     }
                 }
 
                 if (projectionIds.length > 0) {
                     try {
-                        const projKey = buildProjectedAccountKey(filters?.account, statementPeriod);
-                        queryClient.invalidateQueries({ queryKey: projKey });
+                        const projAcct = filters?.account ?? null;
+                        invalidateAccountAndMembers(projAcct);
                     } catch (err) {
                         logger.error('invalidate after projection delete failed', err);
                     }
@@ -500,7 +578,7 @@ export function useTransactionTable(filters = {}) {
                 logger.error('Error deleting transactions', err);
             }
         },
-        [selectedIds, localTx, projectedTx, statementPeriod, filters, queryClient, canonicalPaymentAccounts]
+        [selectedIds, localTx, projectedTx, statementPeriod, filters, queryClient, canonicalPaymentAccounts, invalidateAccountAndMembers]
     );
 
     // --- File upload (CSV import) ---
@@ -512,18 +590,10 @@ export function useTransactionTable(filters = {}) {
                 await budgetApi.uploadBudgetTransactions(file, statementPeriod);
                 // Invalidate the relevant account-scoped queries
                 try {
-                    const acctKey = buildBudgetAccountKey(filters?.account, statementPeriod);
-                    queryClient.invalidateQueries({ queryKey: acctKey });
+                    const acct = filters?.account ?? null;
+                    invalidateAccountAndMembers(acct);
                 } catch (e) {
                     logger.error('invalidate after upload failed', e);
-                }
-
-                // ALSO invalidate payment summary for this period so payments UI updates
-                try {
-                    const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
-                    queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
-                } catch (e) {
-                    logger.error('invalidate paymentSummary after upload failed', e);
                 }
             } catch (err) {
                 logger.error('Upload failed', err);
@@ -531,7 +601,7 @@ export function useTransactionTable(filters = {}) {
                 ev.target.value = '';
             }
         },
-        [statementPeriod, filters?.account, queryClient, canonicalPaymentAccounts]
+        [statementPeriod, filters?.account, queryClient, canonicalPaymentAccounts, invalidateAccountAndMembers]
     );
 
     const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
@@ -666,10 +736,9 @@ export function useTransactionTable(filters = {}) {
                         const createdWithFlag = { ...created, __isProjected: true };
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? createdWithFlag : t)));
 
-                        // invalidate the projection account key so CategorizedTable (if using it) and other consumers refetch
+                        // invalidate keys for projected created item (handle joint -> member split case via helper)
                         try {
-                            const projKey = buildProjectedAccountKey(created.account ?? payload.account, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: projKey });
+                            invalidateAccountAndMembers(created.account ?? payload.account ?? filters?.account);
                         } catch (err) {
                             logger.error('invalidate projected after create failed', err);
                         }
@@ -677,29 +746,16 @@ export function useTransactionTable(filters = {}) {
                         const created = await budgetApi.createBudgetTransaction(payload);
                         setLocalTx((prev) => prev.map((t) => (t.id === id ? { ...created } : t)));
 
-                        // IMPORTANT: invalidate the account-scoped budget query key so CategorizedTable (which uses useBudgetTransactionsQuery(filters))
-                        // will refetch and update its totals and rows. We build the key using the created's account (or payload/account or filters).
+                        // Invalidate canonical keys for the created account, or if created in 'joint' invalidate members as well.
                         try {
-                            const acct = created.account ?? payload.account ?? filters?.account;
-                            const acctKey = buildBudgetAccountKey(acct, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: acctKey });
+                            const acctToInvalidate = created.account ?? payload.account ?? filters?.account;
+                            invalidateAccountAndMembers(acctToInvalidate);
                         } catch (e) {
                             logger.error('invalidate budget queries failed', e);
                         }
 
-                        // ALSO invalidate payment summary for this period so payments UI updates
-                        try {
-                            const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
-
-                            if (filters?.account) {
-                                const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
-                                queryClient.invalidateQueries({ queryKey: perAccountKey });
-                            }
-                        } catch (err) {
-                            logger.error('invalidate paymentSummary after create failed', err);
-                        }
-
+                        // ALSO invalidate payment summary for this period so payments UI updates (handled within helper too)
+                        // addAnother logic unchanged
                         if (addAnother) {
                             const defaultPM = getDefaultPaymentMethodForAccount(filters?.account) || '';
                             const newTx = {
@@ -725,32 +781,16 @@ export function useTransactionTable(filters = {}) {
                     if (txToPersist.__isProjected) {
                         await projectedApi.updateProjectedTransaction(id, payload);
                         try {
-                            const projKey = buildProjectedAccountKey(filters?.account ?? payload.account, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: projKey });
+                            invalidateAccountAndMembers(filters?.account ?? payload.account);
                         } catch (err) {
                             logger.error('invalidate projected after update failed', err);
                         }
                     } else {
                         await budgetApi.updateBudgetTransaction(id, payload);
                         try {
-                            const acct = payload.account ?? filters?.account;
-                            const acctKey = buildBudgetAccountKey(acct, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: acctKey });
+                            invalidateAccountAndMembers(payload.account ?? filters?.account);
                         } catch (e) {
                             logger.error('invalidate budget queries after update failed', e);
-                        }
-
-                        // ALSO invalidate payment summary for this period so payments UI updates
-                        try {
-                            const aggregatePaymentsKey = paymentSummaryQK.summaryKey(canonicalPaymentAccounts, statementPeriod);
-                            queryClient.invalidateQueries({ queryKey: aggregatePaymentsKey });
-
-                            if (filters?.account) {
-                                const perAccountKey = paymentSummaryQK.summaryKey([String(filters.account)], statementPeriod);
-                                queryClient.invalidateQueries({ queryKey: perAccountKey });
-                            }
-                        } catch (err) {
-                            logger.error('invalidate paymentSummary after update failed', err);
                         }
                     }
                 }
@@ -779,6 +819,7 @@ export function useTransactionTable(filters = {}) {
             serverTx,
             queryClient,
             canonicalPaymentAccounts,
+            invalidateAccountAndMembers,
         ]
     );
 
