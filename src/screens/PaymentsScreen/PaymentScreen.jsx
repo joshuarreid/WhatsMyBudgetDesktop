@@ -8,11 +8,11 @@
  * @returns {JSX.Element}
  */
 import React from "react";
-import PaymentSummaryTable from "./PaymentSummaryTable";
-import CardPaymentBreakdown from "./CardPaymentBreakdown";
-import styles from "../styles/PaymentScreen.module.css";
-import { StatementPeriodProvider } from "../../../context/StatementPeriodProvider";
-import { usePaymentsData } from "../hooks/usePaymentsData";
+import PaymentSummaryTable from "../../features/payments/components/PaymentSummaryTable";
+import CardPaymentBreakdown from "../../features/payments/components/CardPaymentBreakdown";
+import styles from "../../features/payments/styles/PaymentScreen.module.css";
+import { StatementPeriodProvider } from "../../context/StatementPeriodProvider";
+import { usePaymentsData } from "../../features/payments/hooks/usePaymentsData";
 
 /**
  * Logger for PaymentScreen component.

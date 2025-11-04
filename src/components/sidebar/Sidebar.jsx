@@ -1,8 +1,8 @@
 import React, { memo } from "react";
 import "../../App.css";
-import useSidebar from "./useSidebar";
-import ViewsAccordion from "./ViewsAccordion";
-import SidebarLink from "./SidebarLink";
+import useSidebar from "./hooks/useSidebar";
+import ViewsAccordion from "./components/ViewsAccordion";
+import SidebarLink from "./components/SidebarLink";
 
 /**
  * Sidebar - composed from small, testable parts

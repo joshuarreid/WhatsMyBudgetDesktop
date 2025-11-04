@@ -3,8 +3,8 @@ import PropTypes from 'prop-types';
 
 import Modal, { ModalBody, ModalFooter, ModalHeader } from '../../components/modal/Modal';
 import CompactTransactionTable from '../compactTransactionTable/CompactTransactionTable';
-import useCategoryWeeklyModalData from './useCategoryWeeklyModalData';
-import './CategoryWeeklyModal.css';
+import useCategoryWeeklyModalData from './hooks/useCategoryWeeklyModalData';
+import './styles/CategoryWeeklyModal.css';
 
 const logger = {
     info: (...args) => console.log('[CategoryWeeklyModal]', ...args),

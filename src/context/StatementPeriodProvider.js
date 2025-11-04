@@ -1,6 +1,19 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+/**
+ * StatementPeriodProvider
+ * - Context provider for statement period selection and persistence.
+ * - Uses a small custom hook (useLocalCacheQuery) wrapping TanStack Query to read the
+ *   cache ONCE on mount, then only persists on user change.
+ *
+ * Notes:
+ * - Provider remains authoritative once initialized (prevents "flashback" bugs).
+ * - isLoaded is set when initial cache read settles (success or error).
+ *
+ * @module context/StatementPeriodProvider
+ */
+
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import useStatementPeriodDropdown from '../components/statementPeriodDropdown/useStatementPeriodDropdown';
-import localCacheService from '../services/LocalCacheService';
+import { useLocalCacheByKey, useSaveLocalCache } from '../hooks/useLocalCacheQuery';
 
 /**
  * Logger for StatementPeriodProvider
@@ -19,10 +32,12 @@ const logger = {
 const StatementPeriodContext = createContext(undefined);
 
 /**
+ * @constant {string} CACHE_KEY - local cache key used to persist the current statement period.
+ */
+const CACHE_KEY = 'currentStatementPeriod';
+
+/**
  * StatementPeriodProvider
- * - Context provider for statement period selection and persistence.
- * - Reads cache ONCE on mount, then only persists on user change.
- * - Prevents flashback bugs by never re-reading cache after initial load.
  *
  * @param {object} props
  * @param {React.ReactNode} props.children - Child nodes to render within context provider.
@@ -31,76 +46,100 @@ const StatementPeriodContext = createContext(undefined);
 export const StatementPeriodProvider = ({ children }) => {
     const dropdown = useStatementPeriodDropdown();
 
-    // State for canonical statement period value. Starts undefined until cache loads.
+    /**
+     * Canonical statementPeriod held in provider. undefined until initial load attempt completes.
+     * @type {[string|undefined, Function]}
+     */
     const [statementPeriod, setStatementPeriod] = useState(undefined);
-    // State for loading status of cache/context.
-    const [isLoaded, setIsLoaded] = useState(false);
 
     /**
-     * Loads statement period from local cache ONCE on mount.
-     * Never re-reads after initial load.
-     * Sets isLoaded to true after first attempt.
+     * Loading flag set true after the cache read attempt settles (success or error).
+     * @type {[boolean, Function]}
+     */
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    // Use the encapsulated query hook to read normalized cache value (string|null)
+    const cacheQuery = useLocalCacheByKey(CACHE_KEY, {
+        // Keep defaults but enabled true explicitly for clarity
+        enabled: true,
+    });
+
+    // Use the encapsulated mutation hook to save/update cache entries
+    const saveMutation = useSaveLocalCache(CACHE_KEY);
+
+    /**
+     * Apply the query result to local provider state ONCE:
+     * - Only set the canonical statementPeriod when provider has not yet set it
+     *   (statementPeriod === undefined). This enforces "read once on mount".
+     * - If the query errors or returns no useful value, fall back to dropdown.defaultOpt.
+     *
+     * We also set isLoaded true once the query has settled (either fetched or errored).
      */
     useEffect(() => {
-        let mounted = true;
-        (async function () {
+        if (statementPeriod !== undefined) {
+            // canonical value already set; do not re-apply cache reads
+            return;
+        }
+
+        if (cacheQuery.isFetched) {
             try {
-                logger.info('Initializing statement period from cache');
-                const res = await localCacheService.get('currentStatementPeriod');
-                const cacheValue = res?.cacheValue || res?.value || (typeof res === 'string' ? res : null);
-                if (mounted && cacheValue) {
+                const cacheValue = cacheQuery.data; // normalized string|null from the hook
+                if (cacheValue) {
                     setStatementPeriod(cacheValue);
-                    logger.info('Loaded statementPeriod from cache', { cacheValue });
-                } else if (mounted) {
-                    setStatementPeriod(dropdown.defaultOpt ? dropdown.defaultOpt.value : '');
-                    logger.info('No cache, using dropdown defaultOpt', { value: dropdown.defaultOpt?.value });
+                    logger.info('Initialized statementPeriod from cache (hook)', { cacheValue });
+                } else {
+                    const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
+                    setStatementPeriod(fallback);
+                    logger.info('No cache entry found - using dropdown default', { value: fallback });
                 }
             } catch (err) {
-                logger.error('Failed to load statementPeriod from cache', err);
-                if (mounted) {
-                    setStatementPeriod(dropdown.defaultOpt ? dropdown.defaultOpt.value : '');
-                }
+                logger.error('Error applying cache query result to state', err);
+                const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
+                setStatementPeriod(fallback);
+                logger.info('Falling back to dropdown default after cache apply error', { value: fallback });
             } finally {
                 setIsLoaded(true);
             }
-        })();
-        return () => { mounted = false; };
-    }, []);
+        } else if (cacheQuery.isError) {
+            const fallback = dropdown.defaultOpt ? dropdown.defaultOpt.value : '';
+            setStatementPeriod(fallback);
+            setIsLoaded(true);
+            logger.error('Cache query failed; falling back to dropdown default', cacheQuery.error);
+        }
+        // Dependencies intentionally limited: we only care about the query state and dropdown default when statementPeriod is unset
+    }, [cacheQuery.isFetched, cacheQuery.isError, cacheQuery.data, cacheQuery.error, dropdown.defaultOpt, statementPeriod]);
 
     /**
      * updateStatementPeriod
-     * - Updates statement period in context and persists to cache.
-     * - Does not re-read cache after update.
+     * - Updates statementPeriod in provider state immediately and persists it via mutation.
+     * - Does not re-read the cache after update; it writes and seeds the query cache via the mutation hook.
      *
      * @async
-     * @function updateStatementPeriod
      * @param {string} value - New statement period value.
      */
     const updateStatementPeriod = useCallback(
-        /**
-         * @param {string} value
-         */
         async (value) => {
             setStatementPeriod(value);
             try {
-                await localCacheService.set('currentStatementPeriod', value);
-                logger.info('Persisted statementPeriod to cache', { value });
+                await saveMutation.mutateAsync(value);
+                logger.info('updateStatementPeriod: mutation completed', { value });
             } catch (err) {
-                logger.error('Failed to persist statementPeriod to cache', err);
+                logger.error('updateStatementPeriod: persist failed', err);
             }
         },
-        []
+        [saveMutation]
     );
 
     /**
      * selectedLabel
-     * - Returns label for the current statement period value.
-     * @returns {string}
+     * - Derives the UI label for the current statementPeriod value.
+     *
+     * @type {string}
      */
-    const selectedLabel = (() => {
+    const selectedLabel = useMemo(() => {
         const found = dropdown.options.find((o) => o.value === statementPeriod);
         return found ? found.label : statementPeriod || '';
-    })();
+    }, [dropdown.options, statementPeriod]);
 
     return (
         <StatementPeriodContext.Provider
@@ -119,8 +158,7 @@ export const StatementPeriodProvider = ({ children }) => {
 
 /**
  * useStatementPeriodContext
- * - Consumes the StatementPeriodContext.
- * - Throws if used outside provider.
+ * - Consumes StatementPeriodContext and throws if used outside provider.
  *
  * @returns {object} statement period context value
  * @throws {Error} If used outside StatementPeriodProvider
@@ -133,3 +171,5 @@ export const useStatementPeriodContext = () => {
     }
     return ctx;
 };
+
+export default StatementPeriodProvider;
