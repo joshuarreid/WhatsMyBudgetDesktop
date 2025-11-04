@@ -2,22 +2,18 @@
  * useStatementPeriodDropdown
  * - Controlled dropdown hook for statement periods.
  * - Respects environment-configured prev/forward defaults.
- * - Uses the statement-period query hook (renamed to useStatementPeriodsQuery) and falls back
- *   to generateOptions when server data is absent or errors.
+ * - Uses the statement-period query hook (useStatementPeriodsQuery) and falls back
+ *   to locally-generated options when server data is absent or errors.
+ *
+ * Notes:
+ * - This file no longer depends on StatementPeriodService; generateOptions and
+ *   getCurrentOption are implemented locally to remove the last service import.
  *
  * @module components/statementPeriodDropdown/useStatementPeriodDropdown
  */
 
 import { useMemo, useRef, useState, useCallback } from 'react';
-/**
- * NOTE:
- * The application now exposes the statement-period query hook as a named export
- * `useStatementPeriodsQuery`. To remain backwards compatible with existing callers
- * that expect `useStatementPeriodQuery` as a function import, we alias the named
- * export to the original name here.
- */
-import { useStatementPeriodsQuery as useStatementPeriodQuery } from '../../hooks/useStatementPeriodQuery';
-import { generateOptions, getCurrentOption } from '../../services/StatementPeriodService';
+import { useStatementPeriodsQuery } from '../../hooks/useStatementPeriodQuery';
 
 /**
  * Logger for useStatementPeriodDropdown
@@ -48,6 +44,49 @@ function readEnvInt(name, fallback) {
 }
 
 /**
+ * generateOptions
+ * - Local implementation that mirrors previous StatementPeriodService.generateOptions
+ *
+ * @param {Object} params
+ * @param {Date} [params.anchor=new Date()]
+ * @param {number} [params.prev=1]
+ * @param {number} [params.forward=5]
+ * @returns {Array<{label:string,value:string,iso:string,offset:number}>}
+ */
+function generateOptions({ anchor = new Date(), prev = 1, forward = 5 } = {}) {
+    try {
+        const options = [];
+        for (let i = -prev; i <= forward; i += 1) {
+            const d = new Date(anchor.getTime());
+            d.setMonth(d.getMonth() + i, 1); // stable first-of-month
+            const monthName = d.toLocaleString('en-US', { month: 'long' }).toUpperCase();
+            const year = d.getFullYear();
+            const label = monthName;
+            const value = `${monthName}${year}`;
+            const iso = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+            options.push({ label, value, iso, offset: i });
+        }
+        logger.info('generateOptions produced', { count: options.length, anchor: anchor.toISOString() });
+        return options;
+    } catch (err) {
+        logger.error('generateOptions failed', err);
+        return [];
+    }
+}
+
+/**
+ * getCurrentOption
+ * - Local implementation that mirrors previous StatementPeriodService.getCurrentOption
+ *
+ * @param {Array} options
+ * @returns {object|null}
+ */
+function getCurrentOption(options = []) {
+    if (!Array.isArray(options) || options.length === 0) return null;
+    return options.find((o) => o.offset === 0) || options[Math.floor(options.length / 2)];
+}
+
+/**
  * useStatementPeriodDropdown.
  * Generates dropdown options, manages open/close, saving state, and keyboard logic.
  * Does NOT own selectedValue; expects it to be managed by provider/context.
@@ -67,16 +106,19 @@ export default function useStatementPeriodDropdown({ prev, forward, anchor = new
     const effectiveForward = typeof forward === 'number' ? forward : envForward;
 
     // Server-backed normalized options via hook (respects the effective prev/forward)
-    // We alias the named export to maintain the original local name used by callers.
+    // useStatementPeriodsQuery is a named export from hooks/useStatementPeriodQuery
     const {
-        options: serverOptions,
-        defaultOpt: serverDefault,
-        isLoading: serverLoading,
-        isError,
-    } = useStatementPeriodQuery({ prev: effectivePrev, forward: effectiveForward, anchor });
+        options: serverOptions = [],
+        defaultOpt: serverDefault = null,
+        isLoading: serverLoading = false,
+        isError = false,
+    } = useStatementPeriodsQuery?.({ prev: effectivePrev, forward: effectiveForward, anchor }) || {};
 
     // Local fallback (identical to prior behavior)
-    const fallbackOptions = useMemo(() => generateOptions({ anchor, prev: effectivePrev, forward: effectiveForward }), [anchor, effectivePrev, effectiveForward]);
+    const fallbackOptions = useMemo(
+        () => generateOptions({ anchor, prev: effectivePrev, forward: effectiveForward }),
+        [anchor, effectivePrev, effectiveForward]
+    );
     const fallbackDefault = useMemo(() => getCurrentOption(fallbackOptions), [fallbackOptions]);
 
     // Choose options: prefer server when present (and not empty)
