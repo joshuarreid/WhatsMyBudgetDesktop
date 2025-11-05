@@ -4,15 +4,18 @@
  * - Encapsulates create/update/delete/upload mutation logic for transactions.
  * - Calls budgetApi / projectedApi, updates local optimistic state via injected setters,
  *   and triggers cache invalidation via the injected invalidateAccountAndMembers helper.
- * - Simplified behavior: when creating a projected transaction from any account (including 'joint'),
- *   the hook will refresh (fetchQuery) the projections for the same account (mirroring user screens),
- *   then perform additional invalidation for member accounts so other screens update.
+ * - When creating/updating projected transactions the hook REFRESHES (fetchQuery) the same
+ *   account's projections using the canonical query key helpers and the public projected API
+ *   (fetchAccountProjectedTransactionList). This mirrors the behavior of the UI screens and
+ *   keeps cache keys canonical.
  *
- * Rationale:
- * - The user requested that the joint flow behave the same as user screens: refetch the same
- *   account's projections after create, and also throw in an extra invalidation for member/user caches.
- * - This file applies that minimal, deterministic approach (fetch canonical for the mutated account),
- *   and also invalidates the other account caches to keep their views up-to-date.
+ * Fix applied:
+ * - When creating a projection from the joint view, the server may assign the created
+ *   projection to a specific member account (e.g. user1). Previously we only refetched
+ *   the attempted account (usually 'joint') which meant the joint list would not include
+ *   the server-assigned projection after navigation. Now we explicitly refresh both the
+ *   attemptedAccount and the server-returned created.account (when different). This ensures
+ *   both the joint and member views show the correct data after a create/update.
  *
  * @module hooks/useTransactionMutations
  */
@@ -30,28 +33,61 @@ const logger = {
 };
 
 /**
- * @typedef UseTransactionMutationsDeps
- * @property {import('@tanstack/react-query').QueryClient} queryClient
- * @property {Object} filters
- * @property {string|null|undefined} statementPeriod
- * @property {Array<string>} canonicalPaymentAccounts
- * @property {Function} invalidateAccountAndMembers - (acct) => void
- * @property {Function} setLocalTx - React setState for localTx
- * @property {Function} setSaveErrors - React setState for saveErrors
- * @property {Function} setSavingIds - React setState for savingIds
- * @property {Function} setEditing - React setState for editing
- * @property {Function} makeTempId - function that returns a temporary id string
- * @property {Object} budgetResult - full budgetResult returned by read hook (used to refetch on error)
- * @property {Function} refetchProjected - function to refetch projected transactions (optional)
- * @property {Array} localTx - current localTx array (used to detect row types)
- * @property {Array} projectedTx - current projectedTx array
+ * stripClientFields
+ *
+ * Remove client-only fields before sending data to the API.
+ *
+ * @param {Object} tx - transaction object
+ * @returns {Object} sanitized copy
  */
+const stripClientFields = (tx) => {
+    const copy = { ...tx };
+    delete copy.id;
+    delete copy.__isNew;
+    delete copy.__isProjected;
+    return copy;
+};
+
+/**
+ * updateLocalWithCreatedProjected
+ *
+ * Update the optimistic localTx row with the server-returned projected object.
+ *
+ * @param {Function} setLocalTx - setter for localTx state
+ * @param {string} tempId - temporary id used on the client
+ * @param {Object|Array} created - server response (object or array)
+ */
+const updateLocalWithCreatedProjectedHelper = (setLocalTx, tempId, created) => {
+    try {
+        if (Array.isArray(created)) {
+            setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...(created[0] || {}), __isProjected: true } : t)));
+        } else {
+            setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...created, __isProjected: true } : t)));
+        }
+    } catch (err) {
+        logger.error('updateLocalWithCreatedProjected failed', err);
+    }
+};
 
 /**
  * Creates mutation handlers for transactions.
  *
- * @param {UseTransactionMutationsDeps} deps
- * @returns {Object} { handleSaveRow, handleDeleteSelected, handleFileChange }
+ * @param {Object} deps - dependency object
+ * @param {import('@tanstack/react-query').QueryClient} deps.queryClient
+ * @param {Object} deps.filters - current filters
+ * @param {string|null|undefined} deps.statementPeriod
+ * @param {Array<string>} deps.canonicalPaymentAccounts
+ * @param {Function} deps.invalidateAccountAndMembers - (acct) => void
+ * @param {Function} deps.setLocalTx - React setState for localTx
+ * @param {Function} deps.setSaveErrors - React setState for saveErrors
+ * @param {Function} deps.setSavingIds - React setState for savingIds
+ * @param {Function} deps.setEditing - React setState for editing
+ * @param {Function} deps.makeTempId - function that returns a temporary id string
+ * @param {Object} deps.budgetResult - full budgetResult returned by read hook (used to refetch on error)
+ * @param {Function} deps.refetchProjected - function to refetch projected transactions (optional)
+ * @param {Array} deps.localTx - current localTx array (used to detect row types)
+ * @param {Array} deps.projectedTx - current projectedTx array
+ * @returns {Object} mutation handlers: { handleSaveRow, handleDeleteSelected, handleFileChange }
  */
 export default function useTransactionMutations(deps = {}) {
     const {
@@ -72,42 +108,6 @@ export default function useTransactionMutations(deps = {}) {
     } = deps;
 
     /**
-     * stripClientFields
-     *
-     * Remove client-only fields before sending data to the API.
-     *
-     * @param {Object} tx - transaction object
-     * @returns {Object} sanitized copy
-     */
-    const stripClientFields = (tx) => {
-        const copy = { ...tx };
-        delete copy.id;
-        delete copy.__isNew;
-        delete copy.__isProjected;
-        return copy;
-    };
-
-    /**
-     * updateLocalWithCreatedProjected
-     *
-     * Update the optimistic localTx row with the server-returned projected object
-     *
-     * @param {string} tempId - temporary id used on the client
-     * @param {Object|Array} created - server response (object or array)
-     */
-    const updateLocalWithCreatedProjected = (tempId, created) => {
-        try {
-            if (Array.isArray(created)) {
-                setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...(created[0] || {}), __isProjected: true } : t)));
-            } else {
-                setLocalTx((prev) => (prev || []).map((t) => (t.id === tempId ? { ...created, __isProjected: true } : t)));
-            }
-        } catch (err) {
-            logger.error('updateLocalWithCreatedProjected failed', err);
-        }
-    };
-
-    /**
      * handleSaveRow
      *
      * Persist a single transaction (create or update).
@@ -115,8 +115,13 @@ export default function useTransactionMutations(deps = {}) {
      * Behavior summary for projected creates:
      * - Persist to server
      * - Update the optimistic local row with the server response
-     * - REFRESH (fetchQuery) the same account's projected list (mirrors user screen behavior)
+     * - REFRESH (fetchQuery) the same account's projected list (mirrors user-screen behavior)
      * - Additionally invalidate/refresh member accounts so their screens update
+     *
+     * Enhanced behavior:
+     * - After creating a projected transaction, refresh both the attemptedAccount (where the UI created)
+     *   and the server-returned created.account (if different). This ensures joint view and member views
+     *   remain consistent.
      *
      * @param {string} id - local id (may be temporary)
      * @param {Object} updatedFields - partial fields to merge into existing local row
@@ -179,22 +184,39 @@ export default function useTransactionMutations(deps = {}) {
                         const created = await projectedApi.createProjectedTransaction(payload);
 
                         // update the optimistic local row with server return
-                        updateLocalWithCreatedProjected(id, created);
+                        updateLocalWithCreatedProjectedHelper(setLocalTx, id, created);
 
-                        // REFRESH the projections for the same account (mirror user-screen behavior)
-                        try {
-                            const targetAccount = attemptedAccount ?? (created?.account ?? payload?.account ?? filters?.account ?? 'joint');
-                            await queryClient.fetchQuery({
-                                queryKey: projectedQK.accountListKey(String(targetAccount), { statementPeriod }),
-                                queryFn: () => projectedApi.getAccountProjectedTransactions(targetAccount, statementPeriod),
-                            });
-                            logger.info('fetched projections for account after create', { account: targetAccount, statementPeriod });
-                        } catch (err) {
-                            logger.error('failed to fetch projections for mutated account', err);
-                        }
+                        // Determine server-assigned account (handle array or object server returns)
+                        const createdObj = Array.isArray(created) ? created[0] : created;
+                        const createdAccount = createdObj?.account ?? payload.account ?? filters?.account ?? null;
+
+                        // Build list of accounts to refresh: attemptedAccount and createdAccount (if different)
+                        const accountsToRefresh = new Set();
+                        if (attemptedAccount) accountsToRefresh.add(String(attemptedAccount));
+                        if (createdAccount) accountsToRefresh.add(String(createdAccount));
+                        // ensure we always normalize to lowercase for consistency
+                        const normalizedAccounts = Array.from(accountsToRefresh).map((a) => String(a));
+
+                        // REFRESH projections for each relevant account so both joint and member views align with server
+                        await Promise.all(
+                            normalizedAccounts.map(async (targetAccount) => {
+                                try {
+                                    const projKey = projectedQK.accountListKey(String(targetAccount), statementPeriod ? { statementPeriod } : null);
+
+                                    await queryClient.fetchQuery({
+                                        queryKey: projKey,
+                                        queryFn: () =>
+                                            // call the public fetch helper that returns the account wrapper
+                                            projectedApi.fetchAccountProjectedTransactionList(targetAccount, statementPeriod ? { statementPeriod } : {}),
+                                    });
+                                    logger.info('fetched projections for account after create', { account: targetAccount, statementPeriod });
+                                } catch (err) {
+                                    logger.error('failed to fetch projections for mutated account', err, { targetAccount, statementPeriod });
+                                }
+                            })
+                        );
 
                         // EXTRA: ensure member/user screens are updated. Invalidate (or refresh) their caches.
-                        // Use canonical accounts from config; filter out 'joint'.
                         try {
                             const members = getAccounts()
                                 .map((a) => String(a).toLowerCase())
@@ -233,7 +255,9 @@ export default function useTransactionMutations(deps = {}) {
 
                         if (addAnother) {
                             try {
-                                const defaultPM = (typeof window !== 'undefined' && window && window.__getDefaultPaymentMethodForAccount) ? window.__getDefaultPaymentMethodForAccount(filters?.account) : undefined;
+                                const defaultPM = (typeof window !== 'undefined' && window && window.__getDefaultPaymentMethodForAccount)
+                                    ? window.__getDefaultPaymentMethodForAccount(filters?.account)
+                                    : undefined;
                                 const newTx = {
                                     id: makeTempId(),
                                     name: '',
@@ -263,9 +287,11 @@ export default function useTransactionMutations(deps = {}) {
                         try {
                             // refresh the projections for the account the edit was attempted on
                             const attemptedAccount = payload.account ?? filters?.account ?? 'joint';
+                            const projKey = projectedQK.accountListKey(String(attemptedAccount), statementPeriod ? { statementPeriod } : null);
+
                             await queryClient.fetchQuery({
-                                queryKey: projectedQK.accountListKey(String(attemptedAccount), { statementPeriod }),
-                                queryFn: () => projectedApi.getAccountProjectedTransactions(attemptedAccount, statementPeriod),
+                                queryKey: projKey,
+                                queryFn: () => projectedApi.fetchAccountProjectedTransactionList(attemptedAccount, statementPeriod ? { statementPeriod } : {}),
                             });
                             logger.info('fetched projections for account after update', { account: attemptedAccount, statementPeriod });
                         } catch (err) {

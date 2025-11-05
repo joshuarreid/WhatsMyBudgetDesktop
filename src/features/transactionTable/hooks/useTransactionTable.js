@@ -4,6 +4,12 @@
  * - Composition hook that wires together: read queries, local UI state, and mutation handlers.
  * - Mutation logic has been moved to useTransactionMutations for clarity and testability.
  *
+ * Changes applied:
+ * - Make cached projected-query access resilient to the newer projections consumer shape
+ *   (projected queries may now cache either an array or an account-scoped wrapper).
+ * - Use canonical filters object when building projected query keys so the cache lookup
+ *   mirrors the query key construction used by useProjectedTransactionsQuery.
+ *
  * @module hooks/useTransactionTable
  */
 
@@ -144,6 +150,8 @@ export function useTransactionTable(filters = {}) {
      * invalidateAccountAndMembers
      *
      * Delegates to centralized helper that performs query invalidation across budget/projected/paymentSummary
+     *
+     * @param {string} acct - account name to invalidate
      */
     const invalidateAccountAndMembers = useCallback((acct) => {
         try {
@@ -184,11 +192,17 @@ export function useTransactionTable(filters = {}) {
         }
 
         // attempt to populate from cache immediately for better UX (avoid flash)
+
+        /**
+         * Lazily require the query-key helpers to avoid circular imports at module initialization.
+         * The helpers expose listKey/accountListKey that accept a canonical filters object.
+         */
         const budgetQK = (() => {
             try {
                 const budgetQKMod = require('../../../api/budgetTransaction/budgetTransactionQueryKeys').default;
                 return budgetQKMod;
-            } catch {
+            } catch (err) {
+                logger.error('failed to require budgetTransactionQueryKeys', err);
                 return null;
             }
         })();
@@ -197,30 +211,64 @@ export function useTransactionTable(filters = {}) {
             try {
                 const projectedQKMod = require('../../../api/projectedTransaction/projectedTransactionQueryKeys').default;
                 return projectedQKMod;
-            } catch {
+            } catch (err) {
+                logger.error('failed to require projectedTransactionQueryKeys', err);
                 return null;
             }
         })();
 
-        const budgetKey = budgetQK ? (filters?.account ? budgetQK.accountListKey(String(filters.account), { statementPeriod }) : budgetQK.listKey(statementPeriod ? { statementPeriod } : null)) : null;
-        const projKey = projectedQK ? (filters?.account ? projectedQK.accountListKey(String(filters.account), { statementPeriod }) : projectedQK.listKey(statementPeriod ? { statementPeriod } : null)) : null;
+        // Build canonical keys using filter objects (mirrors useProjectedTransactionsQuery and useBudgetTransactionsQuery)
+        const budgetKey = (() => {
+            try {
+                if (!budgetQK) return null;
+                if (filters?.account) {
+                    // account-scoped: pass remaining filters (statementPeriod)
+                    const rest = statementPeriod ? { statementPeriod } : null;
+                    return budgetQK.accountListKey(String(filters.account), rest);
+                }
+                const listFilters = statementPeriod ? { statementPeriod } : null;
+                return budgetQK.listKey(listFilters);
+            } catch (err) {
+                logger.error('budgetKey build failed', err, { filters, statementPeriod });
+                return null;
+            }
+        })();
+
+        const projKey = (() => {
+            try {
+                if (!projectedQK) return null;
+                if (filters?.account) {
+                    const rest = statementPeriod ? { statementPeriod } : null;
+                    return projectedQK.accountListKey(String(filters.account), rest);
+                }
+                const listFilters = statementPeriod ? { statementPeriod } : null;
+                return projectedQK.listKey(listFilters);
+            } catch (err) {
+                logger.error('projKey build failed', err, { filters, statementPeriod });
+                return null;
+            }
+        })();
 
         const cachedBudget = budgetKey ? queryClient.getQueryData(budgetKey) : null;
         const cachedProjected = projKey ? queryClient.getQueryData(projKey) : null;
 
         if (cachedBudget || cachedProjected) {
-            // normalize cached shapes to arrays
+            // normalize cached shapes to arrays for localTx population
             let cachedServerArr = [];
             try {
                 if (cachedBudget) {
-                    const personal = cachedBudget.personalTransactions?.transactions ?? cachedBudget.personalTransactions ?? [];
-                    const joint = cachedBudget.jointTransactions?.transactions ?? cachedBudget.jointTransactions ?? [];
-                    if (Array.isArray(personal) || Array.isArray(joint)) {
-                        cachedServerArr = [...(Array.isArray(personal) ? personal : []), ...(Array.isArray(joint) ? joint : [])];
+                    // budget cache may be already normalized by useBudgetTransactionsQuery (canonical shape),
+                    // or legacy shapes (array or wrapper). Try common shapes defensively.
+                    if (Array.isArray(cachedBudget)) {
+                        cachedServerArr = [...cachedBudget];
                     } else if (Array.isArray(cachedBudget.budgetTransactions)) {
                         cachedServerArr = [...cachedBudget.budgetTransactions];
-                    } else if (Array.isArray(cachedBudget)) {
-                        cachedServerArr = [...cachedBudget];
+                    } else {
+                        const personal = cachedBudget.personalTransactions?.transactions ?? cachedBudget.personalTransactions ?? [];
+                        const joint = cachedBudget.jointTransactions?.transactions ?? cachedBudget.jointTransactions ?? [];
+                        if (Array.isArray(personal) || Array.isArray(joint)) {
+                            cachedServerArr = [...(Array.isArray(personal) ? personal : []), ...(Array.isArray(joint) ? joint : [])];
+                        }
                     }
                 }
             } catch (e) {
@@ -229,26 +277,51 @@ export function useTransactionTable(filters = {}) {
 
             const cachedProjArr = cachedProjected ? (() => {
                 try {
-                    const personal = cachedProjected.personalTransactions?.transactions || [];
-                    const joint = cachedProjected.jointTransactions?.transactions || [];
-                    return [...personal, ...joint];
+                    // Projections cache shape may be:
+                    // - Array (new useProjectedTransactionsQuery flattens account-scoped requests to an array)
+                    // - Account wrapper { personalTransactions, jointTransactions }
+                    // - Wrapper { projections: [...] } or { data: [...] }
+                    if (Array.isArray(cachedProjected)) {
+                        return [...cachedProjected];
+                    }
+
+                    if (Array.isArray(cachedProjected.projections)) {
+                        return [...cachedProjected.projections];
+                    }
+
+                    // Attempt account-style flattening (personal/joint)
+                    const personal = cachedProjected.personalTransactions?.transactions ?? cachedProjected.personalTransactions ?? [];
+                    const joint = cachedProjected.jointTransactions?.transactions ?? cachedProjected.jointTransactions ?? [];
+                    if (Array.isArray(personal) || Array.isArray(joint)) {
+                        return [...(Array.isArray(personal) ? personal : []), ...(Array.isArray(joint) ? joint : [])];
+                    }
+
+                    // Common wrapper names
+                    const maybeArr = cachedProjected.data ?? cachedProjected.results ?? cachedProjected.transactions ?? null;
+                    if (Array.isArray(maybeArr)) return [...maybeArr];
+
+                    // Unknown shape -> return empty
+                    return [];
                 } catch (err) {
-                    logger.error('flattenAccountProjectedList failed', err);
+                    logger.error('extracting cachedProjected failed', err);
                     return [];
                 }
             })() : [];
 
+            // Sort server and projected lists newest-first by transactionDate
             const serverSorted = (cachedServerArr || []).sort((a, b) => {
                 const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
                 const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
                 return db - da;
             });
 
-            const projSorted = (cachedProjArr || []).map((t) => ({ ...t, __isProjected: true })).sort((a, b) => {
-                const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
-                const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
-                return db - da;
-            });
+            const projSorted = (cachedProjArr || [])
+                .map((t) => ({ ...t, __isProjected: true }))
+                .sort((a, b) => {
+                    const da = a?.transactionDate ? new Date(a.transactionDate).getTime() : 0;
+                    const db = b?.transactionDate ? new Date(b.transactionDate).getTime() : 0;
+                    return db - da;
+                });
 
             setLocalTx((prev) => {
                 const localOnly = (prev || []).filter((t) => String(t.id).startsWith(TEMP_ID_PREFIX));
@@ -293,6 +366,13 @@ export function useTransactionTable(filters = {}) {
         setLocalTx,
     ]);
 
+    /**
+     * Save edit helper that builds a patch and delegates to handleSaveRow.
+     *
+     * @param {string|number} id - transaction id
+     * @param {string} field - field being edited
+     * @param {any} value - new value
+     */
     const handleSaveEdit = useCallback(
         async (id, field, value) => {
             const patch = {};

@@ -3,14 +3,16 @@
  *
  * - Computes the categorized table data (totals by category, rows, formatting)
  *   using the react-query powered `useBudgetTransactionsQuery` hook.
- * - Also fetches projected transactions (via useProjectedTransactions query hook)
+ * - Also fetches projected transactions (via useProjectedTransactionsQuery hook)
  *   and computes projected totals (per-criticality and per-category) so UI components
  *   don't need to call query hooks themselves.
  * - Keeps the same return shape and adds:
  *     - projectedTotal
  *     - projectedTotalsByCategory
  *
- * JSDoc, logging and Bulletproof React conventions applied.
+ * Notes:
+ * - Projections are requested using the same canonical filters object as budget transactions
+ *   so query keys are consistent across the app.
  *
  * @module hooks/useCategorizedTable
  */
@@ -50,7 +52,7 @@ export default function useCategorizedTable(propsOrFilters = {}) {
         const filters = propsOrFilters?.filters ?? propsOrFilters ?? {};
         logger.info('normalized filters', filters);
 
-        // Budget transactions (react-query)
+        // Budget transactions (react-query) - use canonical filters object
         const txResult = useBudgetTransactionsQuery(filters || {});
 
         // Merge personal + joint transactions
@@ -113,12 +115,9 @@ export default function useCategorizedTable(propsOrFilters = {}) {
         );
 
         // --- Projected transactions (react-query) ---
-        // Fetch projected transactions scoped to account + statementPeriod when present
+        // Use the same canonical filters object for projected queries so keys match budget queries.
         const projectedQuery = useProjectedTransactionsQuery(
-            {
-                account: filters?.account,
-                statementPeriod: filters?.statementPeriod,
-            },
+            filters || {},
             {
                 // align caching behavior with budget hook defaults (callers can override)
                 staleTime: Infinity,

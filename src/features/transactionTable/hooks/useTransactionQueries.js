@@ -5,6 +5,10 @@
  * - Computes derived arrays (serverTx), totals, counts and exposes loading/error/refetch helpers.
  * - Keeps query composition isolated so useTransactionTable can focus on UI state & mutations.
  *
+ * Changes:
+ * - Use a single canonical filters object for both budget and projected queries so
+ *   they build and cache keys the same way (mirrors budget transaction pattern).
+ *
  * @module hooks/useTransactionQueries
  */
 
@@ -18,6 +22,22 @@ const logger = {
 };
 
 /**
+ * Compose canonical filters used by both budget and projected consumers.
+ *
+ * @param {Object} filters - component-provided filters (may include account, category, etc.)
+ * @param {string|null|undefined} statementPeriod - current statementPeriod from context
+ * @returns {Object} canonical filters object
+ */
+function buildAccountFilters(filters = {}, statementPeriod) {
+    try {
+        return { ...(filters || {}), statementPeriod };
+    } catch (err) {
+        logger.error('buildAccountFilters failed', err, { filters, statementPeriod });
+        return { ...(filters || {}), statementPeriod };
+    }
+}
+
+/**
  * useTransactionQueries
  *
  * @param {Object} filters - component-provided filters (may include account, category, etc.)
@@ -25,23 +45,38 @@ const logger = {
  *   @param {string|null|undefined} opts.statementPeriod - statementPeriod from context
  *   @param {boolean} [opts.isStatementPeriodLoaded=true] - whether statementPeriod loading completed
  *
- * @returns {Object} - { budgetResult, projectedTx, serverTx, projectedTotal, total, personalBalance, jointBalance, count, loading, error, refetchProjected }
+ * @returns {Object} - {
+ *   budgetResult,
+ *   projectedTx,
+ *   serverTx,
+ *   projectedTotal,
+ *   total,
+ *   personalBalance,
+ *   jointBalance,
+ *   count,
+ *   loading,
+ *   error,
+ *   refetchProjected
+ * }
  */
 export default function useTransactionQueries(filters = {}, opts = {}) {
     const { statementPeriod, isStatementPeriodLoaded = true } = opts || {};
 
-    // compose account filters the same way callers expect
-    const accountFilters = useMemo(() => ({ ...(filters || {}), statementPeriod }), [filters, statementPeriod]);
+    logger.info('useTransactionQueries called', { filters, statementPeriod, isStatementPeriodLoaded });
+
+    // compose account filters the same way callers expect (canonical shape)
+    const accountFilters = useMemo(() => buildAccountFilters(filters, statementPeriod), [filters, statementPeriod]);
 
     // --- Queries (react-query hooks) ---
     const budgetResult = useBudgetTransactionsQuery(accountFilters);
 
+    // Use the same canonical filters object for projected queries so keys match budget queries.
     const {
         projectedTx = [],
         loading: projectedLoading = false,
         error: projectedError = null,
         refetch: refetchProjected,
-    } = useProjectedTransactionsQuery({ account: filters?.account || undefined, statementPeriod });
+    } = useProjectedTransactionsQuery(accountFilters);
 
     // Flatten server transactions for UI (sorted desc)
     const serverTx = useMemo(() => {
